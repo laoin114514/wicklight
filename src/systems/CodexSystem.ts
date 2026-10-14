@@ -60,6 +60,8 @@ export const HAZARD_LABEL: Record<string, string> = {
   eruption: '熔岩喷发',
   oilvoid: '灯油枯竭',
   echoes: '回声涌来',
+  bramble: '荆棘回廊',
+  coldfront: '寒潮',
 };
 
 /**
@@ -74,6 +76,8 @@ export const HAZARD_TIP: Record<string, string> = {
   eruption: '熔岩喷发留下的火海会封路，把它当成会移动的墙。',
   oilvoid: '灯油被直接抽走——那几秒灯火又暗又弱，先退开再说。',
   echoes: '会从远处刷出「回响」：它们追的是你一秒前的位置，走折线，别直线跑。',
+  bramble: '一圈荆棘把你围住，只留一道缺口——别硬撞，先环视一圈找那条缝。',
+  coldfront: '踩进霜冻里会又慢又费油、灯火也暗一截，不咬人但很拖；提前绕开那几片蓝霜。',
 };
 
 const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;

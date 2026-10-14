@@ -115,7 +115,7 @@ interface Ground {
   r: number;
   life: number;
   dps: number;
-  kind?: 'fire' | 'poison' | 'mud';
+  kind?: 'fire' | 'poison' | 'mud' | 'frost';
 }
 
 interface Decal {
@@ -229,6 +229,7 @@ export class Game {
   siphonKills = 0;
   /** 单局在滞行雾里待过的时间（秒） */
   mudTime = 0;
+  frostTime = 0;
   /** 单局回旋灯刃"回程"命中的次数 */
   bladeReturnHits = 0;
   comboTimer = 0;
@@ -472,6 +473,7 @@ export class Game {
     this.hazards.length = 0;
     this.grounds.length = 0;
     this.beams.length = 0;
+    this.frostTime = 0;
     this.pyresLit = 0;
     this.pyreTotal = this.level.pyres.length;
     this.runPyres += this.pyreTotal;
@@ -1642,9 +1644,17 @@ export class Game {
     });
   }
 
-  private addGround(x: number, y: number, r: number, life: number, dps: number, kind: 'fire' | 'poison' | 'mud' = 'fire'): void {
+  private addGround(
+    x: number,
+    y: number,
+    r: number,
+    life: number,
+    dps: number,
+    kind: 'fire' | 'poison' | 'mud' | 'frost' = 'fire',
+  ): void {
     this.grounds.push({ x, y, r, life, dps, kind });
-    this.particles.shockwave(x, y, kind === 'mud' ? '#9fb7c9' : '#ff7a2f', r, life);
+    const tint = kind === 'mud' ? '#9fb7c9' : kind === 'frost' ? '#bfe6ff' : '#ff7a2f';
+    this.particles.shockwave(x, y, tint, r, life);
   }
 
   /**
@@ -1654,16 +1664,37 @@ export class Game {
    */
   private updateTerrain(dt: number): void {
     let slow = 1;
+    let oil = 1;
+    let light = 1;
+    let frost = false;
     for (const g of this.grounds) {
-      if (g.kind !== 'mud') continue;
+      if (g.kind !== 'mud' && g.kind !== 'frost') continue;
+      if (g.kind === 'mud') {
+        const dx = this.player.x - g.x;
+        const dy = this.player.y - g.y;
+        if (dx * dx + dy * dy <= g.r * g.r) slow = Math.min(slow, 0.6);
+        continue;
+      }
+      // 霜冻不咬人，但会让脚底发滑不起来、灯火烧得更凶也更暗
+      frost = true;
       const dx = this.player.x - g.x;
       const dy = this.player.y - g.y;
-      if (dx * dx + dy * dy <= g.r * g.r) slow = Math.min(slow, 0.6);
+      if (dx * dx + dy * dy <= g.r * g.r) {
+        slow = Math.min(slow, 0.55);
+        oil = Math.max(oil, 1.35);
+        light = Math.min(light, 0.82);
+      }
     }
     this.player.terrainSlow = slow;
+    this.player.terrainOil = oil;
+    this.player.terrainLight = light;
     if (slow < 1) {
       this.mudTime += dt;
       if (this.mudTime >= 20) this.achievements.unlock('mirewalker');
+    }
+    if (frost) {
+      this.frostTime += dt;
+      if (this.frostTime >= 6) this.achievements.unlock('frost_walker');
     }
   }
 
@@ -1675,7 +1706,7 @@ export class Game {
         this.grounds.splice(i, 1);
         continue;
       }
-      if (g.kind === 'mud') continue;
+      if (g.kind === 'mud' || g.kind === 'frost') continue;
       const dx = this.player.x - g.x;
       const dy = this.player.y - g.y;
       if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y, 0, g.kind);
@@ -1732,6 +1763,31 @@ export class Game {
           this.enemies.spawn('echo', mx, my, this.director.bossHpMult * 0.8, this.director.bossDmgMult * 0.9);
         }
         this.hud?.toast('🌒 回声涌来');
+        break;
+      }
+      case 'bramble': {
+        // 荆棘回廊：一圈荆棘围住你，只留一道缺口——别硬撞，找缝
+        const ring = 15;
+        const gapAt = Math.floor(this.rng.next() * ring);
+        const gap = 4;
+        const radius = 250;
+        for (let i = 0; i < ring; i += 1) {
+          const d = (i - gapAt + ring) % ring;
+          if (d < gap) continue;
+          const a = (i / ring) * Math.PI * 2;
+          this.hazards.push({ kind: 'thorn', timer: 1.5, x: p.x + Math.cos(a) * radius, y: p.y + Math.sin(a) * radius, r: 54 });
+        }
+        this.hud?.toast('🌵 荆棘回廊');
+        break;
+      }
+      case 'coldfront': {
+        // 寒潮：不咬人，但踩进霜冻里会又慢又费油、灯火也暗一截
+        for (let i = 0; i < 5; i += 1) {
+          const a = this.rng.angle();
+          const d = i === 0 ? this.rng.range(0, 70) : this.rng.range(80, 340);
+          this.addGround(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, 112, 6, 0, 'frost');
+        }
+        this.hud?.toast('❄ 寒潮来袭');
         break;
       }
       case 'oilvoid': {
@@ -2168,6 +2224,7 @@ export class Game {
     this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
     this.light.render(ctx, this.camera, w, h, this.time);
     this.drawPyreGlow(ctx, w, h);
+    this.drawFrostHaze(ctx, w, h);
 
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
@@ -2185,6 +2242,43 @@ export class Game {
       ctx.fillStyle = `rgba(2,3,6,${this.screenFade.toFixed(3)})`;
       ctx.fillRect(0, 0, w, h);
     }
+  }
+
+  /**
+   * 霜冻地带的冷雾。
+   *
+   * 寒潮不咬人，躲不躲得开全看"有没有看见"。所以这片霜也跟熄灭的灯台一样，
+   * 在暗幕之后补一层很淡的冷色——够你看清该绕开哪里，不足以照亮路。
+   */
+  private drawFrostHaze(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const cam = this.camera;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const g of this.grounds) {
+      if (g.kind !== 'frost') continue;
+      const s = cam.worldToScreen(g.x, g.y);
+      const r = g.r * cam.zoom;
+      if (s.x < -r || s.y < -r || s.x > w + r || s.y > h + r) continue;
+      const fade = clamp(g.life / 6, 0, 1) * (0.82 + Math.sin(this.time * 2 + g.x * 0.01) * 0.18);
+      const grad = ctx.createRadialGradient(s.x, s.y, r * 0.12, s.x, s.y, r);
+      grad.addColorStop(0, `rgba(150,215,255,${(0.17 * fade).toFixed(3)})`);
+      grad.addColorStop(0.7, `rgba(110,175,225,${(0.08 * fade).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(80,140,200,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.3 * fade;
+      ctx.strokeStyle = '#cfeaff';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([5, 9]);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r * 0.96, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
   }
 
   /**
@@ -2685,23 +2779,30 @@ export class Game {
   private drawGrounds(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     for (const g of this.grounds) {
-      if (g.kind !== 'mud') continue;
-      // 滞行雾是"压暗"而不是"发光"：用普通混合盖一层灰，再用虚线勾出边界，
+      if (g.kind !== 'mud' && g.kind !== 'frost') continue;
+      // 滞行雾与霜冻都是"压暗"而不是"发光"：用普通混合盖一层，再用虚线勾出边界，
       // 让玩家一眼知道"这块地会拖住我"。
-      const fade = clamp(g.life / 8, 0, 1);
+      const icy = g.kind === 'frost';
+      const fade = clamp(g.life / (icy ? 6 : 8), 0, 1);
       ctx.globalAlpha = fade * 0.72;
       const mg = ctx.createRadialGradient(g.x, g.y, g.r * 0.22, g.x, g.y, g.r);
-      mg.addColorStop(0, 'rgba(20,28,38,0.94)');
-      mg.addColorStop(0.72, 'rgba(40,56,72,0.66)');
-      mg.addColorStop(1, 'rgba(70,92,116,0)');
+      if (icy) {
+        mg.addColorStop(0, 'rgba(24,44,58,0.9)');
+        mg.addColorStop(0.72, 'rgba(72,124,150,0.6)');
+        mg.addColorStop(1, 'rgba(150,210,240,0)');
+      } else {
+        mg.addColorStop(0, 'rgba(20,28,38,0.94)');
+        mg.addColorStop(0.72, 'rgba(40,56,72,0.66)');
+        mg.addColorStop(1, 'rgba(70,92,116,0)');
+      }
       ctx.fillStyle = mg;
       ctx.beginPath();
       ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = fade * (0.42 + 0.12 * Math.sin(g.life * 3));
-      ctx.strokeStyle = '#b6cfe2';
+      ctx.strokeStyle = icy ? '#cfeaff' : '#b6cfe2';
       ctx.lineWidth = 2.4;
-      ctx.setLineDash([9, 11]);
+      ctx.setLineDash(icy ? [4, 7] : [9, 11]);
       ctx.beginPath();
       ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
       ctx.stroke();
@@ -2712,7 +2813,11 @@ export class Game {
     for (const g of this.grounds) {
       if (g.kind === 'mud') continue;
       const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-      if (g.kind === 'poison') {
+      if (g.kind === 'frost') {
+        // 给霜冻一点冷光：它藏在黑暗里的话，玩家根本没机会躲
+        g2.addColorStop(0, 'rgba(150,215,255,0.2)');
+        g2.addColorStop(1, 'rgba(90,150,200,0)');
+      } else if (g.kind === 'poison') {
         g2.addColorStop(0, 'rgba(140,235,110,0.42)');
         g2.addColorStop(1, 'rgba(70,170,60,0)');
       } else {

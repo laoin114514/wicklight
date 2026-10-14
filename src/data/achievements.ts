@@ -13,6 +13,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'echo_bane', name: '回声止步', blurb: '单局击杀 10 只「回响」。', embers: 35, group: '战斗' },
   { id: 'siphon_slain', name: '灯火不可夺', blurb: '单局击杀 5 只「噬灯魅」。', embers: 45, group: '战斗' },
   { id: 'mirewalker', name: '踏雾而行', blurb: '单局在滞行雾里累计待满 20 秒。', embers: 35, group: '战斗' },
+  { id: 'frost_walker', name: '霜行者', blurb: '单局在寒潮的霜冻里累计待满 6 秒。', embers: 40, group: '战斗' },
   { id: 'pierce_line', name: '一线穿心', blurb: '一次光矛贯穿 5 个敌人。', embers: 40, group: '战斗' },
   { id: 'blade_return', name: '去而复返', blurb: '单局用回旋灯刃回程命中 25 次。', embers: 40, group: '战斗' },
 

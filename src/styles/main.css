@@ -554,6 +554,10 @@ body {
 .announce.is-big { font-size: clamp(20px, 2.7vw, 34px); color: #fff; }
 
 .toast-root { display: flex; flex-direction: column; align-items: center; gap: 6px; justify-content: flex-start; padding-top: 90px; }
+/* 一次堆了好几张时，把旧的压暗一点：新消息始终是主角，画面也不至于糊满 */
+.toast-root > :nth-last-child(n + 3) { opacity: 0.66; transform: scale(0.97); }
+.toast-root > :nth-last-child(n + 5) { opacity: 0.34; }
+
 /* 首次遭遇的提示卡：比普通 toast 宽、有左色条、两行 */
 .toast--tip {
   display: grid;

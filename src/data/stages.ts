@@ -7,7 +7,7 @@ export const STAGES: StageDef[] = [
     waves: 7,
     boss: 'thornlord',
     elites: ['wickmother'],
-    hazards: ['fog', 'meteor'],
+    hazards: ['fog', 'meteor', 'bramble'],
   },
   {
     id: 'ashenkeep',
@@ -15,7 +15,7 @@ export const STAGES: StageDef[] = [
     waves: 8,
     boss: 'extinguisher',
     elites: ['darkless', 'siphon'],
-    hazards: ['collapse', 'wispstorm'],
+    hazards: ['collapse', 'wispstorm', 'bramble'],
   },
   {
     id: 'emberhold',
@@ -40,7 +40,7 @@ export const STAGES: StageDef[] = [
     waves: 10,
     boss: 'nightfall',
     elites: ['wickmother', 'darkless', 'siphon'],
-    hazards: ['echoes', 'wispstorm', 'meteor', 'oilvoid'],
+    hazards: ['echoes', 'wispstorm', 'meteor', 'oilvoid', 'coldfront'],
     pyres: 4,
   },
 ];

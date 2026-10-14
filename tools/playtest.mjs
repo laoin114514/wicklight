@@ -381,6 +381,52 @@ async function main() {
   expect(tip.w > 0 && tip.h > 0 && tip.left >= 0 && tip.right <= 1280, '提示卡有尺寸且在视口内', JSON.stringify(tip));
   await shot('04b-tip');
 
+  // ── 新险境：荆棘回廊（围住你，只留一道缝）与寒潮（霜冻拖慢你）──
+  const bramble = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.hazards.length = 0;
+    g.grounds.length = 0;
+    g.handleHazard('bramble');
+    const thorns = g.hazards.filter((h) => h.kind === 'thorn');
+    const angles = thorns
+      .map((h) => (Math.atan2(h.y - g.player.y, h.x - g.player.x) + Math.PI * 2) % (Math.PI * 2))
+      .sort((a, b) => a - b);
+    let widest = 0;
+    for (let i = 0; i < angles.length; i += 1) {
+      const next = i === angles.length - 1 ? angles[0] + Math.PI * 2 : angles[i + 1];
+      widest = Math.max(widest, next - angles[i]);
+    }
+    return { count: thorns.length, widest: Math.round((widest * 180) / Math.PI) };
+  });
+  expect(bramble.count === 11 && bramble.widest > 80, '荆棘回廊围住玩家并留出一道缝', JSON.stringify(bramble));
+  await shot('04c-bramble');
+
+  const coldfront = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.hazards.length = 0;
+    g.grounds.length = 0;
+    g.handleHazard('coldfront');
+    g.hitStop = 0;
+    const f = g.grounds.find((x) => x.kind === 'frost');
+    g.player.x = f.x;
+    g.player.y = f.y;
+    g.update(1 / 60);
+    return {
+      frost: g.grounds.filter((x) => x.kind === 'frost').length,
+      slow: Number(g.player.terrainSlow.toFixed(2)),
+      oil: Number(g.player.terrainOil.toFixed(2)),
+      hp: g.player.hp > 0,
+    };
+  });
+  expect(coldfront.frost === 5, '寒潮铺下霜冻地带', JSON.stringify(coldfront));
+  expect(coldfront.slow < 1 && coldfront.oil > 1 && coldfront.hp, '踩进霜冻会变慢且更费油，但不掉血', JSON.stringify(coldfront));
+  await shot('04d-coldfront');
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.hazards.length = 0;
+    g.grounds.length = 0;
+  });
+
   await drainLevelUps();
 
   // ── 4. 暂停 ──

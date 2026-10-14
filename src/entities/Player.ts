@@ -88,8 +88,12 @@ export class Player {
   private hitFlash = 0;
   damageMult = 1;
   oilDecayPerSec = 0.018;
-  /** 地形减速（织雾者的滞行雾）：每帧由 Game 重新写入，1 = 不受影响 */
+  /** 地形减速（织雾者的滞行雾 / 寒潮的霜冻）：每帧由 Game 重新写入，1 = 不受影响 */
   terrainSlow = 1;
+  /** 霜冻带来的额外灯油耗率（1 = 不受影响） */
+  terrainOil = 1;
+  /** 霜冻带来的灯火衰减（1 = 不受影响） */
+  terrainLight = 1;
   /** 夜咒「枯灯」带来的灯火衰减倍率 */
   curseOilMult = 1;
   revives = 0;
@@ -114,6 +118,8 @@ export class Player {
     this.oil = 1;
     this.brightness = 1;
     this.terrainSlow = 1;
+    this.terrainOil = 1;
+    this.terrainLight = 1;
     this.curseOilMult = 1;
     this.invuln = 0;
     this.dashTimer = 0;
@@ -276,13 +282,13 @@ export class Player {
     }
 
     // Oil decay / burning
-    this.oil = Math.max(0, this.oil - this.oilDecayPerSec * s.oilDecayMult * this.curseOilMult * dt);
+    this.oil = Math.max(0, this.oil - this.oilDecayPerSec * s.oilDecayMult * this.curseOilMult * this.terrainOil * dt);
     if (this.oil <= 0) {
       this.hp -= 3 * dt;
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
     }
     this.brightness = 0.35 + this.oilFrac * 0.65;
-    this.lightRadius = (96 + this.oilFrac * 224) * this.pyreMods.lightMult;
+    this.lightRadius = (96 + this.oilFrac * 224) * this.pyreMods.lightMult * this.terrainLight;
 
     // Movement
     let mvx = input.moveX;
