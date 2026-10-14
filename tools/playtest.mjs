@@ -429,6 +429,41 @@ async function main() {
 
   await drainLevelUps();
 
+  // ── 首次走进一关：主题 / 险境 / 首领一起说清楚（v20）──
+  const stageTip = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const stages = window.__WICKLIGHT__.catalog.stages;
+    g.save.tips = [];
+    g.hitStop = 0;
+    g.loadStage(stages[1], 1, false);
+    const el = [...document.querySelectorAll('.toast--tip')].pop();
+    const r = el?.getBoundingClientRect();
+    const text = (el?.innerText ?? '').replace(/\n/g, ' ');
+    const recorded = g.save.tips.includes('stage:ashenkeep');
+    g.loadStage(stages[0], 0, false); // 回到第一关，后面的流程照旧
+    const back = [...document.querySelectorAll('.toast--tip')].pop();
+    const seen = g.save.tips.slice();
+    return {
+      text,
+      recorded,
+      seen,
+      w: Math.round(r?.width ?? 0),
+      h: Math.round(r?.height ?? 0),
+      left: Math.round(r?.left ?? 0),
+      right: Math.round(r?.right ?? 0),
+      back: (back?.innerText ?? '').replace(/\n/g, ' '),
+    };
+  });
+  expect(/关卡 · 残堡/.test(stageTip.text), '首次走进一关弹出「关卡」提示卡', stageTip.text);
+  expect(/塌方/.test(stageTip.text) && !/collapse/.test(stageTip.text), '险境用中文名写出来，不露原始 id', stageTip.text);
+  expect(/熄灯者/.test(stageTip.text), '关卡提示写出这一关的首领名', stageTip.text);
+  expect(stageTip.w > 0 && stageTip.h > 0 && stageTip.left >= 0 && stageTip.right <= 1280, '关卡提示卡有尺寸且在视口内', JSON.stringify(stageTip));
+  expect(stageTip.recorded && stageTip.seen.includes('stage:ashenkeep'), '关卡提示写进存档（stage:ashenkeep）', JSON.stringify(stageTip.seen));
+  expect(/关卡 · 幽林/.test(stageTip.back), '回到第一关也会补上它自己的说明', stageTip.back);
+  await shot('04e-stage-tip');
+
+  await drainLevelUps();
+
   // ── 4. 暂停 ──
   await page.keyboard.press('Escape');
   await sleep(300);

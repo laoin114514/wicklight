@@ -31,14 +31,18 @@ test('首次遭遇提示：精英 / 首领 / 险境各讲一次', async (t) => {
   game.player.hp = 1e6;
   game.save.tips = [];
 
-  const cards = () => hud.toastRoot.children.filter((c) => String(c.className).includes('toast--tip'));
+  const allTips = () => hud.toastRoot.children.filter((c) => String(c.className).includes('toast--tip'));
+  // v20 起 newRun 进第一关会先弹一张「关卡」卡，这里只数从这一刻起新增的
+  const base = allTips().length;
+  const cards = () => allTips().length - base;
+  const tipAt = (i) => allTips()[base + i];
   const text = (el) => `${el.innerHTML}`;
 
   // ── 普通敌人不该弹卡（不然第一关就被提示糊住）──
   game.enemies.clear();
   game.enemies.spawn('shade', game.player.x + 200, game.player.y, 1, 1);
   game.scanEncounters();
-  assert.equal(cards().length, 0, '普通敌人不弹提示');
+  assert.equal(cards(), 0, '普通敌人不弹提示');
   assert.deepEqual(game.save.tips, [], '普通敌人不该写进提示存档');
 
   // ── 精英：一条敌人 + 一条词缀，合成一张卡 ──
@@ -46,8 +50,8 @@ test('首次遭遇提示：精英 / 首领 / 险境各讲一次', async (t) => {
   const elite = game.enemies.spawn('wickmother', game.player.x + 260, game.player.y, 1, 1);
   game.applyAffix(elite, 'warded');
   game.scanEncounters();
-  assert.equal(cards().length, 1, `首次遇到精英应弹一张提示卡（${cards().length}）`);
-  const card = text(cards()[0]);
+  assert.equal(cards(), 1, `首次遇到精英应弹一张提示卡（${cards()}）`);
+  const card = text(tipAt(0));
   assert.ok(card.includes('烛母') && card.includes('咒盾'), `提示要写清是谁、带什么词缀（${card}）`);
   assert.ok(card.includes('免疫灼烧'), '词缀提示要说清它的效果');
   assert.ok(game.save.tips.includes('wickmother|warded'), '提示应写进存档（按敌人 + 词缀去重）');
@@ -60,35 +64,35 @@ test('首次遭遇提示：精英 / 首领 / 险境各讲一次', async (t) => {
   const again = game.enemies.spawn('wickmother', game.player.x + 260, game.player.y, 1, 1);
   game.applyAffix(again, 'warded');
   game.scanEncounters();
-  assert.equal(cards().length, 1, '同一种精英 + 同一个词缀只讲一次');
+  assert.equal(cards(), 1, '同一种精英 + 同一个词缀只讲一次');
 
   // ── 换个词缀就是新的应对，该讲 ──
   game.enemies.clear();
   const other = game.enemies.spawn('wickmother', game.player.x + 260, game.player.y, 1, 1);
   game.applyAffix(other, 'venom');
   game.scanEncounters();
-  assert.equal(cards().length, 2, '换了词缀应该再讲一次');
-  assert.ok(text(cards()[1]).includes('剧毒'), '第二张卡讲的是新词缀');
+  assert.equal(cards(), 2, '换了词缀应该再讲一次');
+  assert.ok(text(tipAt(1)).includes('剧毒'), '第二张卡讲的是新词缀');
 
   // ── 首领 ──
   game.enemies.clear();
   game.enemies.spawn('nightfall', game.player.x + 320, game.player.y, 1, 1);
   game.scanEncounters();
-  assert.equal(cards().length, 3, '首次遇到首领要弹提示');
-  assert.ok(text(cards()[2]).includes('终夜'), '首领提示写的是首领名');
+  assert.equal(cards(), 3, '首次遇到首领要弹提示');
+  assert.ok(text(tipAt(2)).includes('终夜'), '首领提示写的是首领名');
   assert.ok(game.save.tips.includes('nightfall|'), '首领提示按敌人去重');
 
   // ── 险境：每种只讲一次 ──
   game.enemies.clear();
-  const before = cards().length;
+  const before = cards();
   game.handleHazard('echoes');
-  assert.equal(cards().length, before + 1, '首次遇到险境要弹提示');
-  assert.ok(text(cards()[before]).includes('险境'), '险境提示带了类别前缀');
+  assert.equal(cards(), before + 1, '首次遇到险境要弹提示');
+  assert.ok(text(tipAt(before)).includes('险境'), '险境提示带了类别前缀');
   assert.ok(game.save.tips.includes('hazard:echoes'), '险境提示应写进存档');
   game.handleHazard('echoes');
-  assert.equal(cards().length, before + 1, '同一个险境只讲一次');
+  assert.equal(cards(), before + 1, '同一个险境只讲一次');
   game.handleHazard('meteor');
-  assert.equal(cards().length, before + 2, '换个险境要讲');
+  assert.equal(cards(), before + 2, '换个险境要讲');
 
   // ── 存档里不该因此长出奇怪的东西，且老存档（没有 tips 字段）也能正常用 ──
   assert.ok(Array.isArray(game.save.tips), 'tips 应是数组');
@@ -102,9 +106,9 @@ test('首次遭遇提示：精英 / 首领 / 险境各讲一次', async (t) => {
   game.enemies.clear();
   game.save.tips = [];
   game.enemies.spawn('darkless', game.player.x + 200, game.player.y, 1, 1);
-  const beforeLoop = cards().length;
+  const beforeLoop = cards();
   for (let i = 0; i < 60; i += 1) game.update(1 / 60);
-  assert.ok(cards().length > beforeLoop, '主循环里的扫描也要能把提示弹出来');
+  assert.ok(cards() > beforeLoop, '主循环里的扫描也要能把提示弹出来');
 
   assert.deepEqual(errors, [], `不应有 console.error：${errors.slice(0, 3).join(' | ')}`);
 });

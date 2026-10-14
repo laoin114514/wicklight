@@ -41,7 +41,8 @@ import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
-import { PASSIVES, baseStats, type PlayerStats } from '../data/upgrades';
+import { PASSIVES, PASSIVE_MAP, baseStats, type PlayerStats } from '../data/upgrades';
+import { WEAPON_MAP } from '../data/weapons';
 import type { Difficulty, RunStats, SaveData, ShopItem, UpgradeOffer } from '../types';
 
 export type GameState =
@@ -501,6 +502,7 @@ export class Game {
     this.rollCurse(stage, index, fresh);
     this.rollBounty();
     this.titleFor(stage);
+    this.noteStageTip(stage);
   }
 
   /**
@@ -1570,6 +1572,7 @@ export class Game {
 
   chooseUpgrade(offer: UpgradeOffer): void {
     this.upgrades.apply(this.player, offer);
+    this.maybeTipUpgrade(offer);
     if (offer.kind === 'passive') this.player.recomputeStats();
     this.upgradedCount += 1;
     this.pendingLevels -= 1;
@@ -1959,6 +1962,45 @@ export class Game {
     this.ui?.showScreen('shop');
   }
 
+  /**
+   * 第一次拿到某把武器：把"它是什么、能长成什么"讲一次。
+   * 二十把武器靠图鉴自己翻太慢，第一次上手时正是一个人最愿意读说明的时候。
+   */
+  private noteWeaponTip(id: string): void {
+    const def = WEAPON_MAP[id];
+    if (!def) return;
+    const evo = def.evolve
+      ? ` 满级 + ${PASSIVE_MAP[def.evolve.passive]?.name ?? def.evolve.passive} 满级即可进化成「${WEAPON_MAP[def.evolve.into]?.name ?? def.evolve.into}」。`
+      : ' 这件没有进化线，但每一级都会更强。';
+    this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${evo}`);
+  }
+
+  /** 升级 / 商店拿到武器或完成进化时，按第一次讲一次。 */
+  private maybeTipUpgrade(offer: UpgradeOffer): void {
+    if (offer.kind !== 'weapon') return;
+    if (offer.tag === 'evolve') {
+      const evolved = WEAPON_MAP[offer.id];
+      this.showTip(
+        `evolve:${offer.id}`,
+        `进化 · ${offer.name}`,
+        `${evolved?.blurb ?? ''} 进化武器不再升级，但吃得住你全部的整体加成。`,
+      );
+    } else if (offer.tag === 'new') {
+      this.noteWeaponTip(offer.id);
+    }
+  }
+
+  /** 第一次走进某一关：先把这一关的样子说清楚（主题、险境、首领）。 */
+  private noteStageTip(stage: import('../types').StageDef): void {
+    const hazards = stage.hazards.map((h) => HAZARD_LABEL[h] ?? h).join(' / ');
+    const boss = stage.boss ? `；首领：${ENEMY_MAP[stage.boss]?.name ?? stage.boss}` : '';
+    this.showTip(
+      `stage:${stage.id}`,
+      `关卡 · ${stage.theme.name}`,
+      `${stage.theme.subtitle}。险境：${hazards || '无'}${boss}。`,
+    );
+  }
+
   /** 拿到新遗物后，看看是否刚好凑齐了某一族的灯火共鸣，凑齐了就报一声。 */
   private announceTribeResonance(before: Record<string, number>): void {
     for (const tribe of TRIBES) {
@@ -1998,6 +2040,7 @@ export class Game {
       this.upgrades.apply(this.player, item.offer);
       this.player.recomputeStats();
       this.upgradedCount += 1;
+      this.maybeTipUpgrade(item.offer);
       this.audio.play('levelup');
     } else if (item.kind === 'heal') {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + this.player.stats.maxHp * 0.4);
