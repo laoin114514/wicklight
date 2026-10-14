@@ -18,11 +18,18 @@ export interface DirectorContext {
 
 export type DirectorPhase = 'intro' | 'spawning' | 'clearing' | 'boss' | 'complete';
 
+/** 无尽之夜的首领轮换顺序：每 5 波一位。 */
+export const ENDLESS_BOSSES = ['thornlord', 'extinguisher', 'emberwake', 'nightfall'];
+/** 从第几轮开始，首领成对出现（第 3 轮 = 第 15 波）。 */
+export const ENDLESS_PAIR_ROUND = 3;
+
 export class Director {
   phase: DirectorPhase = 'intro';
   wave = 0;
   endless = false;
   stageIndex = 0;
+  /** 当前这一波是不是「双首领」。 */
+  bossPair = false;
   /** 本关夜咒带来的敌人强化。 */
   curse: { countMult: number; hpMult: number; dmgMult: number; extraWaves: number } = {
     countMult: 1,
@@ -55,6 +62,7 @@ export class Director {
     this.spawnTimer = 0;
     this.hazardTimer = 12;
     this.aliveCap = 0;
+    this.bossPair = false;
   }
 
   /** 设置本关夜咒的敌人强化（在 setStage 之后调用）。 */
@@ -77,7 +85,13 @@ export class Director {
 
   /** 这一波是不是"首领前的最后一波"：是的话该给个预告，而不是让首领突然站在脸上。 */
   get bossNext(): boolean {
-    return !this.endless && !!this.stage.boss && this.wave === this.totalWaves - 1;
+    if (this.endless) return this.wave % 5 === 4;
+    return !!this.stage.boss && this.wave === this.totalWaves - 1;
+  }
+
+  /** 无尽之夜的轮次（每 5 波一轮，第 1 轮就是第 5 波）。 */
+  get round(): number {
+    return Math.floor(this.wave / 5);
   }
 
   private mods() {
@@ -98,20 +112,31 @@ export class Director {
     this.spawned = 0;
     this.spawnTimer = 0.4;
 
-    const ENDLESS_BOSSES = ['thornlord', 'extinguisher', 'emberwake', 'nightfall'];
-    const bossId = this.endless
-      ? ENDLESS_BOSSES[Math.floor(this.wave / 5 - 1) % ENDLESS_BOSSES.length]
-      : this.stage.boss;
+    const bossIndex = Math.floor(this.wave / 5 - 1) % ENDLESS_BOSSES.length;
+    const bossId = this.endless ? ENDLESS_BOSSES[bossIndex] : this.stage.boss;
     const isBossWave = this.endless
       ? this.wave % 5 === 0
       : this.wave === this.stage.waves + curse.extraWaves && !!bossId;
     if (isBossWave && bossId) {
       this.phase = 'boss';
-      const pos = ctx.spawnPoint();
+      // 第 3 轮起，两位首领一起上场——单只首领的招式已经背熟了，成对才是新的题
+      const pair = this.endless && this.wave / 5 >= ENDLESS_PAIR_ROUND;
+      this.bossPair = pair;
+      const hp = this.hpMult * (pair ? 0.62 : 0.9);
       const def = ENEMY_MAP[bossId];
-      ctx.spawnEnemy(bossId, pos.x, pos.y, this.hpMult * 0.9, this.dmgMult);
+      const pos = ctx.spawnPoint();
+      ctx.spawnEnemy(bossId, pos.x, pos.y, hp, this.dmgMult);
       ctx.onBossSpawn(def.id);
-      ctx.announce(`${def.name} 苏醒`, true);
+      if (pair) {
+        const secondId = ENDLESS_BOSSES[(bossIndex + 1) % ENDLESS_BOSSES.length];
+        const def2 = ENEMY_MAP[secondId];
+        const pos2 = ctx.spawnPoint();
+        ctx.spawnEnemy(secondId, pos2.x, pos2.y, hp, this.dmgMult);
+        ctx.onBossSpawn(def2.id);
+        ctx.announce(`第 ${this.round} 轮 · ${def2.name} 与 ${def.name} 一同苏醒`, true);
+      } else {
+        ctx.announce(`${def.name} 苏醒`, true);
+      }
     } else {
       this.phase = 'spawning';
       // 首领前那一波把话说在前面：不然"下一波直接站着首领"会显得不讲道理
@@ -167,6 +192,7 @@ export class Director {
         break;
       }
       case 'boss': {
+        // 双首领要两只都倒下才算清场（isBossAlive 会一直为真直到最后一只倒下）
         if (!ctx.isBossAlive()) {
           if (this.endless) {
             ctx.onStageComplete();

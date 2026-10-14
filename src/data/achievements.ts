@@ -25,6 +25,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'nightfall_king', name: '长夜终有尽', blurb: '击败「终夜」。', embers: 70, group: '关卡与首领' },
   { id: 'endless20', name: '不灭之灯', blurb: '在无尽模式抵达第 20 波。', embers: 60, group: '关卡与首领' },
   { id: 'endless40', name: '长夜不熄', blurb: '在无尽模式抵达第 40 波。', embers: 120, group: '关卡与首领' },
+  { id: 'endless60', name: '长夜尽头', blurb: '在无尽模式抵达第 60 波。', embers: 150, group: '关卡与首领' },
+  { id: 'twin_boss', name: '双首同焚', blurb: '在无尽模式同一波里击败两位首领。', embers: 120, group: '关卡与首领' },
   { id: 'clears3', name: '三度长明', blurb: '累计通关 3 次。', embers: 90, group: '关卡与首领' },
 
   { id: 'shrine_first', name: '与暗交易', blurb: '在祭坛上做出第一次抉择。', embers: 15, group: '抉择与风险' },

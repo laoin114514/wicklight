@@ -241,9 +241,14 @@ export class HUD implements HUDHost {
     const fill = this.waveFill;
     const boss = this.waveBoss;
     if (endless) {
+      // 无尽没有分母，但每一轮仍是 5 波——进度条改成"离下一轮首领还有几波"
       this.waveBarEl.classList.add('is-endless');
-      fill.style.width = '100%';
-      boss.style.display = 'none';
+      const phase = wave % 5;
+      const frac = wave > 0 && phase === 0 ? 1 : phase / 5;
+      fill.style.width = `${frac * 100}%`;
+      boss.style.display = '';
+      boss.style.left = '80%';
+      boss.style.width = '20%';
       return;
     }
     this.waveBarEl.classList.remove('is-endless');

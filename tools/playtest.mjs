@@ -706,6 +706,28 @@ async function main() {
   const endless = await page.evaluate(() => window.__PROBE__.state());
   expect(endless && endless.state === 'playing', '无尽之夜能开局', JSON.stringify(endless));
   await sleep(1500);
+  // 无尽进度条：没有分母，但每一轮 5 波，条上要填出"离下一轮首领还有几波"
+  const endlessBar = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const q = (sel) => document.querySelector(sel);
+    g.wave = 7;
+    window.__WICKLIGHT__.hud.update(1 / 60);
+    const bar = q('.js-wavebar');
+    const fill = q('.js-wavebar i');
+    const boss = q('.js-wavebar u');
+    const r = bar.getBoundingClientRect();
+    return {
+      endless: bar.classList.contains('is-endless'),
+      fill: Math.round(parseFloat(fill.style.width)),
+      bossDisplay: boss.style.display,
+      bossW: Math.round(parseFloat(boss.style.width)),
+      w: Math.round(r.width),
+      scroll: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  expect(endlessBar.endless && endlessBar.fill === 40, '无尽进度条填到这一轮的哪一波', JSON.stringify(endlessBar));
+  expect(endlessBar.bossDisplay !== 'none' && endlessBar.bossW > 0, '无尽进度条上首领那一段看得见', JSON.stringify(endlessBar));
+  expect(endlessBar.w > 0 && endlessBar.scroll <= 1, '无尽进度条有尺寸且不溢出', JSON.stringify(endlessBar));
   await shot('13-endless');
 
   // ── 11. 今日灯芯：全服同一个夜晚 ──

@@ -718,6 +718,7 @@ export class Game {
     // Endless: keep counting sustained survival every few waves
     if (this.endless && this.wave >= 20) this.achievements.unlock('endless20');
     if (this.endless && this.wave >= 40) this.achievements.unlock('endless40');
+    if (this.endless && this.wave >= 60) this.achievements.unlock('endless60');
   }
 
   /**
@@ -1389,6 +1390,9 @@ export class Game {
       if (e.defId === 'extinguisher') this.achievements.unlock('boss_rush');
       if (e.defId === 'emberwake') this.achievements.unlock('ashen_king');
       if (e.defId === 'nightfall') this.achievements.unlock('nightfall_king');
+      if (this.endless && this.director.bossPair && this.enemies.bosses.filter((b) => b !== e).length === 0) {
+        this.achievements.unlock('twin_boss');
+      }
     }
   }
 
@@ -1721,7 +1725,8 @@ export class Game {
     if (this.curse) this.achievements.unlock('curse_bearer');
     if (this.curse && (this.curse.id === 'whisper' || this.curse.id === 'starve')) this.achievements.unlock('curse_veteran');
     if (this.endless) {
-      this.openShop('无尽之夜 · 补给站');
+      const round = Math.max(1, Math.floor(this.director.wave / 5));
+      this.openShop(`无尽之夜 · 第 ${round} 轮 · 补给站`);
       return;
     }
     if (this.stageIndex >= STAGES.length - 1) {
