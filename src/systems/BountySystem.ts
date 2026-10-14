@@ -101,6 +101,12 @@ export class BountySystem {
     this.advance(s.progress + 1);
   }
 
+  onPyre(): void {
+    const s = this.state;
+    if (!s || s.done || s.kind !== 'pyre') return;
+    this.advance(s.progress + 1);
+  }
+
   tick(dt: number): void {
     const s = this.state;
     if (!s || s.done || s.kind !== 'untouched') return;

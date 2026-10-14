@@ -328,6 +328,29 @@ async function main() {
   expect(clash.length === 0, '悬赏追踪不压住左上角状态条', clash.join('; '));
   const bountyLayout = await page.evaluate(() => window.__PROBE__.layout('.hud__bounty'));
   expect(bountyLayout.issues.length === 0, '悬赏芯片布局正常', bountyLayout.issues.join('; '));
+
+  // ── 灯台：本关的探索目标要真的在场，HUD 也要报得出进度 ──
+  const pyre = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const el = document.querySelector('.hud__pyre');
+    const r = el?.getBoundingClientRect();
+    return {
+      total: g.pyreTotal,
+      lit: g.pyresLit,
+      level: g.level.pyres.length,
+      text: el?.textContent ?? '',
+      on: el?.classList.contains('is-on') ?? false,
+      w: Math.round(r?.width ?? 0),
+      left: Math.round(r?.left ?? 0),
+    };
+  });
+  expect(pyre.level >= 3 && pyre.total === pyre.level, '本关散布着若干待点亮的灯台', JSON.stringify(pyre));
+  expect(pyre.on && pyre.text.includes('灯台'), 'HUD 显示灯台进度', pyre.text);
+  expect(pyre.left >= 0 && pyre.left + pyre.w <= 1280, '灯台芯片没有溢出视口', JSON.stringify(pyre));
+  const pyreClash = await page.evaluate(() => window.__PROBE__.overlaps('.hud__bounty', '.hud__pyre'));
+  expect(pyreClash.length === 0, '灯台芯片不压住悬赏', pyreClash.join('; '));
+  const pyreLayout = await page.evaluate(() => window.__PROBE__.layout('.hud__pyre'));
+  expect(pyreLayout.issues.length === 0, '灯台芯片布局正常', pyreLayout.issues.join('; '));
   const hudText = await page.evaluate(() => window.__PROBE__.text('.hud') ?? document.body.innerText.slice(0, 200));
   expect(hudText && hudText.length > 0, 'HUD 有内容');
   const playCanvas = await page.evaluate(() => window.__PROBE__.canvasStats());
@@ -649,6 +672,15 @@ async function main() {
     ...window.__PROBE__.overlaps('.hud__bounty', '.hud__stage'),
   ]);
   expect(mobClash.length === 0, '移动端悬赏芯片不压住状态栏 / 构筑信息 / 关卡名', mobClash.join('; '));
+  const mobPyre = await mobile.evaluate(() => window.__PROBE__.layout('.hud__pyre'));
+  expect(mobPyre.issues.length === 0, '移动端灯台芯片布局正常', mobPyre.issues.join('; '));
+  const mobPyreClash = await mobile.evaluate(() => [
+    ...window.__PROBE__.overlaps('.hud__topright', '.hud__pyre'),
+    ...window.__PROBE__.overlaps('.hud__build', '.hud__pyre'),
+    ...window.__PROBE__.overlaps('.hud__pyre', '.hud__stage'),
+    ...window.__PROBE__.overlaps('.hud__bounty', '.hud__pyre'),
+  ]);
+  expect(mobPyreClash.length === 0, '移动端灯台芯片不压住其它 HUD', mobPyreClash.join('; '));
 
   const mobileAnn = await mobile.evaluate(() => window.__PROBE__.wraps('.announce'));
   expect(!mobileAnn || mobileAnn.count <= 1, '移动端公告不折行', JSON.stringify(mobileAnn));

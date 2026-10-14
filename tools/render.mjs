@@ -209,6 +209,27 @@ const SCENES = {
     game.player.update(1 / 60, { moveX: 0, moveY: 0, dash: false, nova: false }, game.playerCtx());
     for (let i = 0; i < 16; i += 1) step();
   },
+  pyres() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 60; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    const [a, b] = game.level.pyres;
+    // 一座正在点燃（半途的进度环）、一座已经长明、剩下的留在远处给屏幕边缘的箭头
+    game.player.x = a.x - 46;
+    game.player.y = a.y + 24;
+    b.x = game.player.x + 250;
+    b.y = game.player.y - 78;
+    b.lit = true;
+    game.pyresLit = 1;
+    for (let i = 0; i < 40; i += 1) step();
+    for (let i = 0; i < 4; i += 1) {
+      const ang = (i / 4) * Math.PI * 2;
+      game.enemies.spawn('shade', game.player.x + Math.cos(ang) * 150, game.player.y + Math.sin(ang) * 130, 3, 1);
+    }
+    for (let i = 0; i < 3; i += 1) step();
+  },
   shrine() {
     game.newRun('warden', 'normal', false);
     game.enemies.clear();

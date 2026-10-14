@@ -1,6 +1,6 @@
 /**
  * 悬赏回归测试：每关都要有一张可行（敌人刷得出来）的悬赏，
- * 四种计数方式（猎杀 / 连杀 / 燃爆 / 静默）都能推进、能完成、能发奖，并且只发一次。
+ * 五种计数方式（猎杀 / 连杀 / 燃爆 / 静默 / 点灯）都能推进、能完成、能发奖，并且只发一次。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +36,7 @@ test('悬赏：抽取、计数、完成与发奖', async (t) => {
     assert.ok(b.name && b.icon, `${b.id} 缺名称或图标`);
     assert.ok(b.target > 0, `${b.id} 目标必须为正数`);
     assert.ok(b.reward.gold > 0, `${b.id} 必须有金币奖励`);
-    assert.ok(['hunt', 'combo', 'nova', 'untouched'].includes(b.kind), `${b.id} 计数方式非法`);
+    assert.ok(['hunt', 'combo', 'nova', 'untouched', 'pyre'].includes(b.kind), `${b.id} 计数方式非法`);
     if (b.kind === 'hunt') {
       assert.ok(b.enemy, `${b.id} 是猎杀悬赏却没指定敌人`);
       assert.ok(globalThis.window.__WICKLIGHT__.catalog.enemies.some((e) => e.id === b.enemy), `${b.id} 指向了不存在的敌人 ${b.enemy}`);

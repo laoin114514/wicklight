@@ -918,6 +918,31 @@ body.is-touch .hud__hint { display: none; }
 .hud__bounty i { display: block; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
 .hud__bounty i u { display: block; height: 100%; background: var(--c, #ffd24e); transition: width 0.2s ease; }
 
+.hud__pyre {
+  position: absolute;
+  left: 18px;
+  top: 178px;
+  width: 200px;
+  display: grid;
+  gap: 2px;
+  padding: 7px 12px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: #ffb15e;
+  background: rgba(8, 7, 12, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #ffb15e;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.hud__pyre.is-on { opacity: 0.94; }
+.hud__pyre.is-done { opacity: 0.5; }
+.hud__pyre.is-done b { color: #ffd9a0; }
+.hud__pyre b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud__pyre span { color: var(--text-dim); font-size: 10.5px; }
+
 .lo-bounty { padding: 8px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.04); border-left: 2px solid var(--c, #ffd24e); }
 .lo-bounty b { color: var(--c, #ffd24e); font-size: 13px; }
 .lo-bounty span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-dim); }
@@ -925,9 +950,11 @@ body.is-touch .hud__hint { display: none; }
 
 /* 触屏左侧已经被构筑信息占了，悬赏追踪改挂到右上角状态栏下面 */
 body.is-touch .hud__bounty { left: auto; right: 12px; top: 136px; }
+body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
 
 @media (max-width: 640px) {
   .hud__bounty { width: 150px; font-size: 10.5px; padding: 6px 9px 7px; }
+  .hud__pyre { width: 150px; font-size: 10.5px; padding: 5px 9px 6px; top: 174px; }
 }
 
 /* ── 图鉴详情 ── */

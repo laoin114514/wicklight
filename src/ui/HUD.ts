@@ -3,6 +3,7 @@ import type { HUDHost } from '../core/Game';
 import { WEAPON_MAP } from '../data/weapons';
 import { PASSIVE_MAP } from '../data/upgrades';
 import { RELIC_MAP } from '../data/relics';
+import { STAGES } from '../data/stages';
 
 export class HUD implements HUDHost {
   private root: HTMLElement;
@@ -24,6 +25,8 @@ export class HUD implements HUDHost {
   private curseSig = '~';
   private bountyEl!: HTMLElement;
   private bountySig = '~';
+  private pyreEl!: HTMLElement;
+  private pyreSig = '~';
   private buildSig = '';
   private bossWrap!: HTMLElement;
   private bossName!: HTMLElement;
@@ -68,6 +71,7 @@ export class HUD implements HUDHost {
       </div>
       <div class="hud__curse js-curse"></div>
       <div class="hud__bounty js-bounty"></div>
+      <div class="hud__pyre js-pyre"></div>
       <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · 自动开火 · Esc 暂停</div>
     `;
     this.root.appendChild(hud);
@@ -92,6 +96,7 @@ export class HUD implements HUDHost {
     this.comboBar = q('.js-combo-bar');
     this.curseEl = q('.js-curse');
     this.bountyEl = q('.js-bounty');
+    this.pyreEl = q('.js-pyre');
 
     const build = document.createElement('div');
     build.className = 'hud__build';
@@ -201,6 +206,26 @@ export class HUD implements HUDHost {
     this.bountyEl.classList.add('is-on');
   }
 
+  /** 灯台进度：只在还有没点亮的灯台时占屏幕。 */
+  private updatePyreChip(): void {
+    const total = this.game.pyreTotal;
+    const lit = this.game.pyresLit;
+    const sig = `${lit}/${total}`;
+    if (sig === this.pyreSig) return;
+    this.pyreSig = sig;
+    if (total <= 0) {
+      this.pyreEl.textContent = '';
+      this.pyreEl.classList.remove('is-on');
+      return;
+    }
+    const left = total - lit;
+    this.pyreEl.innerHTML =
+      `<b>🏮 灯台 ${lit}/${total}</b>` +
+      `<span>${left > 0 ? '靠近并停留片刻点亮 · 长明一处' : '✓ 此夜长明'}</span>`;
+    this.pyreEl.classList.toggle('is-done', left === 0);
+    this.pyreEl.classList.add('is-on');
+  }
+
   update(dt: number): void {
     const g = this.game;
     this.hpFill.style.width = `${Math.max(0, (g.player.hp / g.player.stats.maxHp) * 100)}%`;
@@ -214,11 +239,12 @@ export class HUD implements HUDHost {
     this.emberEl.textContent = String(g.save.embers);
     this.goldEl.textContent = String(g.gold);
     this.updateBuild();
-    const stage = g.endless ? '无尽·熔窟' : ['幽林', '残堡', '熔窟'][g.stageIndex] ?? '';
+    const stage = g.endless ? '无尽 · 长夜' : (STAGES[Math.min(g.stageIndex, STAGES.length - 1)]?.theme.name ?? '');
     this.stageEl.textContent = stage;
     this.setBoss(g.bossName, g.bossFrac);
     this.updateCurse();
     this.updateBounty();
+    this.updatePyreChip();
 
     const comboOn = g.combo >= 3;
     if (comboOn !== this.comboEl.classList.contains('is-on')) this.comboEl.classList.toggle('is-on', comboOn);

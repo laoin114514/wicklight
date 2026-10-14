@@ -5,7 +5,7 @@
  * 把连杀堆到 25、忍住 75 秒不挨打，都能换来金币与补给。
  * 奖励刻意给金币而不是余烬：金币只在局内花得掉，等于把出价换成"下一关更强"。
  */
-export type BountyKind = 'hunt' | 'combo' | 'nova' | 'untouched';
+export type BountyKind = 'hunt' | 'combo' | 'nova' | 'untouched' | 'pyre';
 
 export interface BountyReward {
   gold: number;
@@ -44,6 +44,9 @@ export const BOUNTIES: BountyDef[] = [
 
   { id: 'nova3', name: '燃爆 · 三次清场', blurb: '本关释放 3 次燃爆。', icon: '💥', color: '#ffd24e', kind: 'nova', target: 3, reward: { gold: 35 } },
   { id: 'nova5', name: '燃爆 · 五次清场', blurb: '本关释放 5 次燃爆。', icon: '☄️', color: '#ffb14e', kind: 'nova', target: 5, reward: { gold: 60, oil: 0.3 } },
+
+  { id: 'pyre3', name: '点灯 · 三座灯台', blurb: '在本关内点亮 3 座灯台。', icon: '🏮', color: '#ffb15e', kind: 'pyre', target: 3, reward: { gold: 55, oil: 0.3 } },
+  { id: 'pyre_all', name: '点灯 · 燃尽此夜', blurb: '在本关内点亮全部灯台。', icon: '🕯️', color: '#ffd9a0', kind: 'pyre', target: 3, reward: { gold: 80, heal: 0.25 } },
 
   { id: 'untouched45', name: '静默 · 45 秒不受伤', blurb: '连续 45 秒不受到任何伤害。', icon: '🕊️', color: '#8affc1', kind: 'untouched', target: 45, reward: { gold: 55, heal: 0.2 } },
   { id: 'untouched75', name: '静默 · 75 秒不受伤', blurb: '连续 75 秒不受到任何伤害。', icon: '🌙', color: '#c9a3ff', kind: 'untouched', target: 75, reward: { gold: 90, heal: 0.3 } },

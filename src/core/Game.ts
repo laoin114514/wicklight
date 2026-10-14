@@ -18,7 +18,7 @@ import { ProjectileSystem, type Projectile } from '../entities/Projectile';
 import { Director } from '../systems/Director';
 import { generateLevel, type Level } from '../systems/LevelGen';
 import { drawDecor } from './Decor';
-import type { Shrine } from '../systems/LevelGen';
+import type { Pyre, Shrine } from '../systems/LevelGen';
 import { CURSES, type CurseDef } from '../data/curses';
 import { collideWalls, clampToArena, pointInWalls } from '../systems/CollisionSystem';
 import { UpgradeSystem } from '../systems/UpgradeSystem';
@@ -229,6 +229,11 @@ export class Game {
   arcs: { pts: number[]; life: number; maxLife: number; color: string; seed: number }[] = [];
   shrineOffers: ShrineOffer[] = [];
   private shrineOpen: Shrine | null = null;
+  /** 本关已点燃的灯台数（HUD 与成就都用它）。 */
+  pyresLit = 0;
+  /** 本关灯台总数（HUD 显示 n/m）。 */
+  pyreTotal = 0;
+  private pyreChannel: Pyre | null = null;
   hitStop = 0;
   slowmo = 0;
   comboTier = 0;
@@ -423,6 +428,9 @@ export class Game {
     this.hazards.length = 0;
     this.grounds.length = 0;
     this.beams.length = 0;
+    this.pyresLit = 0;
+    this.pyreTotal = this.level.pyres.length;
+    this.pyreChannel = null;
     if (fresh) {
       this.player.oil = this.player.oilMax;
     } else {
@@ -645,6 +653,7 @@ export class Game {
     this.resolveProjectiles(dt);
     this.resolveGrounds(dt);
 
+    this.updatePyres(dt);
     this.pickups.update(dt, this.player.x, this.player.y, this.player.stats.pickupRange, (p) => this.collect(p));
 
     this.camera.resize(this.renderer.width, this.renderer.height);
@@ -660,6 +669,76 @@ export class Game {
     // Endless: keep counting sustained survival every few waves
     if (this.endless && this.wave >= 20) this.achievements.unlock('endless20');
     if (this.endless && this.wave >= 40) this.achievements.unlock('endless40');
+  }
+
+  /**
+   * 灯台：散落在远处的熄灭石灯。
+   *
+   * 站在旁边会慢慢点亮，走开会回落——于是"要不要在一片黑暗里停下来"变成一次取舍：
+   * 点燃要花时间、还会惊动黑暗，换来的是一处长明（视野）与整局的余温（伤害 / 灯火）。
+   * 大竞技场也因此不再只是背景板，而是值得走一趟的地方。
+   */
+  private updatePyres(dt: number): void {
+    const pyres = this.level.pyres;
+    if (!pyres.length) return;
+    let channel: Pyre | null = null;
+    for (const py of pyres) {
+      if (py.lit) continue;
+      const dx = this.player.x - py.x;
+      const dy = this.player.y - py.y;
+      if (dx * dx + dy * dy < 84 * 84) channel = py;
+    }
+    this.pyreChannel = channel;
+    for (const py of pyres) {
+      if (py.lit) {
+        // 长明的灯台一直照亮这一片——它既是奖励，也是你之后可以退守的据点
+        const flicker = 1 + Math.sin(this.time * 7.5 + py.x * 0.02) * 0.05;
+        this.light.addLight(py.x, py.y, 250 * flicker, 0.82);
+        this.light.addGlow(py.x, py.y, 215, 0.5);
+        if (this.rng.next() < dt * 3) this.particles.ember(py.x + this.rng.range(-14, 14), py.y - 30, '#ffc46b');
+      } else if (py === channel) {
+        py.progress = Math.min(1, py.progress + dt / 1.15);
+        this.particles.ember(py.x + this.rng.range(-10, 10), py.y - 20, '#ffb15e');
+        if (py.progress >= 1) this.ignitePyre(py);
+      } else {
+        py.progress = Math.max(0, py.progress - dt * 0.7);
+      }
+    }
+  }
+
+  /** 点燃一座灯台：长明 + 余温 + 黑暗的回应。 */
+  private ignitePyre(py: Pyre): void {
+    py.lit = true;
+    py.progress = 1;
+    this.pyresLit += 1;
+    const p = this.player;
+    p.pyreMods.damageMult *= 1.05;
+    p.pyreMods.lightMult *= 1.06;
+    p.recomputeStats();
+    p.oil = Math.min(p.oilMax, p.oil + p.oilMax * 0.14);
+    this.gold += Math.round(10 * p.flags.goldMult * this.curseGoldMult);
+    this.floaters.label(py.x, py.y - 36, '长明', '#ffd9a0', 15);
+    this.particles.burst(py.x, py.y - 20, 26, '#ffb15e', { speed: 190, size: 3, life: 0.9 });
+    this.camera.addTrauma(0.35);
+    this.flash = 0.22;
+    this.audio.play('evolve');
+    if (this.pyresLit === 1) this.achievements.unlock('pyre_first');
+    if (this.pyreTotal > 0 && this.pyresLit >= this.pyreTotal) this.achievements.unlock('pyre_all');
+    this.bounties.onPyre();
+    this.hud?.toast(`🏮 灯台 ${this.pyresLit}/${this.pyreTotal} · 灯火更旺了`);
+    // 点燃的动静会把附近的东西叫过来：不然"探索"就没有代价了
+    const count = 3 + Math.min(2, this.stageIndex);
+    for (let i = 0; i < count; i += 1) {
+      const a = this.rng.angle();
+      const d = 240 + this.rng.next() * 160;
+      this.spawnWithScaling(
+        this.rng.pick(['shade', 'crawler', 'spitter', 'moth', 'skitter', 'splinter']),
+        py.x + Math.cos(a) * d,
+        py.y + Math.sin(a) * d,
+        this.director.bossHpMult * 0.7,
+        this.director.bossDmgMult * 0.9,
+      );
+    }
   }
 
   private updateShrines(): void {
@@ -1865,6 +1944,7 @@ export class Game {
     this.drawWorld(ctx, w, h);
     this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
     this.light.render(ctx, this.camera, w, h, this.time);
+    this.drawPyreGlow(ctx, w, h);
 
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
@@ -1876,10 +1956,166 @@ export class Game {
       ctx.fillStyle = `rgba(255,242,214,${this.flash.toFixed(3)})`;
       ctx.fillRect(0, 0, w, h);
     }
+    // 方位指示放在后处理之后：屏幕边缘本来就被暗角压暗，再叠一层泛光只会看不清
+    this.drawTargetPointers(ctx, w, h);
     if (this.screenFade > 0) {
       ctx.fillStyle = `rgba(2,3,6,${this.screenFade.toFixed(3)})`;
       ctx.fillRect(0, 0, w, h);
     }
+  }
+
+  /**
+   * 没点亮的灯台在黑暗里透出的一小团余烬微光。
+   *
+   * 世界在暗幕之下，远处的目标按说就该看不见——但"完全不知道该往哪走"不是难，是迷失。
+   * 所以给熄灭的灯台留一点将熄的暖色：够看见方向，不够看清路。
+   */
+  private drawPyreGlow(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const cam = this.camera;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const py of this.level.pyres) {
+      if (py.lit) continue;
+      const s = cam.worldToScreen(py.x, py.y);
+      if (s.x < -90 || s.y < -90 || s.x > w + 90 || s.y > h + 90) continue;
+      const pulse = 0.72 + Math.sin(this.time * 2.4 + py.x * 0.01) * 0.28;
+      const r = (78 + py.progress * 40) * cam.zoom;
+      const g = ctx.createRadialGradient(s.x, s.y - 26 * cam.zoom, 0, s.x, s.y - 26 * cam.zoom, r);
+      g.addColorStop(0, `rgba(255,170,90,${0.3 * pulse})`);
+      g.addColorStop(0.45, `rgba(255,120,40,${0.13 * pulse})`);
+      g.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y - 26 * cam.zoom, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 出屏的目标（灯台 / 祭坛）在屏幕边缘留一枚箭头，最多三个，免得一圈箭头糊住画面。
+   *
+   * 边距照 HUD 的口袋来定：左边一列被悬赏 / 灯台 / 构筑芯片占着，所以左侧缩得更多，
+   * 免得箭头和标签正好落在状态栏上。
+   */
+  private drawTargetPointers(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const cam = this.camera;
+    // 按比例收，窄屏（竖屏手机）上才不会被压成负数、把箭头甩到屏幕中间
+    const left = Math.min(244, w * 0.3);
+    const right = Math.min(134, w * 0.17);
+    // 顶部留得更多：屏幕正中偏上是公告 / 图鉴 / 成就的常驻位，箭头挤进去会被它们盖住
+    const top = Math.min(196, h * 0.32);
+    const bottom = Math.min(84, h * 0.17);
+    const targets: { x: number; y: number; label: string; color: string }[] = [];
+    for (const py of this.level.pyres) if (!py.lit) targets.push({ x: py.x, y: py.y, label: '灯台', color: '#ffb15e' });
+    for (const sh of this.level.shrines) if (!sh.used) targets.push({ x: sh.x, y: sh.y, label: '祭坛', color: '#9dc4ff' });
+    if (!targets.length) return;
+    targets.sort(
+      (a, b) => Math.hypot(a.x - cam.x, a.y - cam.y) - Math.hypot(b.x - cam.x, b.y - cam.y),
+    );
+    ctx.save();
+    ctx.font = '600 12px system-ui, -apple-system, "Noto Sans SC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const t of targets.slice(0, 3)) {
+      const s = cam.worldToScreen(t.x, t.y);
+      const inside = s.x > left && s.x < w - right && s.y > top && s.y < h - bottom;
+      if (inside) continue;
+      const dx = s.x - w / 2;
+      const dy = s.y - h / 2;
+      const k = Math.min(
+        (w / 2 - (dx < 0 ? left : right)) / Math.max(1, Math.abs(dx)),
+        (h / 2 - (dy < 0 ? top : bottom)) / Math.max(1, Math.abs(dy)),
+      );
+      const ax = w / 2 + dx * k;
+      const ay = h / 2 + dy * k;
+      const ang = Math.atan2(dy, dx);
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(ang);
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(-8, -8);
+      ctx.lineTo(-8, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = t.color;
+      const dist = Math.round(Math.hypot(dx, dy) / cam.zoom / 100) * 100;
+      const tx = clamp(ax - Math.cos(ang) * 40, left + 26, w - right - 12);
+      const ty = clamp(ay - Math.sin(ang) * 40, top, h - bottom);
+      ctx.fillText(`${t.label} ${dist}`, tx, ty);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /** 灯台：熄灭时是一座冷掉的石灯，点亮后是一束长明的火。 */
+  private drawPyres(ctx: CanvasRenderingContext2D): void {
+    if (!this.level.pyres.length) return;
+    ctx.save();
+    for (const py of this.level.pyres) {
+      const flicker = 1 + Math.sin(this.time * 8 + py.x * 0.03) * 0.12;
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y + 9, 30, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = py.lit ? '#3a3145' : '#262238';
+      ctx.beginPath();
+      ctx.moveTo(py.x - 10, py.y + 6);
+      ctx.lineTo(py.x + 10, py.y + 6);
+      ctx.lineTo(py.x + 6, py.y - 16);
+      ctx.lineTo(py.x - 6, py.y - 16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = py.lit ? '#4c3f57' : '#332d49';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 18, 14, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      if (py.lit) {
+        const g = ctx.createRadialGradient(py.x, py.y - 28, 0, py.x, py.y - 28, 58 * flicker);
+        g.addColorStop(0, 'rgba(255,238,196,0.95)');
+        g.addColorStop(0.4, 'rgba(255,160,60,0.5)');
+        g.addColorStop(1, 'rgba(255,110,20,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(py.x, py.y - 28, 58 * flicker, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,246,214,0.95)';
+        ctx.beginPath();
+        ctx.ellipse(py.x, py.y - 32, 7 * flicker, 12 * flicker, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // 只剩一撮将熄的余烬：既是没有点亮的提示，也是黑暗里的一点定位
+        const e = ctx.createRadialGradient(py.x, py.y - 22, 0, py.x, py.y - 22, 22 * flicker);
+        e.addColorStop(0, 'rgba(255,150,70,0.5)');
+        e.addColorStop(1, 'rgba(255,110,20,0)');
+        ctx.fillStyle = e;
+        ctx.beginPath();
+        ctx.arc(py.x, py.y - 22, 22 * flicker, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      // 点燃进度：只有站在旁边才画，读起来就像"按住不放"
+      if (!py.lit && py.progress > 0.01) {
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.beginPath();
+        ctx.arc(py.x, py.y - 20, 34, 0, Math.PI * 2);
+        ctx.stroke();
+        // 正在点燃时是明亮的暖白；走开之后进度回落，环也跟着变暗——不必再画一行说明
+        ctx.strokeStyle = py === this.pyreChannel ? '#ffe3b0' : '#8a6a48';
+        ctx.beginPath();
+        ctx.arc(py.x, py.y - 20, 34, -Math.PI / 2, -Math.PI / 2 + py.progress * Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   /** 菜单海报：暖色天光 + 层叠剪影 + 上升的火星 + 中央的持灯人。 */
@@ -2058,6 +2294,7 @@ export class Game {
     this.drawGrounds(ctx);
     this.drawHazards(ctx);
     this.drawShrines(ctx);
+    this.drawPyres(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y);

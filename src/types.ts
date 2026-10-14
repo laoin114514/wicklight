@@ -135,6 +135,8 @@ export interface StageDef {
   boss: string | null;
   elites: string[];
   hazards: string[];
+  /** 场上「灯台」数量：熄灭的石灯，停留片刻点燃可长明此夜（不给就是 3 座）。 */
+  pyres?: number;
 }
 
 export interface AchievementDef {

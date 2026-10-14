@@ -41,6 +41,7 @@ export const STAGES: StageDef[] = [
     boss: 'nightfall',
     elites: ['wickmother', 'darkless', 'siphon'],
     hazards: ['echoes', 'wispstorm', 'meteor', 'oilvoid'],
+    pyres: 4,
   },
 ];
 

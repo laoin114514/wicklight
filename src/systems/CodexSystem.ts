@@ -200,6 +200,7 @@ export function codexCatalog(): CodexEntry[] {
         ['首领', s.boss ? `${ENEMY_MAP[s.boss]?.name ?? s.boss}` : '无'],
         ['精英', s.elites.map((e) => ENEMY_MAP[e]?.name ?? e).join('、') || '无'],
         ['险境', s.hazards.map((h) => HAZARD_LABEL[h] ?? h).join('、') || '无'],
+        ['灯台', `${s.pyres ?? 3} 座 · 停留点燃后长明，并给本局灯火与伤害余温`],
       ],
     });
   }

@@ -15,6 +15,15 @@ export interface Decor {
   kind: number;
 }
 
+export interface Pyre {
+  x: number;
+  y: number;
+  /** 已经点燃（本关内一直亮着） */
+  lit: boolean;
+  /** 点燃进度 0~1：站在旁边慢慢涨，走开会回落 */
+  progress: number;
+}
+
 export interface Shrine {
   x: number;
   y: number;
@@ -32,6 +41,8 @@ export interface Level {
   /** 细碎地面装饰（石子、草丛、裂纹……），用来填充光照范围内的地面细节。 */
   details: Decor[];
   shrines: Shrine[];
+  /** 熄灭的灯台：散落在远处的探索目标，点亮后既换增益也照亮一片地方。 */
+  pyres: Pyre[];
   theme: StageDef['theme'];
 }
 
@@ -93,5 +104,20 @@ export function generateLevel(stage: StageDef, seed: number): Level {
       break;
     }
   }
-  return { halfW, halfH, walls, decor, details, shrines, theme: stage.theme };
+  const pyres: Pyre[] = [];
+  const pyreCount = stage.pyres ?? 3;
+  for (let i = 0; i < pyreCount; i += 1) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const x = rng.range(-halfW + 200, halfW - 200);
+      const y = rng.range(-halfH + 200, halfH - 200);
+      // 灯台是"要跑过去"的目标：别贴着脸生，也别挤在一起
+      if (Math.hypot(x, y) < 620) continue;
+      if (walls.some((w) => x > w.x - 70 && x < w.x + w.w + 70 && y > w.y - 70 && y < w.y + w.h + 70)) continue;
+      if (shrines.some((s) => Math.hypot(s.x - x, s.y - y) < 320)) continue;
+      if (pyres.some((p) => Math.hypot(p.x - x, p.y - y) < 760)) continue;
+      pyres.push({ x, y, lit: false, progress: 0 });
+      break;
+    }
+  }
+  return { halfW, halfH, walls, decor, details, shrines, pyres, theme: stage.theme };
 }
