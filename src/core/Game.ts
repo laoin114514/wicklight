@@ -78,6 +78,17 @@ export interface ShrineOffer {
 /** 地面网格的格距（世界单位）。 */
 const GRID_STEP = 150;
 
+/** 墙体精灵外扩：投影往右下偏 (6, 8)，2px 描边还有一半在框外，留 12px 富余。 */
+const WALL_SPRITE_PAD = 12;
+
+interface WallSprite {
+  canvas: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 const SHRINE_OFFERS: ShrineOffer[] = [
   { id: 'blood_pact', name: '血契', blurb: '生命上限 -20%，换取一件随机遗物。', icon: '🩸', color: '#ff4d6d' },
   { id: 'kindle', name: '燃薪', blurb: '伤害 +12%，但灯油消耗 +18%。', icon: '🔥', color: '#ff9d2e' },
@@ -2865,65 +2876,14 @@ export class Game {
       }
     }
 
-    // 地面网格：横竖 ~36 条线。逐条 stroke 要 144 条画布命令，合成一条路径后只要 74 条，
-    // 而且像素结果逐位相同（同一条路径、同样的描边参数，光栅化出来的线段一模一样）。
-    ctx.save();
-    ctx.globalAlpha = 0.07;
-    ctx.strokeStyle = theme.wall;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x = -lvl.halfW; x <= lvl.halfW; x += GRID_STEP) {
-      ctx.moveTo(x, -lvl.halfH);
-      ctx.lineTo(x, lvl.halfH);
-    }
-    for (let y = -lvl.halfH; y <= lvl.halfH; y += GRID_STEP) {
-      ctx.moveTo(-lvl.halfW, y);
-      ctx.lineTo(lvl.halfW, y);
-    }
-    ctx.stroke();
-    ctx.restore();
-
     // 主题布景
     drawDecor(ctx, theme.id, lvl.decor, this.worldView(), this.time, lvl.details);
 
-    // Walls (with soft drop shadow for depth)
-    ctx.save();
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = '#000';
-    for (const wall of lvl.walls) {
-      ctx.fillRect(wall.x + 6, wall.y + 8, wall.w, wall.h);
-    }
-    ctx.restore();
-    const wallPattern = this.textures.wallFor(theme.id);
-    for (const wall of lvl.walls) {
-      const { x, y, w: ww, h: wh } = wall;
-      // 主体（贴图）
-      ctx.fillStyle = wallPattern ?? theme.wall;
-      ctx.fillRect(x, y, ww, wh);
-      // 顶部受光的高光带，暗示"这是有体积的障碍"
-      const topLight = ctx.createLinearGradient(0, y, 0, y + Math.min(wh, 46));
-      topLight.addColorStop(0, 'rgba(255,255,255,0.085)');
-      topLight.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = topLight;
-      ctx.fillRect(x, y, ww, wh);
-      // 底部与右侧的暗面
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(x, y + wh - Math.min(10, wh * 0.2), ww, Math.min(10, wh * 0.2));
-      ctx.fillRect(x + ww - Math.min(10, ww * 0.2), y, Math.min(10, ww * 0.2), wh);
-      // 顶边一小段月光描边
-      ctx.strokeStyle = theme.accent;
-      ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x + 2, y + 1);
-      ctx.lineTo(x + ww - 2, y + 1);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      // 深色轮廓把石块与地面分开
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, ww, wh);
-    }
+    // 墙：每面墙十几个命令（贴图主体 + 高光渐变 + 暗面 + 描边 + 投影）合起来是这一帧里
+    // 最肥的一块地面开销，而它们**一整局都不动**。所以烘焙成"每面墙一张精灵"，
+    // 每帧只 drawImage 一次（见 wallLayer）。真机逐像素比对：与原实现最大差
+    // 1/255（手机）/ 5/255（桌面 1.6 倍率）。
+    this.drawWalls(ctx, theme);
 
     // Arena border
     ctx.strokeStyle = theme.accent;
@@ -2933,7 +2893,114 @@ export class Game {
     ctx.globalAlpha = 1;
   }
 
-  /** 烘焙好的静态地面层（渐变 + 贴图），按主题/尺寸缓存。 */
+  /**
+   * 墙体精灵层：每面墙一张 1:1 的位图（含投影），画一次就冻结到关卡换掉为止。
+   * 关卡里只有 10~16 面墙，但它们加起来是地面开销里最肥的一块——每帧每面墙要
+   * 贴图填充 + 一次线性渐变 + 两次暗面 + 一次描边 + 一次描边矩形 + 投影，十几个命令。
+   * 烘成精灵后每帧每面墙只剩一次 drawImage：手机横屏每帧画布命令 1605 → 1273 条、
+   * 整帧 −1.35ms（FROZEN=1 固定场面，844×390 dpr1），桌面 1440×810 整帧 −6.6ms。
+   */
+  private wallCache: { walls: unknown; themeId: string; sprites: WallSprite[] | null } | null = null;
+
+  private wallLayer(theme: import('../types').StageTheme): WallSprite[] | null {
+    const lvl = this.level;
+    const cache = this.wallCache;
+    if (cache && cache.walls === lvl.walls && cache.themeId === theme.id) return cache.sprites;
+    this.wallCache = { walls: lvl.walls, themeId: theme.id, sprites: null };
+    const sprites: WallSprite[] = [];
+    const pattern = this.textures.wallFor(theme.id);
+    const pad = WALL_SPRITE_PAD;
+    // 桌面档烘 2 倍再缩回来：高分屏上石头贴图要按设备像素重新采样，
+    // 1 倍精灵被放大 1.6~2 倍会糊一点（实测最大 14/255），2 倍精灵缩下去就是原样。
+    // 掌上档不这么做：那里画面本来就在 0.4~0.8 倍上跑，1 倍精灵是被缩小的，
+    // 而且移动端内存更紧（2 倍精灵要 4 倍显存），实测 1 倍与原实现差 ≤5/255。
+    const k = this.profile.handheld ? 1 : 2;
+    // 精灵总像素预算（≈24MB）：墙最大 350×350，全部按 2 倍烘的话极端一局能吃掉几十 MB。
+    // 超了就从这一面墙起退回 1 倍——后画的墙只损失一点点贴图锐度，换来内存有上限。
+    let budget = 6e6;
+    try {
+      for (const wall of lvl.walls) {
+        const kk = budget > 0 ? k : 1;
+        const pw = Math.ceil((wall.w + pad * 2) * kk);
+        const ph = Math.ceil((wall.h + pad * 2) * kk);
+        budget -= pw * ph;
+        const c = document.createElement('canvas');
+        c.width = pw;
+        c.height = ph;
+        const g = c.getContext('2d');
+        if (!g) return null;
+        g.setTransform(kk, 0, 0, kk, (pad - wall.x) * kk, (pad - wall.y) * kk);
+        this.paintWall(g, wall, theme, pattern);
+        sprites.push({
+          canvas: c,
+          x: wall.x - pad,
+          y: wall.y - pad,
+          w: c.width / kk,
+          h: c.height / kk,
+        });
+      }
+    } catch {
+      // 建不出画布（内存吃紧 / 无 document）：退回逐面墙直接画，画面照旧
+      this.wallCache = { walls: lvl.walls, themeId: theme.id, sprites: null };
+      return null;
+    }
+    this.wallCache = { walls: lvl.walls, themeId: theme.id, sprites };
+    return sprites;
+  }
+
+  /** 一面墙的全部笔画（含投影），世界坐标。烘焙与逐帧兜底走的是同一份代码。 */
+  private paintWall(
+    ctx: CanvasRenderingContext2D,
+    wall: { x: number; y: number; w: number; h: number },
+    theme: import('../types').StageTheme,
+    pattern: CanvasPattern | null,
+  ): void {
+    const { x, y, w: ww, h: wh } = wall;
+    // 投影：先声明"这是立起来的东西"
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + 6, y + 8, ww, wh);
+    ctx.restore();
+    // 主体（贴图）
+    ctx.fillStyle = pattern ?? theme.wall;
+    ctx.fillRect(x, y, ww, wh);
+    // 顶部受光的高光带，暗示"这是有体积的障碍"
+    const topLight = ctx.createLinearGradient(0, y, 0, y + Math.min(wh, 46));
+    topLight.addColorStop(0, 'rgba(255,255,255,0.085)');
+    topLight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = topLight;
+    ctx.fillRect(x, y, ww, wh);
+    // 底部与右侧的暗面
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(x, y + wh - Math.min(10, wh * 0.2), ww, Math.min(10, wh * 0.2));
+    ctx.fillRect(x + ww - Math.min(10, ww * 0.2), y, Math.min(10, ww * 0.2), wh);
+    // 顶边一小段月光描边
+    ctx.strokeStyle = theme.accent;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + 1);
+    ctx.lineTo(x + ww - 2, y + 1);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // 深色轮廓把石块与地面分开
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, ww, wh);
+  }
+
+  private drawWalls(ctx: CanvasRenderingContext2D, theme: import('../types').StageTheme): void {
+    const sprites = this.wallLayer(theme);
+    if (!sprites) {
+      const pattern = this.textures.wallFor(theme.id);
+      for (const wall of this.level.walls) this.paintWall(ctx, wall, theme, pattern);
+      return;
+    }
+    for (const s of sprites) ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h);
+  }
+
+  /** 烘焙好的静态地面层（渐变 + 贴图 + 网格），按主题/尺寸缓存。 */
   private floorCache: { key: string; canvas: HTMLCanvasElement | null } | null = null;
   private floorLayer(theme: import('../types').StageTheme): HTMLCanvasElement | null {
     const lvl = this.level;
@@ -2970,6 +3037,26 @@ export class Game {
           /* pattern 不可用就只留渐变 */
         }
       }
+      // 地面网格：横竖 ~36 条线，位置只跟关卡尺寸有关，也一起烘进来。
+      // 逐条 stroke 是 144 条命令、合成一条路径 74 条，而真正贵的是那 36 条 2600px 长的描边
+      // （软件光栅化下 ~0.3ms/帧）；烘进来之后每帧一次 drawImage 全带上了。
+      // 它只是一层 alpha 0.07 的底纹，降到 0.58 倍分辨率再放大看不出来。
+      g.save();
+      g.setTransform(scale, 0, 0, scale, c.width / 2, c.height / 2);
+      g.globalAlpha = 0.07;
+      g.strokeStyle = theme.wall;
+      g.lineWidth = 2;
+      g.beginPath();
+      for (let x = -lvl.halfW; x <= lvl.halfW; x += GRID_STEP) {
+        g.moveTo(x, -lvl.halfH);
+        g.lineTo(x, lvl.halfH);
+      }
+      for (let y = -lvl.halfH; y <= lvl.halfH; y += GRID_STEP) {
+        g.moveTo(-lvl.halfW, y);
+        g.lineTo(lvl.halfW, y);
+      }
+      g.stroke();
+      g.restore();
       this.floorCache = { key, canvas: c };
       return c;
     } catch {

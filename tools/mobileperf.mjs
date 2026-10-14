@@ -76,6 +76,9 @@ const SOAK = +(process.env.SOAK || 12);
 /** 消融开关：逗号分隔。Chromium 的 canvas 命令是延迟提交的，按方法掐表会把整块画布的
  *  栅格化都算到"第一个跨画布操作"头上，所以改成"逐个关掉再对比总帧时间"。 */
 const KILL = (process.env.KILL || '').split(',').filter(Boolean);
+/** 冻结模式：钉死分辨率、手工摆固定数量的敌人、停掉模拟——两次测量量的是同一帧，
+ *  差值才是改动本身的（实测同一份产物连跑三次波动 ±0.3ms，不冻结则能差好几毫秒）。 */
+const FROZEN = process.env.FROZEN === '1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** 统计每帧画布命令条数（真机 CPU 侧开销的代理指标）。 */
 const OPS = process.env.OPS === '1';
@@ -122,6 +125,26 @@ const instrument = () => {
       return r;
     };
   };
+  // 整帧：前后各刷一次，给所有阶段一个锚点。
+  // 只在冻结模式下装：这一步每帧强制把画布的栅格化同步掉，会打断正常跑法的流水线，
+  // 拿它去量"能跑多少帧"会凭空慢 2ms（实测 17.7 → 20.0ms），量渲染成本时才需要它。
+  if (window.__MP_FROZEN__) {
+    let flushCtx = null;
+    const flushNow = () => {
+      if (!flushCtx) flushCtx = g.renderer.ctx;
+      if (flushCtx) flushCtx.getImageData(0, 0, 1, 1);
+    };
+    const origRender = g.render.bind(g);
+    g.render = function (...a) {
+      if (!on) return origRender(...a);
+      flushNow();
+      const t = performance.now();
+      const r = origRender(...a);
+      flushNow();
+      acc.renderTotal = (acc.renderTotal || 0) + (performance.now() - t);
+      return r;
+    };
+  }
   wrap(g, 'drawWorld', 'world');
   // drawWorld 内部的每一块单独数一遍命令条数：真机上 CPU 侧开销正比于命令数，
   // 光知道"world 占了 1500 条"不够，得知道是敌人还是地面陈设。
@@ -279,9 +302,10 @@ try {
       window.__MP_DPR__ = cfg.dpr;
       window.__MP_OVER__ = cfg.over;
       window.__MP_OPS_ON__ = cfg.ops;
+      window.__MP_FROZEN__ = cfg.frozen;
       if (cfg.framecap !== null) window.__MP_FRAMECAP__ = cfg.framecap;
     },
-    { kill: KILL, dpr: +(process.env.FORCE_DPR || 0), over: OVER, ops: OPS, framecap: process.env.FRAMECAP === undefined ? null : +process.env.FRAMECAP },
+    { kill: KILL, dpr: +(process.env.FORCE_DPR || 0), over: OVER, ops: OPS, frozen: FROZEN, framecap: process.env.FRAMECAP === undefined ? null : +process.env.FRAMECAP },
   );
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 160)));
@@ -301,7 +325,7 @@ try {
       (process.env.FORCE_DPR ? ` · 固定 dpr ${process.env.FORCE_DPR}` : ''),
   );
 
-  await page.evaluate(([q, ad, wave, stress]) => {
+  await page.evaluate(([q, ad, wave, stress, frozen]) => {
     const g = window.__WICKLIGHT__.game;
     g.settings.data.quality = q;
     g.settings.data.adaptive = ad;
@@ -319,21 +343,32 @@ try {
     g.player.stats.maxHp = 1e7;
     g.player.hp = 1e7;
     // 固定一份"敌人数量"的负载：自适应 / 画质一变帧率就变，靠计时器刷怪会让两次测量的场面不一样
-    if (stress > 0) {
+    if (stress > 0 || frozen) {
+      g.enemies.clear();
+      g.particles.clear();
+      const count = stress || 24;
       const defs = ['crawler', 'moth'];
-      for (let i = 0; i < stress; i += 1) {
-        const a = (i / stress) * Math.PI * 2;
+      for (let i = 0; i < count; i += 1) {
+        const a = (i / count) * Math.PI * 2;
         const d = 180 + (i % 5) * 90;
         try {
-          const e = g.enemies.spawn(defs[i % defs.length], g.player.x + Math.cos(a) * d, g.player.y + Math.sin(a) * d, 1e6, 0.0001);
+          const e = g.enemies.spawn(defs[i % defs.length], g.player.x + Math.cos(a) * d, g.player.y + Math.sin(a) * d, 1e6, 1);
           if (e) { e.hp = e.maxHp = 1e9; e.speed = 0; }
         } catch { /* 未收录的敌人 id 就跳过 */ }
       }
     }
-  }, [QUALITY, ADAPTIVE, WAVE, +(process.env.STRESS || 0)]);
+    if (frozen) {
+      // 模拟停摆，但渲染照旧每帧跑：场景一动不动，量到的差值只可能来自渲染改动
+      g.update = () => {};
+      g.renderer.adaptive = false;
+      g.settings.data.adaptive = false;
+      const lv = g.level;
+      window.__MP_SCENE__ = `${lv.walls.length} 墙 / ${lv.decor.length} 布景 / ${lv.details.length} 细节`;
+    }
+  }, [QUALITY, ADAPTIVE, WAVE, +(process.env.STRESS || 0), FROZEN]);
 
-  // 让动态分辨率先稳定下来
-  await sleep(6000);
+  // 让动态分辨率先稳定下来（冻结模式钉了分辨率，不用等）
+  if (!FROZEN) await sleep(6000);
 
   const out = await page.evaluate(async (soak) => {
     const MP = window.__MP__;
@@ -411,6 +446,7 @@ try {
     console.log(`  ${'（合批/其它）'.padEnd(10)} ${String(rest).padStart(5)}`);
   }
   const sum = known.reduce((a, k) => a + (st[k] || 0), 0);
+  if (st.renderTotal) console.log(`整帧渲染 ${st.renderTotal.toFixed(2)}ms（阶段合计 ${sum.toFixed(2)}ms）`);
   console.log(`\n帧数 ${out.frames} · 平均 ${out.avg}ms (${out.fps}fps) · p50 ${out.p50} · p95 ${out.p95} · 最慢 ${out.max}`);
   console.log(`画面 ${out.info.canvas} (${out.info.mp}MPx) dpr ${out.info.dpr} scale ${out.info.scale}`);
   console.log(`[环境] maxDpr ${out.info.maxDpr} · 环境 dpr ${out.info.dprEnv} · 消融 "${out.info.killEnv}"`);
