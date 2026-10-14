@@ -701,9 +701,33 @@ async function main() {
   await page.click('[data-act="meta"]');
   await sleep(350);
   const metaNodes = await page.evaluate(() => window.__PROBE__.layout('[data-node]'));
-  expect(metaNodes.count > 0, '解锁树有节点', `count=${metaNodes.count}`);
+  expect(metaNodes.count >= 16, '解锁树有节点', `count=${metaNodes.count}`);
   const metaLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
   expect(metaLayout.issues.length === 0, '解锁树布局正常', metaLayout.issues.join('; '));
+  const metaText = await page.evaluate(() => document.querySelector('.panel--meta').textContent || '');
+  expect(/旧灯|钱袋|暗视|夜行|薪火/.test(metaText), '解锁树列出了局外成长的新节点', metaText.slice(0, 80));
+  expect(!/undefined|NaN/.test(metaText), '解锁树没有缺字段');
+
+  // 买一个：余烬真的会少，而且这一局之后就带上了
+  const bought = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.embers = 5000;
+    g.ui.showScreen('meta');
+    const el = document.querySelector('[data-node="kindling"]');
+    const card = el ? el.getBoundingClientRect() : null;
+    const before = g.save.embers;
+    el?.click();
+    return {
+      cost: 50,
+      before,
+      after: g.save.embers,
+      owned: g.save.meta.includes('kindling'),
+      w: Math.round(card?.width ?? 0),
+      h: Math.round(card?.height ?? 0),
+    };
+  });
+  expect(bought.owned && bought.after === bought.before - bought.cost, '买下解锁节点会扣余烬', JSON.stringify(bought));
+  expect(bought.w > 0 && bought.h > 0, '解锁节点的卡片有尺寸', JSON.stringify(bought));
   await shot('10-meta');
   await page.click('[data-act="back"]');
   await sleep(300);

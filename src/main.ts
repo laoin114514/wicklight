@@ -12,6 +12,7 @@ import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies } from './data/enemies';
 import { AFFIXES as affixes } from './data/affixes';
 import { BOUNTIES as bounties } from './data/bounties';
+import { META_TREE as meta } from './data/meta';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -37,7 +38,7 @@ function boot(): void {
     hud,
     touch,
     // 供测试/调试读取的静态数据表（无副作用）
-    data: { weapons, relics, passives, curses, bounties, tribes },
+    data: { weapons, relics, passives, curses, bounties, tribes, meta },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages },
@@ -83,7 +84,7 @@ function boot(): void {
     render: () => game.render(),
   });
 
-  void [weapons, relics, passives, curses, enemies, affixes, bounties, stages, tribes, daily];
+  void [weapons, relics, passives, curses, enemies, affixes, bounties, stages, tribes, meta, daily];
 
   const ready = () => {
     game.renderer.setQuality(game.settings.data.quality);

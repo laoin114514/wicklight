@@ -69,10 +69,14 @@ export class Player {
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
   shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
+  /** 局外解锁带来的修正：也要走 recomputeStats，不然中途重算（拿到遗物）就会把它冲掉。 */
+  metaMods = { moveSpeedMult: 1 };
   /** 本局由「灯台」累积的余温：点亮的灯台越多，灯火越旺、伤害越高。 */
   pyreMods = { damageMult: 1, lightMult: 1 };
   brightness = 1;
   lightRadius = 300;
+  /** 局外解锁带来的灯火半径倍率（与灯台余温、地形各自独立） */
+  baseLightMult = 1;
   invuln = 0;
   dashTimer = 0;
   dashCd = 0;
@@ -120,6 +124,8 @@ export class Player {
     this.terrainSlow = 1;
     this.terrainOil = 1;
     this.terrainLight = 1;
+    this.baseLightMult = 1;
+    this.metaMods = { moveSpeedMult: 1 };
     this.curseOilMult = 1;
     this.invuln = 0;
     this.dashTimer = 0;
@@ -195,6 +201,7 @@ export class Player {
     this.stats.critChance += sm.critChance;
     this.flags.goldMult *= sm.goldMult;
     this.stats.damageMult *= this.pyreMods.damageMult;
+    this.stats.moveSpeed *= this.metaMods.moveSpeedMult;
     this.hp = Math.min(this.hp, this.stats.maxHp);
   }
 
@@ -288,7 +295,7 @@ export class Player {
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
     }
     this.brightness = 0.35 + this.oilFrac * 0.65;
-    this.lightRadius = (96 + this.oilFrac * 224) * this.pyreMods.lightMult * this.terrainLight;
+    this.lightRadius = (96 + this.oilFrac * 224) * this.pyreMods.lightMult * this.terrainLight * this.baseLightMult;
 
     // Movement
     let mvx = input.moveX;

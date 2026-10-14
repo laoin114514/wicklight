@@ -11,6 +11,10 @@ export interface MetaBonuses {
   weaponLevel: number;
   startPassives: number;
   revives: number;
+  startGold: number;
+  startRelic: number;
+  lightMult: number;
+  moveSpeedMult: number;
 }
 
 export class MetaSystem {
@@ -43,7 +47,20 @@ export class MetaSystem {
   }
 
   bonuses(): MetaBonuses {
-    const out: MetaBonuses = { hpMult: 0, oilMult: 0, emberMult: 0, dashMult: 0, rerolls: 0, weaponLevel: 0, startPassives: 0, revives: 0 };
+    const out: MetaBonuses = {
+      hpMult: 0,
+      oilMult: 0,
+      emberMult: 0,
+      dashMult: 0,
+      rerolls: 0,
+      weaponLevel: 0,
+      startPassives: 0,
+      revives: 0,
+      startGold: 0,
+      startRelic: 0,
+      lightMult: 0,
+      moveSpeedMult: 0,
+    };
     for (const id of this.save.meta) {
       const node = META_MAP[id];
       if (!node) continue;
@@ -57,6 +74,10 @@ export class MetaSystem {
         case 'weaponLevel': out.weaponLevel += value; break;
         case 'startPassives': out.startPassives += value; break;
         case 'revives': out.revives += value; break;
+        case 'startGold': out.startGold += value; break;
+        case 'startRelic': out.startRelic += value; break;
+        case 'lightMult': out.lightMult += value; break;
+        case 'moveSpeedMult': out.moveSpeedMult += value; break;
         default: break;
       }
     }

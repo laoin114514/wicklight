@@ -453,7 +453,21 @@ export class Game {
       this.player.addPassive(p.id, 1);
     }
     this.player.revives = b.revives;
+    // 移速走 metaMods（由 recomputeStats 套用），这样后面拿到遗物重算也不会把它冲掉
+    this.player.metaMods = { moveSpeedMult: 1 + b.moveSpeedMult };
     this.player.recomputeStats();
+    this.player.baseLightMult = 1 + b.lightMult;
+    this.gold += b.startGold;
+    for (let i = 0; i < b.startRelic; i += 1) {
+      const pool = RELICS.filter((r) => !this.player.relics.has(r.id));
+      if (!pool.length) break;
+      const relic = this.rng.pick(pool);
+      const tiers = this.player.tribeTiers();
+      this.player.addRelic(relic.id);
+      this.codex.discover('relic', relic.id);
+      this.hud?.toast(`🕯️ 旧灯 · ${relic.name}`);
+      this.announceTribeResonance(tiers);
+    }
     this.player.hp = this.player.stats.maxHp;
   }
 
