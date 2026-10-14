@@ -32,6 +32,12 @@ export interface PerfProfile {
   particleScale: number;
   /** 帧率上限（0 = 不限）。 */
   frameCap: number;
+  /**
+   * 动态分辨率能降到的最低倍率。桌面 0.5 就够（大屏降太多会糊），
+   * 手机多留一档 0.4：横屏本来就只有 0.18MPx 上下，再少 20% 面积去换 60fps 是划算的，
+   * 而且只有在实测帧时间确实够不着 60 的时候才会被走到。
+   */
+  minScale: number;
 }
 
 let memo: { key: string; profile: PerfProfile } | null = null;
@@ -90,6 +96,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
         detailScale: 0.5,
         particleScale: 0.55,
         frameCap: 60,
+        minScale: 0.4,
       };
     } else if (quality === 'medium') {
       profile = {
@@ -102,6 +109,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
         detailScale: 0.6,
         particleScale: 0.7,
         frameCap: 60,
+        minScale: 0.4,
       };
     } else {
       profile = {
@@ -114,6 +122,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
         detailScale: 0.7,
         particleScale: 0.8,
         frameCap: 60,
+        minScale: 0.4,
       };
     }
   } else if (quality === 'low') {
@@ -127,6 +136,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
       detailScale: 0.7,
       particleScale: 0.7,
       frameCap: 0,
+      minScale: 0.5,
     };
   } else if (quality === 'medium') {
     profile = {
@@ -139,6 +149,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
       detailScale: 0.85,
       particleScale: 0.85,
       frameCap: 0,
+      minScale: 0.5,
     };
   } else {
     profile = {
@@ -151,6 +162,7 @@ export function perfProfile(quality: Quality = 'high', handheld: boolean = isHan
       detailScale: 1,
       particleScale: 1,
       frameCap: 0,
+      minScale: 0.5,
     };
   }
   memo = { key, profile };

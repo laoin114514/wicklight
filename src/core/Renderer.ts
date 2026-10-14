@@ -14,6 +14,8 @@ export class Renderer {
   adaptive = true;
   /** 每帧渲染的像素总数上限，防止 4K + dpr2 直接把 GPU/CPU 打死。 */
   pixelBudget = 3e6;
+  /** 动态分辨率的下限，由性能档位给（手机 0.4 / 桌面 0.5）。 */
+  private minScale = 0.5;
   private maxDpr = 2;
   private cssW = 1280;
   private cssH = 720;
@@ -40,9 +42,10 @@ export class Renderer {
    * 只改这两项，尺寸/倍率的重算仍旧走 apply()，所以「缓冲 = CSS × 倍率」这条约定不被破坏。
    */
   setProfile(p: PerfProfile): void {
-    if (p.maxDpr === this.maxDpr && p.pixelBudget === this.pixelBudget) return;
+    if (p.maxDpr === this.maxDpr && p.pixelBudget === this.pixelBudget && p.minScale === this.minScale) return;
     this.maxDpr = p.maxDpr;
     this.pixelBudget = p.pixelBudget;
+    this.minScale = p.minScale;
     this.apply();
   }
 
@@ -89,11 +92,11 @@ export class Renderer {
       this.warmup -= 1;
       return;
     }
-    if (avg > 18 && this.scale > 0.5) {
+    if (avg > 18 && this.scale > this.minScale) {
       // 像素成本与面积近似成正比 ⇒ 理想倍率是 sqrt(目标帧时间 / 实测帧时间)
       const want = this.scale * Math.sqrt(16.5 / avg);
       const step = Math.min(this.scale - 0.05, Math.max(want, this.scale - 0.35));
-      this.scale = Math.max(0.5, Math.round(step * 20) / 20);
+      this.scale = Math.max(this.minScale, Math.round(step * 20) / 20);
       this.calm = 0;
       this.apply();
     } else if (avg < 13.6 && this.scale < 1) {

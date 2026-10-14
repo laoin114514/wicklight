@@ -24,6 +24,16 @@ export class LightSystem {
    * 半分辨率再放大几乎看不出差别，但填充与叠加的像素只剩 1/4。
    */
   private resolutionScale = 1;
+  /**
+   * 暖光精灵放大时不做滤波。
+   *
+   * 判据是"这台设备正在走近路"：光照贴图被压到半分辨率，或者自适应已经把渲染倍率
+   * 降到 1 以下——两种情况都说明帧预算紧。暖光是一张很柔的径向渐变，放大时用最近邻
+   * 还是双线性，冻结同一帧逐像素比对只差 0.03/255（最大 2），
+   * 但省掉一次"带滤波的整屏加法"在软件光栅化与低端 GPU 上是实打实的几毫秒。
+   * 桌面满档（dpr≥1 且光照全分辨率）保持双线性——大屏上看得更仔细。
+   */
+  private crispGlow = false;
   /** 上一帧真正参与“照亮”的光源数量（供冒烟测试断言灯芯光源没被清空）。 */
   lastLightCount = 0;
   /** 上一帧真正落到屏幕上的光源数量（视野外的会被裁掉）。 */
@@ -50,6 +60,7 @@ export class LightSystem {
   setScale(dpr: number, resolutionScale = 1): void {
     if (dpr > 0) this.dpr = dpr;
     if (resolutionScale > 0) this.resolutionScale = resolutionScale;
+    this.crispGlow = this.dpr * this.resolutionScale < 0.999;
   }
 
   /** 贴图实际分辨率倍率（供测试断言）。 */
@@ -134,6 +145,7 @@ export class LightSystem {
       const glow = this.glowSprite;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      if (this.crispGlow) ctx.imageSmoothingEnabled = false;
       for (const l of this.glowLight) {
         const s = cam.worldToScreen(l.x, l.y);
         const r = l.radius * cam.zoom;
