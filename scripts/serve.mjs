@@ -1,10 +1,13 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { networkInterfaces } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'dist');
 const port = Number(process.env.PORT || 4173);
+/** 绑在所有网卡上：容器 / 虚拟机里也能从宿主机直接用 IP 打开。 */
+const host = process.env.HOST || '0.0.0.0';
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -42,6 +45,18 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`WICKLIGHT 本地预览: http://localhost:${port}`);
+/** 除了 localhost，把能直达的局域网地址也列出来——省得自己去翻 ip addr。 */
+function addresses() {
+  const out = [`http://localhost:${port}`];
+  for (const list of Object.values(networkInterfaces())) {
+    for (const net of list ?? []) {
+      if (net.family === 'IPv4' && !net.internal) out.push(`http://${net.address}:${port}`);
+    }
+  }
+  return out;
+}
+
+server.listen(port, host, () => {
+  console.log('WICKLIGHT 预览已启动：');
+  for (const url of addresses()) console.log(`  ${url}`);
 });
