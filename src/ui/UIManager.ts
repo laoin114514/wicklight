@@ -452,6 +452,7 @@ export class UIManager implements UIHost {
         <div class="panel__title">${g.shopHeader}</div>
         <div class="shop-wallet">金币 <b>🪙 ${g.gold}</b></div>
         <div class="shop-grid">${items}</div>
+        ${this.forgeBlock()}
         <div class="row-actions">
           <button class="btn ${g.gold >= 8 ? '' : 'is-locked'}" data-act="reroll">刷新商品 (8 🪙)</button>
           <button class="btn btn--primary" data-act="leave">${g.endless ? '继续战斗' : '继续前进'}</button>
@@ -463,6 +464,33 @@ export class UIManager implements UIHost {
     });
     this.on('[data-act="reroll"]', () => this.game.rerollShop());
     this.on('[data-act="leave"]', () => this.game.leaveShop());
+    this.onAll('[data-forge]', (el) => this.game.forgeRelic(el.dataset.forge as string));
+  }
+
+  /** 熔铸台：把一件已有遗物烧掉换一件新的——契约型遗物的代价终于有了出口。 */
+  private forgeBlock(): string {
+    const g = this.game;
+    const owned = [...g.player.relics];
+    if (!owned.length) return '';
+    const price = g.forgePrice;
+    const used = g.forgeUsed;
+    const poor = g.gold < price;
+    const chips = owned
+      .map((id) => {
+        const d = RELIC_MAP[id];
+        return `<button class="forge-chip" data-forge="${id}" title="${d?.blurb ?? id}" style="--c:${d?.color ?? '#fff'}">${d?.icon ?? ''} ${d?.name ?? id}</button>`;
+      })
+      .join('');
+    const note = used ? '本店已熔铸过' : poor ? `还差 ${price - g.gold} 金币` : `换掉哪一件？`;
+    return `
+      <div class="forge ${used || poor ? 'is-off' : ''}">
+        <div class="forge__head">
+          <b>🔥 熔铸台</b>
+          <span>${note}</span>
+          <i>${price} 🪙</i>
+        </div>
+        <div class="forge__row">${chips}</div>
+      </div>`;
   }
 
   private shrine(): void {

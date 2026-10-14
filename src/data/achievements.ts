@@ -32,6 +32,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'curse_veteran', name: '咒中行', blurb: '带着「低语」或「枯灯」平定一整关。', embers: 30, group: '抉择与风险' },
   { id: 'pyre_first', name: '点灯人', blurb: '点亮第一座灯台。', embers: 20, group: '抉择与风险' },
   { id: 'pyre_all', name: '长夜灯塔', blurb: '单局点亮一关里的全部灯台。', embers: 70, group: '抉择与风险' },
+  { id: 'forge_first', name: '淬火', blurb: '在商店的熔铸台上换掉一件遗物。', embers: 20, group: '抉择与风险' },
   { id: 'relic_first', name: '遗物猎手', blurb: '获得第一件遗物。', embers: 15, group: '抉择与风险' },
   { id: 'relic_hoard', name: '拾荒者', blurb: '单局收集 4 件遗物。', embers: 30, group: '抉择与风险' },
 

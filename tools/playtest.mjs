@@ -435,6 +435,53 @@ async function main() {
   await sleep(300);
   const goldAfter = (await page.evaluate(() => window.__PROBE__.state())).gold;
   expect(goldAfter < goldBefore, '购买后金币减少', `${goldBefore} → ${goldAfter}`);
+
+  // ── 6b. 熔铸台：真的把一件已有遗物换掉 ──
+  const forge = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.gold = Math.max(g.gold, 400);
+    g.forgeUsed = false;
+    g.ui.showScreen('shop'); // 金币变了，重画一次面板
+    const chips = window.__PROBE__.layout('[data-forge]');
+    return {
+      owned: [...g.player.relics],
+      hasBlock: !!document.querySelector('.forge'),
+      chips: chips.count,
+      chipsOk: chips.issues.length === 0,
+      price: g.forgePrice,
+      gold: g.gold,
+    };
+  });
+  expect(forge.hasBlock, '商店面板出现熔铸台');
+  expect(forge.chips > 0 && forge.chips === forge.owned.length, '熔铸台列出全部已有遗物', JSON.stringify(forge));
+  expect(forge.chipsOk, '熔铸台布局正常');
+  const forgeResult = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const before = [...g.player.relics];
+    window.__PROBE__.forgeBefore = before;
+    window.__PROBE__.forgeGold = g.gold;
+    return before;
+  });
+  await page.click(`[data-forge="${forgeResult[0]}"]`);
+  await sleep(300);
+  const after = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const before = window.__PROBE__.forgeBefore;
+    return {
+      used: g.forgeUsed,
+      goldBefore: window.__PROBE__.forgeGold,
+      gold: g.gold,
+      size: g.player.relics.size,
+      beforeSize: before.length,
+      swapped: before.filter((r) => !g.player.relics.has(r)).length,
+    };
+  });
+  expect(after.used, '熔铸后本店标记为已熔铸');
+  expect(after.gold < after.goldBefore, '熔铸扣了金币', `${after.goldBefore} → ${after.gold}`);
+  expect(after.size === after.beforeSize && after.swapped >= 1, '熔铸是"换一件"而不是凭空增减', JSON.stringify(after));
+  await shot('07c-shop-forge');
+  const forgeLayout = await page.evaluate(() => window.__PROBE__.layout('.forge'));
+  expect(forgeLayout.issues.length === 0, '熔铸台在面板里没有溢出', forgeLayout.issues.join('; '));
   await page.click('[data-act="leave"]');
   await sleep(900);
 

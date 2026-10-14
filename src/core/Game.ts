@@ -38,7 +38,7 @@ import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
-import { RELICS } from '../data/relics';
+import { RELICS, RELIC_MAP } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
 import { PASSIVES, baseStats, type PlayerStats } from '../data/upgrades';
 import type { Difficulty, RunStats, SaveData, ShopItem, UpgradeOffer } from '../types';
@@ -233,6 +233,8 @@ export class Game {
   embersEarned = 0;
   gold = 0;
   shopItems: ShopItem[] = [];
+  /** 熔铸台这次商店用过没有（每家店只让熔一件，免得刷成自选）。 */
+  forgeUsed = false;
   shopHeader = '';
   decals: Decal[] = [];
   arcs: { pts: number[]; life: number; maxLife: number; color: string; seed: number }[] = [];
@@ -1695,6 +1697,7 @@ export class Game {
 
   private openShop(header: string): void {
     this.shopHeader = header;
+    this.forgeUsed = false;
     this.state = 'shop';
     this.audio.setMood('calm');
     this.audio.play('levelup');
@@ -1750,6 +1753,49 @@ export class Game {
     items.push({ kind: 'heal', id: 'heal', name: '热汤', blurb: '回复 40% 生命。', icon: '🍲', color: '#8affc1', price: Math.round(20 * priceScale), sold: false });
     items.push({ kind: 'oil', id: 'oil', blurb: '立刻回满灯油。', name: '满壶灯油', icon: '🛢️', color: '#ffd24e', price: Math.round(12 * priceScale), sold: false });
     this.shopItems = items;
+  }
+
+  /** 熔铸台的价格：越深的关卡越贵（那时金币也多）。 */
+  get forgePrice(): number {
+    return 55 + this.stageIndex * 15;
+  }
+
+  /**
+   * 熔铸：把一件已有遗物烧掉，换成另一件。
+   *
+   * 契约型遗物（双芯 / 猎人之眼 / 苦修之环……）是"更强但带代价"，可代价原本没有出口；
+   * 有了熔铸台，玩家就能在"忍"和"花金币换掉"之间做一次真正的决定。
+   */
+  forgeRelic(id: string): void {
+    if (this.forgeUsed || this.state !== 'shop') return;
+    if (!this.player.relics.has(id)) return;
+    const price = this.forgePrice;
+    if (this.gold < price) {
+      this.hud?.toast('金币不够熔铸');
+      return;
+    }
+    const old = RELIC_MAP[id];
+    const rarity = old?.rarity ?? 'common';
+    const owned = this.player.relics;
+    const sameRarity = RELICS.filter((r) => !owned.has(r.id) && r.id !== id && r.rarity === rarity);
+    const anyLeft = RELICS.filter((r) => !owned.has(r.id) && r.id !== id);
+    const pool = sameRarity.length ? sameRarity : anyLeft;
+    if (!pool.length) {
+      this.hud?.toast('没有可以换上的遗物了');
+      return;
+    }
+    this.gold -= price;
+    this.forgeUsed = true;
+    this.player.removeRelic(id);
+    const next = this.rng.pick(pool);
+    this.player.addRelic(next.id);
+    this.codex.discover('relic', next.id);
+    this.audio.play('evolve');
+    this.flash = 0.3;
+    this.achievements.unlock('forge_first');
+    this.hud?.toast(`🔥 熔铸：${old?.name ?? id} → ${next.name}`);
+    // 不重掷商品：玩家可能正攒钱等某一件，熔铸不该把它换掉
+    this.ui?.showScreen('shop');
   }
 
   rerollShop(): void {

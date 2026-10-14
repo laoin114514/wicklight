@@ -14,6 +14,9 @@ export class HUD implements HUDHost {
   private waveEl!: HTMLElement;
   private timeEl!: HTMLElement;
   private stageEl!: HTMLElement;
+  private waveBarEl!: HTMLElement;
+  private waveFill!: HTMLElement;
+  private waveBoss!: HTMLElement;
   private killEl!: HTMLElement;
   private emberEl!: HTMLElement;
   private goldEl!: HTMLElement;
@@ -27,6 +30,7 @@ export class HUD implements HUDHost {
   private bountySig = '~';
   private pyreEl!: HTMLElement;
   private pyreSig = '~';
+  private waveSig = '~';
   private buildSig = '';
   private bossWrap!: HTMLElement;
   private bossName!: HTMLElement;
@@ -60,6 +64,7 @@ export class HUD implements HUDHost {
         <div class="hud__stat hud__stat--ember"><span>余烬</span><b class="js-ember">0</b></div>
       </div>
       <div class="hud__stage js-stage">幽林</div>
+      <div class="hud__wave js-wavebar"><i></i><u></u></div>
       <div class="hud__boss js-boss">
         <div class="hud__boss-name js-boss-name"></div>
         <div class="hud__boss-bar"><i></i></div>
@@ -88,6 +93,9 @@ export class HUD implements HUDHost {
     this.emberEl = q('.js-ember');
     this.goldEl = q('.js-gold');
     this.stageEl = q('.js-stage');
+    this.waveBarEl = q('.js-wavebar');
+    this.waveFill = q('.js-wavebar i');
+    this.waveBoss = q('.js-wavebar u');
     this.bossWrap = q('.js-boss');
     this.bossName = q('.js-boss-name');
     this.bossFill = hud.querySelector('.hud__boss-bar i') as HTMLElement;
@@ -206,6 +214,27 @@ export class HUD implements HUDHost {
     this.bountyEl.classList.add('is-on');
   }
 
+  /** 关卡进度条：填到哪就是打到第几波，最后一段是首领波。 */
+  private updateWaveBar(wave: number, total: number, endless: boolean): void {
+    const sig = `${wave}/${total}/${endless}`;
+    if (sig === this.waveSig) return;
+    this.waveSig = sig;
+    const fill = this.waveFill;
+    const boss = this.waveBoss;
+    if (endless) {
+      this.waveBarEl.classList.add('is-endless');
+      fill.style.width = '100%';
+      boss.style.display = 'none';
+      return;
+    }
+    this.waveBarEl.classList.remove('is-endless');
+    boss.style.display = '';
+    fill.style.width = `${Math.min(100, (wave / total) * 100)}%`;
+    // 首领波那一段单独标红：进度条本身就是"还有多久"的答案
+    boss.style.left = `${((total - 1) / total) * 100}%`;
+    boss.style.width = `${(1 / total) * 100}%`;
+  }
+
   /** 灯台进度：只在还有没点亮的灯台时占屏幕。 */
   private updatePyreChip(): void {
     const total = this.game.pyreTotal;
@@ -232,7 +261,11 @@ export class HUD implements HUDHost {
     this.oilFill.style.width = `${Math.max(0, g.player.oilFrac * 100)}%`;
     this.xpFill.style.width = `${g.xpFrac * 100}%`;
     this.levelEl.textContent = String(g.playerLevel);
-    this.waveEl.textContent = g.endless ? `∞${g.wave}` : `${g.wave}`;
+    // 波次写出分母：玩家该知道"还剩几波就出首领"，而不是只能数着等
+    const totalWaves = g.director.totalWaves;
+    const endless = g.endless || !Number.isFinite(totalWaves);
+    this.waveEl.textContent = endless ? `∞${g.wave}` : `${g.wave}/${totalWaves}`;
+    this.updateWaveBar(g.wave, totalWaves, endless);
     const t = Math.floor(g.runTime);
     this.timeEl.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     this.killEl.textContent = String(g.kills);

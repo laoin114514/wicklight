@@ -148,6 +148,16 @@ export class Player {
     return true;
   }
 
+  /** 熔铸用：把一件遗物取下来（遗物给的复活数要一并还回去，不然会凭空多命）。 */
+  removeRelic(id: string): boolean {
+    if (!this.relics.has(id)) return false;
+    this.relics.delete(id);
+    const def = RELIC_MAP[id];
+    if (def?.mods.revives) this.revives = Math.max(0, this.revives - def.mods.revives);
+    this.recomputeStats();
+    return true;
+  }
+
   private countOf(st: { count: number }): number {
     return Math.max(1, Math.round(st.count) + this.flags.extraProjectiles);
   }

@@ -518,7 +518,7 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  top: 42px;
+  top: 58px;
   padding: 5px 14px;
   border-radius: 14px;
   font-size: 12px;
@@ -873,6 +873,64 @@ body.is-touch .hud__hint { display: none; }
 }
 .hl b { color: #fff; }
 .ember-gain--ach { color: var(--text-dim); font-size: 13px; }
+/* ── 关卡进度条（挂在关卡名下面）── */
+.hud__wave {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  transform: translateX(-50%);
+  width: 170px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  pointer-events: none;
+}
+.hud__wave i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffb14e, #ff7a2f);
+  transition: width 0.3s ease;
+}
+.hud__wave u {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 90, 109, 0.9);
+}
+.hud__wave.is-endless i { background: linear-gradient(90deg, #c9a3ff, #7a5bff); }
+body.is-touch .hud__wave { display: none; }
+@media (max-width: 640px) {
+  .hud__wave { display: none; }
+}
+
+/* ── 商店熔铸台 ── */
+.forge {
+  margin: 14px 0 4px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: rgba(255, 177, 78, 0.05);
+  border: 1px solid rgba(255, 177, 78, 0.18);
+}
+.forge.is-off { opacity: 0.55; }
+.forge__head { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; color: var(--text-dim); }
+.forge__head b { color: var(--amber-bright); font-size: 13.5px; }
+.forge__head i { margin-left: auto; font-style: normal; color: #ffd24e; }
+.forge__row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 96px; overflow: auto; }
+.forge-chip {
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--c, #fff) 12%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--c, #fff) 40%, transparent);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.forge.is-off .forge-chip { cursor: default; }
+.forge:not(.is-off) .forge-chip:hover { transform: translateY(-1px); border-color: var(--c); }
+
 /* 结算：先说清楚是被谁扑灭的 / 这一路点了几座灯台 */
 .killer { text-align: center; margin: 10px 0 2px; font-size: 13.5px; color: var(--text-dim); }
 .killer b { color: var(--c, #ff6b81); font-size: 15px; }

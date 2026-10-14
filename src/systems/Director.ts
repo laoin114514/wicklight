@@ -75,6 +75,11 @@ export class Director {
     return this.endless ? Infinity : this.stage.waves + this.curse.extraWaves;
   }
 
+  /** 这一波是不是"首领前的最后一波"：是的话该给个预告，而不是让首领突然站在脸上。 */
+  get bossNext(): boolean {
+    return !this.endless && !!this.stage.boss && this.wave === this.totalWaves - 1;
+  }
+
   private mods() {
     return DIFFICULTIES[this.difficulty];
   }
@@ -109,12 +114,15 @@ export class Director {
       ctx.announce(`${def.name} 苏醒`, true);
     } else {
       this.phase = 'spawning';
-      ctx.announce(`第 ${this.wave} 波`);
+      // 首领前那一波把话说在前面：不然"下一波直接站着首领"会显得不讲道理
+      const warning = this.bossNext ? ' · 首领将至' : '';
       if (this.wave % 3 === 0 && this.stage.elites.length) {
         const eliteId = this.rng.pick(this.stage.elites);
         const pos = ctx.spawnPoint();
         const affix = ctx.spawnEnemy(eliteId, pos.x, pos.y, this.hpMult * 0.85, this.dmgMult);
-        ctx.announce(`精英来袭：${ENEMY_MAP[eliteId].name}${affix ? ' · ' + affix : ''}`, true);
+        ctx.announce(`精英来袭：${ENEMY_MAP[eliteId].name}${affix ? ' · ' + affix : ''}${warning}`, true);
+      } else {
+        ctx.announce(`第 ${this.wave} 波${warning}`);
       }
     }
   }
