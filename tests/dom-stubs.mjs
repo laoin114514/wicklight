@@ -109,6 +109,10 @@ export function installDomStubs(opts = {}) {
       this.clientHeight = 720;
       this._ctx = null;
     }
+    get className() { return [...this.classList.set].join(' '); }
+    set className(value) {
+      this.classList.set = new Set(String(value ?? '').split(/\s+/).filter(Boolean));
+    }
     get innerHTML() { return this._html; }
     set innerHTML(value) { this._html = String(value); this.children = []; }
     get textContent() { return this._text; }

@@ -202,22 +202,66 @@ export class HUD implements HUDHost {
   }
 
   toast(text: string): void {
+    // 同样的话还挂在屏幕上就别再叠一条：开局那一串事件本来就会连着弹
+    // （"图鉴 +2 条" 曾经同时出现两条），重复的公告只会把战场糊住。
+    if (this.hasCard(text)) return;
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
-    this.toastRoot.appendChild(el);
-    window.setTimeout(() => el.classList.add('is-out'), 1800);
-    window.setTimeout(() => el.remove(), 2600);
+    this.pushCard(el, text, 1800, 2600);
   }
 
   /** 首次遭遇的提示卡：比 toast 多一行说明，停得也久一些（7 秒）。 */
   tip(title: string, text: string): void {
+    if (this.hasCard(title)) return;
     const el = document.createElement('div');
     el.className = 'toast toast--tip';
     el.innerHTML = `<b>${title}</b><span>${text}</span>`;
+    this.pushCard(el, title, 6400, 7200);
+  }
+
+  /**
+   * 屏幕上已经挂着同一句话了吗（只看还没开始淡出的那几条）。
+   * 认的是往元素上写的 `cardKey`，不是从 DOM 里抠文本：提示卡的标题藏在 <b> 里，
+   * 抠文本既多绕一圈，也在无头桩件里抠不出来。
+   */
+  private hasCard(key: string): boolean {
+    for (const el of Array.from(this.toastRoot.children as HTMLCollectionOf<HTMLElement>)) {
+      if (el.classList.contains('is-out')) continue;
+      if (el.dataset.cardKey === key) return true;
+    }
+    return false;
+  }
+
+  /** 上屏 + 定时淡出。 */
+  private pushCard(el: HTMLElement, key: string, holdMs: number, lifeMs: number): void {
+    el.dataset.cardKey = key;
     this.toastRoot.appendChild(el);
-    window.setTimeout(() => el.classList.add('is-out'), 6400);
-    window.setTimeout(() => el.remove(), 7200);
+    if (!el.classList.contains('toast--tip')) this.trimCards();
+    window.setTimeout(() => el.classList.add('is-out'), holdMs);
+    window.setTimeout(() => el.remove(), lifeMs);
+  }
+
+  /**
+   * 手机横屏上短公告要**限个数**：开局那几秒图鉴 / 悬赏 / 险境预警会连着冒出来，
+   * 实测 844×390 能同时挂住三四条，正好盖住站在屏幕中央的自己。
+   * 挂不下就把**最旧的**那条摘掉——它已经读过一遍了，留着只会挡视线。
+   *
+   * 只数短公告，不数提示卡：提示卡是"讲一次就够"的教学（精英 / 首领 / 险境），
+   * 被顶掉等于教学白讲；而会成串冒出来的本来就是短公告。
+   */
+  private trimCards(): void {
+    const cap = isTouchDevice() ? 3 : 5;
+    const isToast = (el: Element) => !el.classList.contains('toast--tip');
+    let count = Array.from(this.toastRoot.children).filter(isToast).length;
+    for (const el of Array.from(this.toastRoot.children)) {
+      if (count <= cap) break;
+      if (!isToast(el)) continue;
+      // 走 removeChild 而不是 el.remove()：浏览器里两者等价，
+      // 但无头桩件只实现了 removeChild，不这么写这一条就测不到。
+      this.toastRoot.removeChild(el);
+      count -= 1;
+    }
   }
 
   announce(text: string, big = false): void {

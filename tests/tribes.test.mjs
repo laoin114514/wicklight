@@ -100,6 +100,10 @@ test('灯火共鸣：遗物分族、凑数加成与展示', async (t) => {
   game.shopItems = [
     { kind: 'relic', id: 'whetstone', name: '磨石', blurb: '所有伤害 +18%。', icon: '🪨', color: '#ff7a2f', price: 50, sold: false },
   ];
+  // 前面几段凑遗物时已经弹过同样的共鸣卡。真机上 2.6 秒就淡出了，
+  // 但无头环境里 setTimeout 不跑、卡片会一直挂着，而 HUD 现在会拦下同一句话的重复上屏
+  // （见 tests/toastcap.test.mjs）——所以先把屏幕清干净，才能验"买进这一件确实报了"。
+  hud.toastRoot.innerHTML = '';
   const cardsBefore = hud.toastRoot.children.length;
   assert.equal(game.buyShop(0), true, '应能买下磨石');
   assert.equal(q.tribeTier('flame'), 1, '买到第 3 件应就地共鸣');
