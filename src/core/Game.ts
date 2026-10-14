@@ -8,6 +8,7 @@ import { Settings } from './Settings';
 import { Storage, type Storage as StorageType } from './Storage';
 import { EventBus, type GameEvents } from './Events';
 import { clamp } from './MathUtils';
+import { CombatHaptics } from './Haptics';
 import { isTouchDevice, perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
 import { Player, type PlayerContext } from '../entities/Player';
@@ -162,6 +163,11 @@ export class Game {
   readonly events = new EventBus<GameEvents>();
   readonly rng = new Random();
   readonly textures = new TextureBank();
+  /**
+   * 战斗触感：受伤 / 濒死 / 升级 / 死亡各一种节奏。手机上两只拇指都压在屏幕上，
+   * 血条与油条都长在视野的两个角上——手是唯一空着的反馈通道。
+   */
+  readonly haptics: CombatHaptics;
 
   readonly player = new Player();
   readonly enemies = new EnemySystem();
@@ -301,6 +307,8 @@ export class Game {
     // 先定档位：后面 generateLevel 才知道该铺多少布景
     this.refreshPerf();
     this.audio = new AudioEngine(this.settings);
+    // 设置里关掉震动（或不是掌上设备）时，下面这些调用会安静地什么都不做
+    this.haptics = new CombatHaptics(() => this.settings.data.vibrate !== false);
     this.loot = new LootSystem(this.pickups);
     this.save = this.storage.load();
     this.meta = new MetaSystem(this.save);
@@ -448,6 +456,7 @@ export class Game {
     this.lastKiller = null;
     this.bounties.reset();
     this.codex.reset();
+    this.haptics.reset();
     this.codexTimer = 0;
     this.syncCodex();
   }
@@ -693,6 +702,7 @@ export class Game {
       return;
     }
     this.runTime += dt;
+    this.haptics.update(dt, this.player.stats.maxHp > 0 ? this.player.hp / this.player.stats.maxHp : 1);
     this.bounties.tick(dt);
     this.checkBounty();
     this.codexTimer -= dt;
@@ -1459,6 +1469,7 @@ export class Game {
     this.damageTaken += scaled;
     this.bounties.onPlayerHit();
     this.hitStop = Math.max(this.hitStop, 0.05);
+    this.haptics.hurt();
     this.audio.play('hurt');
     this.camera.addTrauma(0.35, this.settings.data.shake * this.settings.motionScale);
     this.postfx.triggerGlitch(0.5);
@@ -1663,6 +1674,7 @@ export class Game {
       return;
     }
     this.state = 'levelup';
+    this.haptics.levelUp();
     this.audio.play('levelup');
     this.ui?.setOffers(this.currentOffers, this.rerollsLeft);
     this.ui?.showScreen('levelup');
@@ -2178,10 +2190,12 @@ export class Game {
       this.particles.burst(this.player.x, this.player.y, 40, '#ffb14e', { speed: 300, size: 5, life: 1 });
       this.postfx.triggerGlitch(1.4);
       this.camera.addTrauma(1);
+      this.haptics.died();
       this.hud?.toast('✦ 复燃！');
       return;
     }
     this.state = 'dead';
+    this.haptics.died();
     this.audio.setMood('calm');
     this.finalizeRun('defeat');
     this.ui?.showScreen('dead');

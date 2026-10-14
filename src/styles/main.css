@@ -702,26 +702,38 @@ body {
 
 /* 暂停键：只给触屏（桌面有 Esc/P，HUD 不必多一个按钮）。
    挂在右上角记分栏的左上角外侧——那一块在横屏下是空的，而且它绝对定位，不参与 grid 排版，
-   所以既不会把记分栏撑高，也不会跟任何芯片抢位置。 */
+   所以既不会把记分栏撑高，也不会跟任何芯片抢位置。
+   命中区 48×48、里面画 36px 的圆：手指点得中，视觉上又不至于顶到记分栏第一行上去。
+   （36px 是按"眼睛看得见"定的，不是按"拇指点得着"——手机上 44 是下限。） */
 .hud__pause {
   display: none;
   position: absolute;
-  left: -44px;
-  top: -2px;
-  width: 36px;
-  height: 36px;
+  left: -50px;
+  /* 绝对定位的 top 是相对父级 padding box（记分栏顶 16px）算的：
+     -8 让"48px 命中圈 + 里面 6px 内缩的 36px 圆"正好和以前那枚 36px 的圆重合。 */
+  top: -8px;
+  width: 48px;
+  height: 48px;
   grid-auto-flow: column;
   place-content: center;
   align-items: center;
   gap: 4px;
   padding: 0;
+  border: 0;
+  background: none;
   border-radius: 50%;
-  border: 1px solid rgba(196, 158, 96, 0.5);
-  background: radial-gradient(circle at 50% 35%, rgba(46, 38, 30, 0.92), rgba(14, 13, 17, 0.86));
   color: var(--amber-bright);
   pointer-events: auto;
   touch-action: manipulation;
   animation: none;
+}
+.hud__pause::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1px solid rgba(196, 158, 96, 0.5);
+  background: radial-gradient(circle at 50% 35%, rgba(46, 38, 30, 0.92), rgba(14, 13, 17, 0.86));
 }
 body.is-touch .hud__pause { display: grid; }
 .hud__pause i {

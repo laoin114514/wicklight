@@ -174,7 +174,20 @@ async function main() {
         const h = window.__WICKLIGHT__;
         return h ? { state: h.game.state, kills: h.game.kills, wave: h.game.wave, gold: h.game.gold, level: h.game.playerLevel } : null;
       },
+      /** 触感被调用了几次、都是什么节奏（震动在真机上肉眼看不见，只能这样验）。 */
+      vibes: {
+        log: [],
+        install() {
+          if (typeof navigator.vibrate === 'function') {
+            navigator.vibrate = (p) => {
+              window.__PROBE__.vibes.log.push(Array.isArray(p) ? p.slice() : p);
+              return true;
+            };
+          }
+        },
+      },
     };
+    window.__PROBE__.vibes.install();
   };
   await page.addInitScript(probeInit);
 
@@ -999,6 +1012,12 @@ async function main() {
   expect(trioHud.left >= 0 && trioHud.right <= trioHud.vw && trioHud.h > 0, '多首领血条在视口内且有高度', JSON.stringify(trioHud));
   await shot('13b-endless-trio');
 
+  // ── 10b. 桌面不该有任何触感：打了一整局，navigator.vibrate 一次都不该被调到 ──
+  expect(
+    (await page.evaluate(() => window.__PROBE__.vibes.log.length)) === 0,
+    '桌面（非掌上设备）全程不震动',
+  );
+
   // ── 11. 今日灯芯：全服同一个夜晚 ──
   await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
   await sleep(400);
@@ -1142,6 +1161,25 @@ async function main() {
   );
   const mobileOverlap = await mobile.evaluate(() => window.__PROBE__.overlaps('#touch-stick', '.hud__build'));
   expect(mobileOverlap.length === 0, '移动端摇杆不遮挡构筑信息', mobileOverlap.join('; '));
+
+  // 暂停键的命中圈：圆按钮"点得中"是按半径算的，48px 的圈里 8 个方向都要命中
+  const pauseHit = await mobile.evaluate(() => {
+    const el = document.querySelector('.hud__pause');
+    const b = el.getBoundingClientRect();
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    const dirs = (r) =>
+      Array.from({ length: 8 }, (_, i) => {
+        const a = ((i * 45 - 90) * Math.PI) / 180;
+        const t = document.elementFromPoint(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r));
+        return !!t && (t === el || el.contains(t));
+      });
+    return { w: Math.round(b.width), h: Math.round(b.height), edge: dirs(22), inner: dirs(17) };
+  });
+  expect(pauseHit.w >= 44 && pauseHit.h >= 44, '暂停键命中圈不小于 44px（拇指点得中）', JSON.stringify(pauseHit));
+  expect(pauseHit.edge.every(Boolean), '命中圈边缘 8 个方向都点得中', JSON.stringify(pauseHit));
+  expect(pauseHit.inner.every(Boolean), '命中圈里（原来那枚 36px 圆的范围）更得点得中', JSON.stringify(pauseHit));
+
   const mobBounty = await mobile.evaluate(() => window.__PROBE__.layout('.hud__bounty'));
   expect(mobBounty.issues.length === 0, '移动端悬赏芯片布局正常', mobBounty.issues.join('; '));
   const mobClash = await mobile.evaluate(() => [
@@ -1301,6 +1339,8 @@ async function main() {
     await wait(1800);
     return { fired, ring, cooling, later, cd: p.dashCd, cdMax: p.dashCdMax, done: btn.style.getPropertyValue('--cd'), doneCooling: btn.classList.contains('is-cooling') };
   });
+  const mobVibes = await mobile.evaluate(() => window.__PROBE__.vibes.log);
+  expect(mobVibes.length > 0, '手机上按钮反馈会真的调用震动', JSON.stringify(mobVibes.slice(0, 4)));
   expect(cdRing.fired === true, '按住冲刺按钮会真的放出去', JSON.stringify(cdRing));
   expect(cdRing.cooling && Number(cdRing.ring) > 0, '冷却时按钮上要画冷却圈', JSON.stringify(cdRing));
   expect(Number(cdRing.later) < Number(cdRing.ring), '冷却圈会随时间退回去（不是画着不动）', JSON.stringify(cdRing));
