@@ -810,10 +810,12 @@ export class Game {
     for (const py of pyres) {
       if (py.lit) {
         // 长明的灯台一直照亮这一片——它既是奖励，也是你之后可以退守的据点
+        // 灯焰被吹走一半，灯就暗一半——"快被吹灭了"应该是看得见的
+        const ember = 0.45 + 0.55 * clamp(py.flame, 0, 1);
         const flicker = 1 + Math.sin(this.time * 7.5 + py.x * 0.02) * 0.05;
-        this.light.addLight(py.x, py.y, 250 * flicker, 0.82);
-        this.light.addGlow(py.x, py.y, 215, 0.5);
-        if (this.rng.next() < dt * 3) this.particles.ember(py.x + this.rng.range(-14, 14), py.y - 30, '#ffc46b');
+        this.light.addLight(py.x, py.y, 250 * flicker * ember, 0.82 * ember);
+        this.light.addGlow(py.x, py.y, 215 * ember, 0.5 * ember);
+        if (this.rng.next() < dt * 3 * ember) this.particles.ember(py.x + this.rng.range(-14, 14), py.y - 30, '#ffc46b');
       } else if (py === channel) {
         py.progress = Math.min(1, py.progress + dt / 1.15);
         this.particles.ember(py.x + this.rng.range(-10, 10), py.y - 20, '#ffb15e');
@@ -828,6 +830,7 @@ export class Game {
   private ignitePyre(py: Pyre): void {
     py.lit = true;
     py.progress = 1;
+    py.flame = 1;
     this.pyresLit += 1;
     this.pyresLitTotal += 1;
     const p = this.player;
@@ -845,6 +848,7 @@ export class Game {
     if (this.pyreTotal > 0 && this.pyresLit >= this.pyreTotal) this.achievements.unlock('pyre_all');
     this.bounties.onPyre();
     this.hud?.toast(`🏮 灯台 ${this.pyresLit}/${this.pyreTotal} · 灯火更旺了`);
+    this.summonSnuffers(py);
     // 点燃的动静会把附近的东西叫过来：不然"探索"就没有代价了
     const count = 3 + Math.min(2, this.stageIndex);
     for (let i = 0; i < count; i += 1) {
@@ -858,6 +862,73 @@ export class Game {
         this.director.bossDmgMult * 0.9,
       );
     }
+  }
+
+  /** 最近的、还亮着的灯台；超出范围就当作"这片没灯"。 */
+  private nearestLitPyre(x: number, y: number, maxDist: number): { x: number; y: number } | null {
+    let best: Pyre | null = null;
+    let bestD = maxDist;
+    for (const py of this.level.pyres) {
+      if (!py.lit || py.flame <= 0) continue;
+      const d = Math.hypot(py.x - x, py.y - y);
+      if (d < bestD) {
+        bestD = d;
+        best = py;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  /** 吹灯客站在灯台边抽灯焰；灯焰归零，这座灯台就重新熄掉。 */
+  private quenchPyre(x: number, y: number, dt: number): void {
+    let best: Pyre | null = null;
+    let bestD = Infinity;
+    for (const py of this.level.pyres) {
+      if (!py.lit || py.flame <= 0) continue;
+      const d = Math.hypot(py.x - x, py.y - y);
+      if (d < bestD) {
+        bestD = d;
+        best = py;
+      }
+    }
+    if (!best || bestD > 96) return;
+    best.flame -= dt * 0.42;
+    if (best.flame <= 0) {
+      best.flame = 0;
+      this.extinguishPyre(best);
+    }
+  }
+
+  /** 熄灭一座灯台：余温按点灯时加过的比例原路收回，位置重新变回"黑着的灯"。 */
+  private extinguishPyre(py: Pyre): void {
+    py.lit = false;
+    py.progress = 0;
+    this.pyresLit = Math.max(0, this.pyresLit - 1);
+    const p = this.player;
+    p.pyreMods.damageMult /= 1.05;
+    p.pyreMods.lightMult /= 1.06;
+    p.recomputeStats();
+    this.particles.burst(py.x, py.y - 24, 24, '#5f6a8f', { speed: 150, size: 3, life: 0.8 });
+    this.camera.addTrauma(0.25);
+    this.audio.play('quench');
+    this.hud?.toast('💨 一盏灯台被吹灭了');
+  }
+
+  /** 点灯会招来吹灯客：你点亮一处，黑暗就派人来吹灭它。 */
+  private summonSnuffers(py: Pyre): void {
+    const count = this.stageIndex >= 2 || this.endless ? 2 : 1;
+    for (let i = 0; i < count; i += 1) {
+      const a = this.rng.angle();
+      const d = 430 + this.rng.next() * 200;
+      this.spawnWithScaling(
+        'snuffer',
+        py.x + Math.cos(a) * d,
+        py.y + Math.sin(a) * d,
+        this.director.bossHpMult * 0.7,
+        this.director.bossDmgMult * 0.9,
+      );
+    }
+    this.hud?.toast('💨 有东西朝灯台去了');
   }
 
   private updateShrines(): void {
@@ -1075,6 +1146,8 @@ export class Game {
       spawnAdd: (defId, x, y) => this.enemies.spawn(defId, x, y, this.director.bossHpMult * 0.6, this.director.bossDmgMult),
       ignitGround: (x, y) => this.addGround(x, y, 60, 4, 10),
       fog: (x, y, r) => this.addGround(x, y, r, 8, 0, 'mud'),
+      pyreTarget: (x, y) => this.nearestLitPyre(x, y, 1600),
+      quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
       spikes: (x, y, r) => {
         this.hazards.push({ kind: 'thorn', timer: 1.15, x, y, r });
@@ -2457,17 +2530,20 @@ export class Game {
       ctx.fill();
       ctx.globalCompositeOperation = 'lighter';
       if (py.lit) {
-        const g = ctx.createRadialGradient(py.x, py.y - 28, 0, py.x, py.y - 28, 58 * flicker);
-        g.addColorStop(0, 'rgba(255,238,196,0.95)');
-        g.addColorStop(0.4, 'rgba(255,160,60,0.5)');
+        // 灯焰越少，火越小：被吹灯客抽着的时候一眼就看得出来
+        const flame = clamp(py.flame ?? 1, 0, 1);
+        const glowR = 58 * flicker * (0.45 + 0.55 * flame);
+        const g = ctx.createRadialGradient(py.x, py.y - 28, 0, py.x, py.y - 28, glowR);
+        g.addColorStop(0, `rgba(255,238,196,${0.35 + 0.6 * flame})`);
+        g.addColorStop(0.4, `rgba(255,160,60,${0.18 + 0.32 * flame})`);
         g.addColorStop(1, 'rgba(255,110,20,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(py.x, py.y - 28, 58 * flicker, 0, Math.PI * 2);
+        ctx.arc(py.x, py.y - 28, glowR, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,246,214,0.95)';
+        ctx.fillStyle = `rgba(255,246,214,${0.5 + 0.45 * flame})`;
         ctx.beginPath();
-        ctx.ellipse(py.x, py.y - 32, 7 * flicker, 12 * flicker, 0, 0, Math.PI * 2);
+        ctx.ellipse(py.x, py.y - 32, 7 * flicker * (0.6 + 0.4 * flame), 12 * flicker * (0.5 + 0.5 * flame), 0, 0, Math.PI * 2);
         ctx.fill();
       } else {
         // 只剩一撮将熄的余烬：既是没有点亮的提示，也是黑暗里的一点定位

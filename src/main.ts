@@ -9,7 +9,7 @@ import { WEAPONS as weapons } from './data/weapons';
 import { RELICS as relics, TRIBES as tribes } from './data/relics';
 import { PASSIVES as passives } from './data/upgrades';
 import { CURSES as curses } from './data/curses';
-import { ENEMIES as enemies } from './data/enemies';
+import { ENEMIES as enemies, NORMAL_ENEMIES as normalEnemies } from './data/enemies';
 import { AFFIXES as affixes } from './data/affixes';
 import { BOUNTIES as bounties } from './data/bounties';
 import { META_TREE as meta } from './data/meta';
@@ -41,7 +41,7 @@ function boot(): void {
     data: { weapons, relics, passives, curses, bounties, tribes, meta },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
-    catalog: { enemies, affixes, stages },
+    catalog: { enemies, affixes, stages, normalEnemies },
   };
 
   const resize = () => {

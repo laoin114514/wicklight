@@ -22,6 +22,8 @@ export interface Pyre {
   lit: boolean;
   /** 点燃进度 0~1：站在旁边慢慢涨，走开会回落 */
   progress: number;
+  /** 灯焰剩余 0~1：点亮后是满的，被「吹灯客」抽干就重新熄灭 */
+  flame: number;
 }
 
 export interface Shrine {
@@ -115,7 +117,7 @@ export function generateLevel(stage: StageDef, seed: number): Level {
       if (walls.some((w) => x > w.x - 70 && x < w.x + w.w + 70 && y > w.y - 70 && y < w.y + w.h + 70)) continue;
       if (shrines.some((s) => Math.hypot(s.x - x, s.y - y) < 320)) continue;
       if (pyres.some((p) => Math.hypot(p.x - x, p.y - y) < 760)) continue;
-      pyres.push({ x, y, lit: false, progress: 0 });
+      pyres.push({ x, y, lit: false, progress: 0, flame: 0 });
       break;
     }
   }

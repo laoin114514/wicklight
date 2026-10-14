@@ -462,6 +462,48 @@ async function main() {
   expect(/关卡 · 幽林/.test(stageTip.back), '回到第一关也会补上它自己的说明', stageTip.back);
   await shot('04e-stage-tip');
 
+  // ── 吹灯客：点亮灯台会招来专门扑灯台的东西 ──
+  const snuffer = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const pyre = g.level.pyres[0];
+    g.enemies.clear();
+    g.player.x = pyre.x;
+    g.player.y = pyre.y;
+    for (let i = 0; i < 90; i += 1) g.updatePyres(1 / 60);
+    const list = [];
+    g.enemies.forEach((e) => list.push(e));
+    const one = list.find((e) => e.defId === 'snuffer');
+    const before = one ? Math.hypot(one.x - pyre.x, one.y - pyre.y) : 0;
+    // 把人挪远：它该扑的是灯，不是玩家
+    if (one) {
+      g.player.x = pyre.x + 900;
+      g.player.y = pyre.y;
+      for (let i = 0; i < 30; i += 1) g.enemies.update(1 / 60, g.enemyCtx());
+    }
+    const after = one ? Math.hypot(one.x - pyre.x, one.y - pyre.y) : 0;
+    const out = {
+      lit: pyre.lit,
+      flame: pyre.flame,
+      snuffers: list.filter((e) => e.defId === 'snuffer').length,
+      others: list.filter((e) => e.defId !== 'snuffer').length,
+      before: Math.round(before),
+      after: Math.round(after),
+    };
+    // 收干净：熄灭这座灯台、清场、把人放回中心，后面的流程照旧
+    g.extinguishPyre(pyre);
+    g.enemies.clear();
+    g.player.x = 0;
+    g.player.y = 0;
+    out.afterCleanup = { lit: pyre.lit, pyresLit: g.pyresLit };
+    return out;
+  });
+  expect(snuffer.lit && snuffer.flame === 1, '灯台点亮后灯焰是满的', JSON.stringify(snuffer));
+  expect(snuffer.snuffers >= 1, '点灯会招来吹灯客', JSON.stringify(snuffer));
+  expect(snuffer.others > 0, '点灯的动静照旧会叫来普通敌人', JSON.stringify(snuffer));
+  expect(snuffer.after < snuffer.before, '吹灯客直奔灯台，而不是扑向玩家', JSON.stringify(snuffer));
+  expect(snuffer.afterCleanup.lit === false && snuffer.afterCleanup.pyresLit === 0, '熄灭后灯台与计数都归位', JSON.stringify(snuffer.afterCleanup));
+  await shot('04f-snuffer');
+
   await drainLevelUps();
 
   // ── 4. 暂停 ──

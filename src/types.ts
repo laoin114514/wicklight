@@ -39,6 +39,7 @@ export type EnemyBehavior =
   | 'dive'
   | 'tank'
   | 'drain'
+  | 'quench'
   | 'bomber'
   | 'charge'
   | 'beacon'

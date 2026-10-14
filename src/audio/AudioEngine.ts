@@ -155,6 +155,10 @@ export class AudioEngine {
       case 'ui':
         this.tone(700, 0.06, 'triangle', 0.08);
         break;
+      case 'quench':
+        this.noise(0.42, 0.15, 900, 0.5);
+        this.tone(300, 0.4, 'sine', 0.07, 90);
+        break;
       case 'evolve':
         this.tone(440, 0.5, 'triangle', 0.14, 1320);
         break;

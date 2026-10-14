@@ -222,6 +222,7 @@ const SCENES = {
     b.x = game.player.x + 250;
     b.y = game.player.y - 78;
     b.lit = true;
+    b.flame = 1;
     game.pyresLit = 1;
     for (let i = 0; i < 40; i += 1) step();
     for (let i = 0; i < 4; i += 1) {
@@ -229,6 +230,27 @@ const SCENES = {
       game.enemies.spawn('shade', game.player.x + Math.cos(ang) * 150, game.player.y + Math.sin(ang) * 130, 3, 1);
     }
     for (let i = 0; i < 3; i += 1) step();
+  },
+  snuffer() {
+    // 点亮的灯台被吹灯客围着抽灯焰：火已经小下去，看得出来这座快守不住了
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 60; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    const a = game.level.pyres[0];
+    a.x = game.player.x + 190;
+    a.y = game.player.y - 40;
+    a.lit = true;
+    a.flame = 0.34;
+    game.pyresLit = 1;
+    for (let i = 0; i < 3; i += 1) {
+      const ang = (i / 3) * Math.PI * 2 - 0.6;
+      const s = game.enemies.spawn('snuffer', a.x + Math.cos(ang) * 46, a.y + Math.sin(ang) * 40, 3, 1);
+      s.vx = 0;
+      s.vy = 0;
+    }
+    for (let i = 0; i < 2; i += 1) step();
   },
   shrine() {
     game.newRun('warden', 'normal', false);

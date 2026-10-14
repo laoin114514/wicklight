@@ -15,6 +15,8 @@ export const ENEMIES: EnemyDef[] = [
   { id: 'weaver', name: '织雾者', hp: 74, speed: 38, radius: 19, damage: 11, xp: 13, oil: 11, behavior: 'weaver', color: '#9fb7c9', minWave: 7, note: '走动时在脚下织出滞行雾，雾里你的脚步会沉下去；要么绕开，要么先点掉它。' },
   { id: 'beacon', name: '引灯', hp: 48, speed: 44, radius: 17, damage: 10, xp: 11, oil: 10, behavior: 'beacon', color: '#e8d38a', minWave: 6, note: '提灯亡灵，为周围敌人提供速度光环并照亮四方；优先击杀，能立刻削弱整片敌群。' },
 
+  { id: 'snuffer', name: '吹灯客', hp: 46, speed: 86, radius: 16, damage: 8, xp: 9, oil: 7, behavior: 'quench', color: '#7a6bd6', minWave: 3, note: '不追你，追你点亮的灯台：它会绕过你直接扑向灯火，一点点把灯焰吹灭；灯台一熄，余温也跟着收回。' },
+
   { id: 'wickmother', name: '烛母', hp: 320, speed: 42, radius: 34, damage: 16, xp: 90, oil: 60, behavior: 'chase', color: '#c96a2f', elite: true, minWave: 1, note: '精英 · 厚血高伤，是前期最硬的坎；把它拖到灯火边缘慢慢磨。' },
   { id: 'siphon', name: '噬灯魅', hp: 210, speed: 62, radius: 24, damage: 15, xp: 60, oil: 44, behavior: 'siphon', color: '#c98fe8', elite: true, minWave: 1, note: '精英 · 吊在中距离持续抽取你的灯火，越拖越暗；它的血不薄，得先冲上去解决。' },
   { id: 'darkless', name: '无光者', hp: 400, speed: 58, radius: 32, damage: 20, xp: 110, oil: 70, behavior: 'chase', color: '#2b2b3a', elite: true, lightShy: true, requiresLight: true, minWave: 1, note: '精英 · 只有被光照到时才能被击破，逼你主动把灯推过去。' },
@@ -27,4 +29,8 @@ export const ENEMIES: EnemyDef[] = [
 
 export const ENEMY_MAP: Record<string, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.id, e]));
 
-export const NORMAL_ENEMIES = ENEMIES.filter((e) => !e.elite && !e.boss).map((e) => e.id);
+/**
+ * 普通刷怪池。「吹灯客」不在里面——它是点灯招来的专属敌人：
+ * 混进随机刷怪只会让它在你没点灯时变成一只没有身份的追击怪，那不如不要。
+ */
+export const NORMAL_ENEMIES = ENEMIES.filter((e) => !e.elite && !e.boss && e.behavior !== 'quench').map((e) => e.id);

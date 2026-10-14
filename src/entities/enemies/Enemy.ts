@@ -77,6 +77,10 @@ export interface EnemyContext {
   ignitGround: (x: number, y: number) => void;
   /** 在战场上留下一片「滞行雾」（织雾者） */
   fog: (x: number, y: number, r: number) => void;
+  /** 最近的、还亮着的灯台（吹灯客的目标）；没有就返回 null */
+  pyreTarget: (x: number, y: number) => { x: number; y: number } | null;
+  /** 站在灯台边时把灯焰抽掉一点（吹灯客） */
+  quench: (x: number, y: number, dt: number) => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
   regen: number;
   spikes: (x: number, y: number, r: number) => void;
@@ -423,6 +427,31 @@ export class EnemySystem {
       case 'drain': {
         e.vx = nx * e.speed * speedMul;
         e.vy = ny * e.speed * speedMul;
+        break;
+      }
+      case 'quench': {
+        // 它不管你，只管你点亮的灯台：扑上去把灯焰一点点吹灭
+        const pyre = ctx.pyreTarget(e.x, e.y);
+        if (pyre) {
+          const tx = pyre.x - e.x;
+          const ty = pyre.y - e.y;
+          const tr = Math.hypot(tx, ty) || 1;
+          e.angle = Math.atan2(ty, tx);
+          if (tr > 52) {
+            e.vx = (tx / tr) * e.speed * speedMul;
+            e.vy = (ty / tr) * e.speed * speedMul;
+          } else {
+            e.vx *= 0.2;
+            e.vy *= 0.2;
+            ctx.quench(e.x, e.y, dt);
+            if (Math.random() < dt * 6) ctx.burst(e.x, e.y - 12, 1, '#b6a6ff', { speed: 40, size: 2, life: 0.5 });
+          }
+        } else {
+          // 没有灯可吹，就退化成普通的追击
+          const strafe = Math.sin(e.wobble * 0.6) * 0.22;
+          e.vx = (nx - ny * strafe) * e.speed * speedMul;
+          e.vy = (ny + nx * strafe) * e.speed * speedMul;
+        }
         break;
       }
       case 'bomber': {
