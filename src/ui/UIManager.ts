@@ -444,6 +444,56 @@ export class UIManager implements UIHost {
       </div>`;
   }
 
+  /**
+   * 这一局到底攒出了一套什么。
+   *
+   * 结算里一向只有数字（击杀 / 伤害 / 灯台），可肉鸽真正被记住的是"我这一局长成了什么样"：
+   * 哪几把武器点满了、凑齐了哪一族的共鸣、背着哪条夜咒走完的。复盘时最想看的其实是这些。
+   */
+  private runBuildBlock(): string {
+    const g = this.game;
+    const p = g.player;
+    const parts: string[] = [];
+
+    const weapons = [...p.weapons.entries()]
+      .map(([id, lvl]) => {
+        const def = WEAPON_MAP[id];
+        if (!def) return '';
+        const tag = def.evolved ? '<i class="lo-tag lo-tag--evo">进化</i>' : '';
+        return `<span class="rb-item" style="--c:${def.color}">${def.name}${tag}<u>Lv ${lvl}</u></span>`;
+      })
+      .filter(Boolean);
+    parts.push(`<div class="run-build__row"><span>武器</span><b>${weapons.join('') || '——'}</b></div>`);
+
+    const passives = [...p.passives.entries()]
+      .map(([id, lvl]) => {
+        const def = PASSIVE_MAP[id];
+        return def ? `<span class="rb-item">${def.name}<u>Lv ${lvl}</u></span>` : '';
+      })
+      .filter(Boolean);
+    if (passives.length) parts.push(`<div class="run-build__row"><span>被动</span><b>${passives.join('')}</b></div>`);
+
+    const relics = [...p.relics]
+      .map((id) => {
+        const def = RELIC_MAP[id];
+        return def ? `<span class="rb-item" style="--c:${def.color}">${def.name}</span>` : '';
+      })
+      .filter(Boolean);
+    const resonance = TRIBES.map((t) => {
+      const n = p.tribeCount(t.id);
+      const tier = p.tribeTier(t.id);
+      if (!tier) return '';
+      return `<span class="rb-tribe" style="--c:${t.color}">${t.icon} ${t.name} ${n} 件 · ${tier} 档</span>`;
+    }).filter(Boolean);
+    parts.push(
+      `<div class="run-build__row"><span>遗物</span><b>${relics.join('') || '——'}${resonance.length ? `<i class="rb-reso">灯火共鸣</i>${resonance.join('')}` : ''}</b></div>`,
+    );
+
+    if (g.curse) parts.push(`<div class="run-build__row"><span>夜咒</span><b><span class="rb-item" style="--c:${g.curse.color}">${g.curse.name}</span></b></div>`);
+
+    return `<div class="run-build"><div class="run-build__title">本局构筑</div>${parts.join('')}</div>`;
+  }
+
   /** 死亡时说清楚是被谁扑灭的——比"你死了"有用得多。 */
   private killerLine(): string {
     const k = this.game.lastKiller;
@@ -579,6 +629,7 @@ export class UIManager implements UIHost {
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
+        ${this.runBuildBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="again">再点一盏</button>
           <button class="btn" data-act="menu">返回主菜单</button>
@@ -600,6 +651,7 @@ export class UIManager implements UIHost {
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
+        ${this.runBuildBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="endless">挑战无尽之夜</button>
           <button class="btn" data-act="menu">返回主菜单</button>

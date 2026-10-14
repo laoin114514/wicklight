@@ -86,6 +86,22 @@ test('结算交代与首局引导', async (t) => {
   assert.equal(game.pyresLitTotal, 1, '本局点亮的灯台要累计');
   assert.ok(game.runPyres >= 3, `本局总灯台数要有分母（${game.runPyres}）`);
 
+  // ── 本局构筑：这一局长成了什么样，结算里也该摊开 ──
+  // 攒一套有代表性的：一把满级武器、一条被动、一族凑够 3 件的共鸣、外加一条夜咒
+  const build = game.player;
+  build.addWeapon('wisp');
+  for (let i = 0; i < 4; i += 1) build.levelWeapon('wisp');
+  build.addPassive('might', 3);
+  build.addRelic('whetstone');
+  build.addRelic('oilcan');
+  build.addRelic('honeypot');
+  build.addRelic('wickbrand');
+  build.recomputeStats();
+  const curse = handle.data.curses[0];
+  game.curse = curse;
+  assert.equal(build.tribeCount('oil'), 3, '灯油族应凑到 3 件');
+  assert.equal(build.tribeTier('oil'), 1, '3 件应解锁第一档共鸣');
+
   // ── 结算面板：死因与高光都在，且没有缺字段 ──
   game.player.revives = 0;
   game.player.hp = -1;
@@ -97,9 +113,27 @@ test('结算交代与首局引导', async (t) => {
   assert.ok(html.includes('点亮灯台'), '结算要交代点亮的灯台');
   assert.ok(html.includes('最强一击') && html.includes('321'), '结算要展示最强一击');
   assert.ok(html.includes('完成悬赏'), '结算要交代悬赏完成数');
+  assert.ok(html.includes('本局构筑'), '结算要摊开这一局的构筑');
+  assert.ok(html.includes('追踪火苗'), '构筑里应写出本局的武器');
+  assert.ok(html.includes('Lv 5'), '武器要带上等级');
+  assert.ok(html.includes('灼心'), '构筑里应写出被动');
+  for (const relic of ['磨石', '油壶', '蜜罐', '芯印']) {
+    assert.ok(html.includes(relic), `构筑里应列出遗物「${relic}」`);
+  }
+  assert.ok(html.includes('灯火共鸣'), '凑齐一族要标出灯火共鸣');
+  assert.ok(html.includes('灯油 3 件 · 1 档'), `共鸣要写清族名与件数（${(html.match(/灯油 \d+ 件 · \d 档/) ?? [''])[0]}）`);
+  assert.ok(html.includes(curse.name), `背着的夜咒也要写出来（${curse.name}）`);
   for (const bad of ['undefined', 'NaN', '[object Object]']) {
     assert.ok(!html.includes(bad), `结算面板出现了 ${bad}`);
   }
+
+  // ── 一件遗物都没有时也要留个占位符，而不是留空或露 undefined ──
+  game.player.relics.clear();
+  game.player.recomputeStats();
+  ui.showScreen('dead');
+  const bare = ui.screen.innerHTML;
+  assert.ok(bare.includes('本局构筑') && bare.includes('——'), '没有遗物时应给出占位符');
+  assert.ok(!/undefined|NaN|\[object Object\]/.test(bare), '空构筑也不该出现缺字段');
 
   // ── 首局引导：第一次跑会排队，第二局不再有 ──
   game.save.hintsSeen = false;
