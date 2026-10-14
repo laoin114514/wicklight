@@ -86,6 +86,18 @@ interface Hazard {
   r: number;
 }
 
+interface BeamFx {
+  x: number;
+  y: number;
+  ex: number;
+  ey: number;
+  width: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  seed: number;
+}
+
 interface Ground {
   x: number;
   y: number;
@@ -187,6 +199,8 @@ export class Game {
   oilPickups = 0;
   hazards: Hazard[] = [];
   grounds: Ground[] = [];
+  /** 光矛这类瞬时直线特效 */
+  beams: BeamFx[] = [];
   fogTimer = 0;
   darknessBoost = 0;
   /** 夜咒「深潜」带来的持续黑暗（不会被浓雾衰减吃掉） */
@@ -318,6 +332,7 @@ export class Game {
     this.floaters.clear();
     this.hazards.length = 0;
     this.grounds.length = 0;
+    this.beams.length = 0;
     this.time = 0;
     this.runTime = 0;
     this.wave = 0;
@@ -397,6 +412,7 @@ export class Game {
     this.camera.y = center.y;
     this.hazards.length = 0;
     this.grounds.length = 0;
+    this.beams.length = 0;
     if (fresh) {
       this.player.oil = this.player.oilMax;
     } else {
@@ -600,7 +616,8 @@ export class Game {
     }
     if (!this.enemies.bosses.length) this.bossName = null;
 
-    this.projectiles.update(dt, (p) => this.nearestEnemy(p.x, p.y, 460));
+    this.projectiles.update(dt, (p) => this.nearestEnemy(p.x, p.y, 460), { x: this.player.x, y: this.player.y });
+    this.updateBeams(dt);
     this.resolveProjectiles(dt);
     this.resolveGrounds(dt);
 
@@ -789,6 +806,7 @@ export class Game {
       hit: (e, damage, crit, kx, ky, kb, opts) => this.applyHit(e, damage, crit, kx, ky, kb, opts),
       findTarget: (x, y, maxDist, requireLight) => this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist)),
       chainZap: (x, y, damage, jumps, range, color, opts) => this.chainZap(x, y, damage, jumps, range, color, opts),
+      beam: (x, y, angle, length, width, damage, color, opts) => this.fireBeam(x, y, angle, length, width, damage, color, opts),
       onNova: () => this.bounties.onNova(),
     };
   }
@@ -915,6 +933,92 @@ export class Game {
       this.arcs.push({ pts, life: 0.17, maxLife: 0.17, color, seed: this.rng.next() * 1000 });
       this.audio.play('hit');
     }
+  }
+
+  /**
+   * 光矛：一条瞬时贯穿的直线。命中判定用"敌心到线段的距离"，
+   * 所以一条光矛能把排成一列的敌人全部串起来——这正是它存在的意义。
+   */
+  private fireBeam(
+    x: number,
+    y: number,
+    angle: number,
+    length: number,
+    width: number,
+    damage: number,
+    color: string,
+    opts: { burn?: number; slow?: number; knockback?: number } = {},
+  ): void {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const ex = x + dx * length;
+    const ey = y + dy * length;
+    this.beams.push({ x, y, ex, ey, width, life: 0.18, maxLife: 0.18, color, seed: this.rng.next() * 1000 });
+
+    const hits: Enemy[] = [];
+    this.enemies.forEach((e) => {
+      if (!e.active || !this.enemies.isVulnerable(e, this.lightCtx())) return;
+      const px = e.x - x;
+      const py = e.y - y;
+      const t = clamp(px * dx + py * dy, 0, length);
+      const cx = x + dx * t;
+      const cy = y + dy * t;
+      if (Math.hypot(e.x - cx, e.y - cy) <= width + e.radius) hits.push(e);
+    });
+    for (const e of hits) {
+      const crit = Math.random() < this.player.stats.critChance;
+      this.applyHit(e, damage * (crit ? this.player.stats.critMult : 1), crit, dx, dy, opts.knockback ?? 60, {
+        burn: opts.burn,
+        slow: opts.slow,
+      });
+      this.particles.burst(e.x, e.y, 3, color, { speed: 120, size: 2, life: 0.25 });
+    }
+    this.particles.burst(ex, ey, 6, color, { speed: 90, size: 2.5, life: 0.3 });
+    this.particles.burst(x, y, 4, color, { speed: 70, size: 2, life: 0.25 });
+    this.camera.addTrauma(hits.length ? 0.16 : 0.06, this.settings.data.shake * this.settings.motionScale);
+  }
+
+  private updateBeams(dt: number): void {
+    for (let i = this.beams.length - 1; i >= 0; i -= 1) {
+      this.beams[i].life -= dt;
+      if (this.beams[i].life <= 0) this.beams.splice(i, 1);
+    }
+  }
+
+  private drawBeams(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (const b of this.beams) {
+      const t = clamp(b.life / b.maxLife, 0, 1);
+      // 外圈散光 + 内芯白热：让"瞬间一击"看起来比普通子弹重得多
+      ctx.globalAlpha = 0.22 * t;
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = b.width * 3.4;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.ex, b.ey);
+      ctx.stroke();
+      ctx.globalAlpha = 0.65 * t;
+      ctx.lineWidth = b.width * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.ex, b.ey);
+      ctx.stroke();
+      ctx.globalAlpha = 0.95 * t;
+      ctx.strokeStyle = '#fffbe8';
+      ctx.lineWidth = Math.max(1.5, b.width * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.ex, b.ey);
+      ctx.stroke();
+      ctx.globalAlpha = 0.7 * t;
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.arc(b.ex, b.ey, b.width * (1.2 + (1 - t) * 1.6), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private updateArcs(dt: number): void {
@@ -1903,6 +2007,7 @@ export class Game {
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y);
     this.player.draw(ctx, this.time);
     this.drawArcs(ctx);
+    this.drawBeams(ctx);
     this.particles.draw(ctx);
     this.floaters.draw(ctx);
 

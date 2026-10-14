@@ -24,6 +24,9 @@ export interface Projectile {
   spin: number;
   angle: number;
   weaponId: string;
+  /** > 0 表示回旋刃：飞出一段距离后掉头回到玩家手里（回程可以再命中一次） */
+  boomerang: number;
+  returning: boolean;
 }
 
 export class ProjectileSystem {
@@ -51,6 +54,8 @@ export class ProjectileSystem {
     spin: 0,
     angle: 0,
     weaponId: '',
+    boomerang: 0,
+    returning: false,
   }), 512);
 
   spawn(cfg: Partial<Projectile> & { x: number; y: number; vx: number; vy: number; damage: number }): Projectile {
@@ -78,10 +83,12 @@ export class ProjectileSystem {
     p.spin = cfg.spin ?? 0;
     p.angle = Math.atan2(p.vy, p.vx);
     p.weaponId = cfg.weaponId ?? '';
+    p.boomerang = cfg.boomerang ?? 0;
+    p.returning = false;
     return p;
   }
 
-  update(dt: number, homingTarget: (p: Projectile) => { x: number; y: number } | null): void {
+  update(dt: number, homingTarget: (p: Projectile) => { x: number; y: number } | null, owner?: { x: number; y: number }): void {
     for (const p of this.pool.all) {
       if (!p.active) continue;
       p.life -= dt;
@@ -99,6 +106,31 @@ export class ProjectileSystem {
           p.angle += Math.max(-p.homing * dt, Math.min(p.homing * dt, d));
           p.vx = Math.cos(p.angle) * p.speed;
           p.vy = Math.sin(p.angle) * p.speed;
+        }
+      }
+      if (p.boomerang > 0 && owner) {
+        // 0.615 = 1 - 1/2.6：飞满 range 的距离后掉头（寿命由发射方按此比例给出）
+        if (p.life <= p.maxLife * 0.615) {
+          // 掉头：先把命中记录清空，于是"回程"能再打一次同一只敌人
+          if (!p.returning) {
+            p.returning = true;
+            p.hitIds = [];
+          }
+          const dx = owner.x - p.x;
+          const dy = owner.y - p.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const desired = Math.atan2(dy, dx);
+          let diff = desired - p.angle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          p.angle += Math.max(-p.boomerang * dt, Math.min(p.boomerang * dt, diff));
+          p.speed = Math.max(p.speed, 280);
+          p.vx = Math.cos(p.angle) * p.speed * 1.15;
+          p.vy = Math.sin(p.angle) * p.speed * 1.15;
+          if (d < 28) {
+            p.active = false;
+            continue;
+          }
         }
       }
       if (p.spin !== 0) p.angle += p.spin * dt;
@@ -124,6 +156,16 @@ export class ProjectileSystem {
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
+      if (p.boomerang > 0) {
+        // 月刃：两片交叉的弧，回程时整体转成偏白，提示"还能再打一次"
+        ctx.strokeStyle = p.returning ? '#ffffff' : p.color;
+        ctx.lineWidth = 3;
+        for (const side of [0, Math.PI]) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 1.25, p.angle + side - 0.9, p.angle + side + 0.9);
+          ctx.stroke();
+        }
+      }
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.4);
       g.addColorStop(0, '#fff');
       g.addColorStop(0.35, p.color);

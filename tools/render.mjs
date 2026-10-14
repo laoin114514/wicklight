@@ -152,6 +152,43 @@ const SCENES = {
     // 立刻再放一道电弧，保证截图里能看到闪电
     game.chainZap(game.player.x, game.player.y, 20, 5, 460, '#8ff0ff', {});
   },
+  beam() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.player.weapons.clear();
+    game.player.weapons.set('beam', 3);
+    game.player.recomputeStats();
+    game.player.stats.cooldownMult = 0.35;
+    for (const d of [110, 200, 290, 380]) {
+      game.enemies.spawn('shade', game.player.x + d, game.player.y - 8, 26, 1);
+    }
+    game.enemies.spawn('bulwark', game.player.x + 450, game.player.y, 8, 1);
+    fight(26, { spawnEvery: 400 });
+    // 收尾再放一道，保证截图里正亮着
+    game.fireBeam(game.player.x, game.player.y, 0, game.player.stats.areaMult * 430, 15, 30, '#fff3c4', { knockback: 120 });
+    for (let i = 0; i < 2; i += 1) step();
+  },
+  blade() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.player.weapons.clear();
+    game.player.weapons.set('boomerang', 1);
+    game.player.recomputeStats();
+    game.player.stats.cooldownMult = 1;
+    for (const [d, dy] of [[150, 0], [255, 30], [350, -20]]) {
+      game.enemies.spawn('shade', game.player.x + d, game.player.y + dy, 30, 1);
+    }
+    // 只掷一轮，抓"刃在半路"的那一帧
+    game.player.cooldowns.set('boomerang', 0);
+    game.player.update(1 / 60, { moveX: 0, moveY: 0, dash: false, nova: false }, game.playerCtx());
+    for (let i = 0; i < 16; i += 1) step();
+  },
   shrine() {
     game.newRun('warden', 'normal', false);
     game.enemies.clear();

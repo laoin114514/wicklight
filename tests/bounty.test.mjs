@@ -43,9 +43,12 @@ test('悬赏：抽取、计数、完成与发奖', async (t) => {
     }
   }
 
+  // 注意：必须走 force() 而不是直接改 state——force() 会记下 lastId，
+  // 而「换关重抽」的不重复保证正是基于 lastId 的。绕过它会让下面的断言变成掷骰子。
   const force = (id, target) => {
     const def = byId(id);
-    game.bounties.state = { def, kind: def.kind, progress: 0, target: target ?? def.target, done: false, settled: false };
+    game.bounties.force(def); // 返回值是定义本身，目标要改在 state 上
+    game.bounties.state.target = target ?? def.target;
     return def;
   };
   const kill = (count, defId = 'shade') => {

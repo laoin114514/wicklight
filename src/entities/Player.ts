@@ -18,6 +18,17 @@ export interface PlayerContext {
   hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number }) => boolean;
   findTarget: (x: number, y: number, maxDist: number, requireLight?: boolean) => Enemy | null;
   chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number }) => void;
+  /** 光矛：一条贯穿光束，沿途全部命中 */
+  beam: (
+    x: number,
+    y: number,
+    angle: number,
+    length: number,
+    width: number,
+    damage: number,
+    color: string,
+    opts?: { burn?: number; slow?: number; knockback?: number },
+  ) => void;
   /** 燃爆真正放出去的那一刻（用于悬赏计数等）。 */
   onNova: () => void;
 }
@@ -456,6 +467,44 @@ export class Player {
       }
       case 'arc': {
         ctx.chainZap(this.x, this.y, dmg, Math.max(1, st.pierce + this.countOf(st) - 1), st.range * area, def.color, { burn: st.burn, slow: st.slow });
+        ctx.audio('wisp');
+        break;
+      }
+      case 'beam': {
+        const count = this.countOf(st);
+        for (let i = 0; i < count; i += 1) {
+          const a = aim + (i - (count - 1) / 2) * 0.1;
+          ctx.beam(this.x, this.y, a, st.range * area, st.radius, dmg, def.color, {
+            burn: st.burn,
+            slow: st.slow,
+            knockback: st.knockback,
+          });
+        }
+        ctx.audio('shoot');
+        break;
+      }
+      case 'boomerang': {
+        const count = this.countOf(st);
+        for (let i = 0; i < count; i += 1) {
+          const a = aim + (i - (count - 1) / 2) * 0.55;
+          ctx.projectiles.spawn({
+            x: this.x,
+            y: this.y,
+            vx: Math.cos(a) * st.speed,
+            vy: Math.sin(a) * st.speed,
+            damage: dmg,
+            radius: st.radius,
+            color: def.color,
+            pierce: 99,
+            spin: 0,
+            boomerang: 9,
+            knockback: st.knockback,
+            slow: st.slow,
+            // 回旋刃的寿命按"去程 = range"来定，剩下 60% 用来掉头飞回来
+            maxLife: (st.range / st.speed) * 2.6,
+            weaponId: id,
+          });
+        }
         ctx.audio('wisp');
         break;
       }

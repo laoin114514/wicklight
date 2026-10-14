@@ -94,6 +94,24 @@ export const WEAPONS: WeaponDef[] = [
     evolve: { passive: 'crit', into: 'arc_tempest' },
   },
   {
+    id: 'beam',
+    name: '光矛',
+    kind: 'beam',
+    color: '#fff3c4',
+    blurb: '瞬发一道贯穿光束，沿途所有敌人都被串起来。',
+    levels: scale({ ...base, damage: 24, cooldown: 1.6, count: 1, speed: 0, range: 430, radius: 13, pierce: 99, spread: 0, knockback: 140 }, { damage: 11, radius: 2, range: 34, cooldown: 0.92 }),
+    evolve: { passive: 'reach', into: 'beam_dawnbreak' },
+  },
+  {
+    id: 'boomerang',
+    name: '回旋灯刃',
+    kind: 'boomerang',
+    color: '#8ff0c8',
+    blurb: '掷出灯刃再飞回手里，去程与回程各能伤到一次。',
+    levels: scale({ ...base, damage: 17, cooldown: 1.5, count: 1, speed: 470, range: 300, radius: 12, pierce: 99, knockback: 90 }, { damage: 8, count: 1, range: 22, cooldown: 0.92 }),
+    evolve: { passive: 'swift', into: 'blade_twinmoon' },
+  },
+  {
     id: 'frost',
     name: '霜棱',
     kind: 'shard',
@@ -168,6 +186,24 @@ export const WEAPONS: WeaponDef[] = [
     levels: scale({ ...base, damage: 42, cooldown: 1.05, count: 1, speed: 0, range: 460, radius: 0, pierce: 6, spread: 0, knockback: 40, burn: 1 }, { damage: 16, pierce: 2, cooldown: 0.94, range: 26 }),
   },
   {
+    id: 'beam_dawnbreak',
+    name: '晨光破晓',
+    kind: 'beam',
+    color: '#fffbe0',
+    blurb: '贯穿全场的黎明光束，命中即点燃。',
+    evolved: true,
+    levels: scale({ ...base, damage: 78, cooldown: 0.95, count: 2, speed: 0, range: 900, radius: 30, pierce: 99, burn: 3, knockback: 260 }, { damage: 30, radius: 4, count: 1, cooldown: 0.94 }),
+  },
+  {
+    id: 'blade_twinmoon',
+    name: '双月轮',
+    kind: 'boomerang',
+    color: '#c8ffe8',
+    blurb: '三枚月轮同时旋出，回程还会把敌人拖住。',
+    evolved: true,
+    levels: scale({ ...base, damage: 44, cooldown: 0.85, count: 3, speed: 620, range: 460, radius: 17, pierce: 99, slow: 1.6, knockback: 140 }, { damage: 17, range: 26, slow: 0.4, cooldown: 0.93 }),
+  },
+  {
     id: 'spray_firestorm',
     name: '焚风',
     kind: 'spray',
@@ -187,4 +223,4 @@ export function weaponAt(id: string, level: number): WeaponStats {
 }
 
 export const STARTER_WEAPONS = ['ring', 'wisp', 'fireball', 'whip', 'shard', 'spray'] as const;
-export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc'] as const;
+export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang'] as const;
