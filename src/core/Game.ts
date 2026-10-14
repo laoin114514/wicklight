@@ -2537,6 +2537,10 @@ export class Game {
     ctx.font = '600 12px system-ui, -apple-system, "Noto Sans SC", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    // 已经放下的标签框：两个目标在同一个方向上时，两个标签会直接压在一起
+    // （手机横屏实测："灯台 1000" 与 "祭坛 800" 叠成一团，谁也读不出来）。
+    // 箭头方向往里挪不行（会撞到箭头本体），所以沿箭头法线左右让开，最多让两次。
+    const placed: { x: number; y: number; w: number }[] = [];
     for (const t of targets.slice(0, 3)) {
       const s = cam.worldToScreen(t.x, t.y);
       const inside = s.x > left && s.x < w - right && s.y > top && s.y < h - bottom;
@@ -2565,9 +2569,27 @@ export class Game {
       ctx.globalAlpha = 0.72;
       ctx.fillStyle = t.color;
       const dist = Math.round(Math.hypot(dx, dy) / cam.zoom / 100) * 100;
-      const tx = clamp(ax - Math.cos(ang) * 40, left + 26, w - right - 12);
-      const ty = clamp(ay - Math.sin(ang) * 40, top, h - bottom);
-      ctx.fillText(`${t.label} ${dist}`, tx, ty);
+      const label = `${t.label} ${dist}`;
+      const tw = ctx.measureText(label).width;
+      const baseX = clamp(ax - Math.cos(ang) * 40, left + 26, w - right - 12);
+      const baseY = clamp(ay - Math.sin(ang) * 40, top, h - bottom);
+      // 法线方向（箭头方向转 90°）：沿它左右让开，让开之后仍然贴着箭头，读起来还是一组
+      const nx = -Math.sin(ang);
+      const ny = Math.cos(ang);
+      let tx = baseX;
+      let ty = baseY;
+      for (const step of [0, 18, -18, 36, -36]) {
+        const cx = clamp(baseX + nx * step, left + 26, w - right - 12);
+        const cy = clamp(baseY + ny * step, top + 8, h - bottom - 8);
+        const clash = placed.some((b) => Math.abs(b.x - cx) < (b.w + tw) / 2 + 6 && Math.abs(b.y - cy) < 15);
+        if (!clash || step === -36) {
+          tx = cx;
+          ty = cy;
+          break;
+        }
+      }
+      placed.push({ x: tx, y: ty, w: tw });
+      ctx.fillText(label, tx, ty);
       ctx.globalAlpha = 1;
     }
     ctx.restore();

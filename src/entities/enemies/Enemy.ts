@@ -136,7 +136,10 @@ export class EnemySystem {
     const def = ENEMY_MAP[defId] ?? ENEMY_MAP.shade;
     const e = this.pool.acquire();
     e.id = this.nextId++;
-    e.defId = defId;
+    // 认不出来的 id 一律按兜底那一种来：defId 也要跟着改成**解析后**的 id，
+    // 否则这只怪活着的时候像 shade，死的时候 `ENEMY_MAP[e.defId].color` 会当场炸掉
+    // （数据表里写错一个字，一局打到它死才崩，最难查）。
+    e.defId = def.id;
     e.def = def;
     e.x = x;
     e.y = y;
