@@ -35,6 +35,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'forge_first', name: '淬火', blurb: '在商店的熔铸台上换掉一件遗物。', embers: 20, group: '抉择与风险' },
   { id: 'relic_first', name: '遗物猎手', blurb: '获得第一件遗物。', embers: 15, group: '抉择与风险' },
   { id: 'relic_hoard', name: '拾荒者', blurb: '单局收集 4 件遗物。', embers: 30, group: '抉择与风险' },
+  { id: 'resonance', name: '灯火同源', blurb: '凑齐任意一族的灯火共鸣。', embers: 40, group: '抉择与风险' },
+  { id: 'resonance_pair', name: '双辉共鸣', blurb: '单局同时凑齐两族灯火共鸣。', embers: 90, group: '抉择与风险' },
 
   { id: 'codex50', name: '博物学者', blurb: '图鉴中记录 50 个条目。', embers: 80, group: '收集与档案' },
   { id: 'codex_all', name: '无所不窥', blurb: '把图鉴里的条目全部点亮。', embers: 200, group: '收集与档案' },

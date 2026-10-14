@@ -1,5 +1,5 @@
 import { baseStats, PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
-import { RELIC_MAP } from '../data/relics';
+import { RELIC_MAP, TRIBES, type RelicMods, type RelicTribeId } from '../data/relics';
 import { weaponAt, WEAPON_MAP } from '../data/weapons';
 import type { Enemy, EnemySystem } from './enemies/Enemy';
 import type { ParticleSystem } from './Particle';
@@ -174,27 +174,12 @@ export class Player {
     this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
-      if (!m) continue;
-      if (m.damageMult) this.stats.damageMult *= 1 + m.damageMult;
-      if (m.maxHpMult) this.stats.maxHp *= 1 + m.maxHpMult;
-      if (m.pickupMult) this.stats.pickupRange *= 1 + m.pickupMult;
-      if (m.moveSpeedMult) this.stats.moveSpeed *= 1 + m.moveSpeedMult;
-      if (m.critChance) this.stats.critChance += m.critChance;
-      if (m.critMult) this.stats.critMult += m.critMult;
-      if (m.dashMult) this.stats.dashCooldown *= Math.max(0.25, 1 - m.dashMult);
-      if (m.regen) this.stats.regen += m.regen;
-      if (m.oilDecayMult) this.stats.oilDecayMult *= Math.max(0.1, 1 + m.oilDecayMult);
-      if (m.oilGainMult) this.stats.oilGainMult *= 1 + m.oilGainMult;
-      if (m.areaMult) this.stats.areaMult *= 1 + m.areaMult;
-      if (m.cooldownMult) this.stats.cooldownMult *= Math.max(0.3, 1 + m.cooldownMult);
-      this.flags.extraProjectiles += m.extraProjectiles ?? 0;
-      this.flags.lifesteal += m.lifesteal ?? 0;
-      this.flags.chill = Math.max(this.flags.chill, m.chill ?? 0);
-      this.flags.contactMult *= 1 + (m.contactMult ?? 0);
-      this.flags.goldMult *= 1 + (m.goldMult ?? 0);
-      this.flags.novaHeal += m.novaHeal ?? 0;
-      if (m.lowOilDamage) this.flags.lowOilDamage = Math.max(this.flags.lowOilDamage, m.lowOilDamage);
-      if (m.novaBuff) this.flags.novaBuff = Math.max(this.flags.novaBuff, m.novaBuff);
+      if (m) this.applyRelicMods(m);
+    }
+    // 灯火共鸣：同族遗物凑够数量，额外叠一档修正
+    for (const tribe of TRIBES) {
+      const tier = this.tribeTier(tribe.id);
+      for (let i = 0; i < tier; i += 1) this.applyRelicMods(tribe.tiers[i].mods);
     }
     const sm = this.shrineMods;
     this.stats.damageMult *= sm.damageMult;
@@ -205,6 +190,54 @@ export class Player {
     this.flags.goldMult *= sm.goldMult;
     this.stats.damageMult *= this.pyreMods.damageMult;
     this.hp = Math.min(this.hp, this.stats.maxHp);
+  }
+
+  /** 把一份遗物修正套用到当前属性上（遗物与共鸣共用同一套规则）。 */
+  private applyRelicMods(m: RelicMods): void {
+    if (m.damageMult) this.stats.damageMult *= 1 + m.damageMult;
+    if (m.maxHpMult) this.stats.maxHp *= 1 + m.maxHpMult;
+    if (m.pickupMult) this.stats.pickupRange *= 1 + m.pickupMult;
+    if (m.moveSpeedMult) this.stats.moveSpeed *= 1 + m.moveSpeedMult;
+    if (m.critChance) this.stats.critChance += m.critChance;
+    if (m.critMult) this.stats.critMult += m.critMult;
+    if (m.dashMult) this.stats.dashCooldown *= Math.max(0.25, 1 - m.dashMult);
+    if (m.regen) this.stats.regen += m.regen;
+    if (m.oilDecayMult) this.stats.oilDecayMult *= Math.max(0.1, 1 + m.oilDecayMult);
+    if (m.oilGainMult) this.stats.oilGainMult *= 1 + m.oilGainMult;
+    if (m.areaMult) this.stats.areaMult *= 1 + m.areaMult;
+    if (m.cooldownMult) this.stats.cooldownMult *= Math.max(0.3, 1 + m.cooldownMult);
+    this.flags.extraProjectiles += m.extraProjectiles ?? 0;
+    this.flags.lifesteal += m.lifesteal ?? 0;
+    this.flags.chill = Math.max(this.flags.chill, m.chill ?? 0);
+    this.flags.contactMult *= 1 + (m.contactMult ?? 0);
+    this.flags.goldMult *= 1 + (m.goldMult ?? 0);
+    this.flags.novaHeal += m.novaHeal ?? 0;
+    if (m.lowOilDamage) this.flags.lowOilDamage = Math.max(this.flags.lowOilDamage, m.lowOilDamage);
+    if (m.novaBuff) this.flags.novaBuff = Math.max(this.flags.novaBuff, m.novaBuff);
+  }
+
+  /** 当前持有某一族遗物的数量。 */
+  tribeCount(id: RelicTribeId): number {
+    let n = 0;
+    for (const relicId of this.relics) if (RELIC_MAP[relicId]?.tribe === id) n += 1;
+    return n;
+  }
+
+  /** 某一族已经解锁到第几档（0 = 还没共鸣，1 = 3 件，2 = 5 件）。 */
+  tribeTier(id: RelicTribeId): number {
+    const def = TRIBES.find((t) => t.id === id);
+    if (!def) return 0;
+    const n = this.tribeCount(id);
+    let tier = 0;
+    for (let i = 0; i < def.tiers.length; i += 1) if (n >= def.tiers[i].count) tier = i + 1;
+    return tier;
+  }
+
+  /** 各族当前档位，用来判断「刚凑齐了哪一族」。 */
+  tribeTiers(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const t of TRIBES) out[t.id] = this.tribeTier(t.id);
+    return out;
   }
 
   get oilFrac(): number {

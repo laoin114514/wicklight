@@ -3,7 +3,7 @@ import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { META_TREE } from '../data/meta';
 import { PASSIVE_MAP } from '../data/upgrades';
 import { CODEX_SECTIONS } from '../systems/CodexSystem';
-import { RELIC_MAP } from '../data/relics';
+import { RELIC_MAP, TRIBES } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import type { RunRecord } from '../types';
@@ -309,6 +309,20 @@ export class UIManager implements UIHost {
       })
       .join('');
 
+    // 灯火共鸣：把「还差几件、凑齐了给什么」写在遗物旁边，构筑方向才看得见
+    const tribeRows = TRIBES.map((t) => {
+      const n = p.tribeCount(t.id);
+      const tier = p.tribeTier(t.id);
+      const next = t.tiers[tier];
+      const on = tier > 0;
+      const active = on ? t.tiers.slice(0, tier).map((x) => x.blurb).join(' · ') : '';
+      const hint = next ? `${on ? '还差' : '再集'} ${next.count - n} 件 → ${next.blurb}` : '已满';
+      return `<div class="lo-tri ${on ? 'is-on' : ''}" style="--c:${t.color}">
+        <span class="lo-tri__head"><b>${t.icon} ${t.name}</b><i>${n} 件</i></span>
+        <span class="lo-tri__body">${on ? active : t.blurb} ｜ ${hint}</span>
+      </div>`;
+    }).join('');
+
     const passives = [...p.passives.entries()]
       .map(([id, lvl]) => {
         const def = PASSIVE_MAP[id];
@@ -393,6 +407,8 @@ export class UIManager implements UIHost {
           <section class="lo-col">
             <h4>遗物 <b>${p.relics.size}</b></h4>
             ${relics || '<div class="lo-empty">还没有遗物</div>'}
+            <h4>灯火共鸣</h4>
+            ${tribeRows}
             <h4>夜咒</h4>
             ${curse}
             <h4>悬赏</h4>

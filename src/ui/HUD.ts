@@ -2,7 +2,7 @@ import type { Game } from '../core/Game';
 import type { HUDHost } from '../core/Game';
 import { WEAPON_MAP } from '../data/weapons';
 import { PASSIVE_MAP } from '../data/upgrades';
-import { RELIC_MAP } from '../data/relics';
+import { RELIC_MAP, TRIBES } from '../data/relics';
 import { STAGES } from '../data/stages';
 
 export class HUD implements HUDHost {
@@ -163,7 +163,9 @@ export class HUD implements HUDHost {
       '|' +
       [...p.passives].map(([k, v]) => k + v).join(',') +
       '|' +
-      [...p.relics].join(',');
+      [...p.relics].join(',') +
+      '|' +
+      TRIBES.map((t) => p.tribeTier(t.id)).join('');
     if (sig === this.buildSig) return;
     this.buildSig = sig;
     const w = [...p.weapons]
@@ -184,7 +186,14 @@ export class HUD implements HUDHost {
         return `<span class="chip chip--relic" style="--c:${d?.color ?? '#fff'}" title="${d?.name ?? id}">${d?.icon ?? ''}</span>`;
       })
       .join('');
-    this.buildEl.innerHTML = `<div class="build-row">${w}</div><div class="build-row">${pas}${rel}</div>`;
+    // 已点亮的共鸣：压缩成一个小芯片挂在遗物后面，战斗中也能一眼看到体系成没成
+    const tri = TRIBES.filter((t) => p.tribeTier(t.id) > 0)
+      .map((t) => {
+        const n = p.tribeCount(t.id);
+        return `<span class="chip chip--tri" style="--c:${t.color}" title="灯火共鸣 · ${t.name} ${n} 件">${t.icon}<i>${n}</i></span>`;
+      })
+      .join('');
+    this.buildEl.innerHTML = `<div class="build-row">${w}</div><div class="build-row">${pas}${rel}${tri}</div>`;
   }
 
   /** 本关夜咒提示（有夜咒才显示）。 */

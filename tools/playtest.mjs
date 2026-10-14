@@ -407,7 +407,40 @@ async function main() {
   expect(sheetText.includes('进化路线'), '构筑总览列出了进化路线');
   expect(/武器 \d+\/\d+/.test(sheetText), '进化路线写明了武器等级进度');
   expect(!/undefined|NaN/.test(sheetText), '构筑总览没有缺字段', sheetText.match(/undefined|NaN/g)?.slice(0, 3).join(',') ?? '');
+  expect(sheetText.includes('灯火共鸣'), '构筑总览列出了灯火共鸣一栏');
   await shot('05b-loadout');
+
+  // 灯火共鸣：每一族都要写出「还差几件」；凑齐一族后那一族应被点亮
+  const resonance = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const local = (sel) => [...document.querySelectorAll(sel)].map((el) => el.textContent.trim());
+    const before = local('.lo-tri');
+    const prev = [...g.player.relics];
+    g.player.relics.clear();
+    for (const id of ['thornring', 'scope', 'whetstone']) g.player.addRelic(id);
+    g.ui.showScreen('loadout');
+    const on = local('.lo-tri.is-on');
+    const box = document.querySelector('.panel--loadout') || document.querySelector('.panel');
+    const r = box.getBoundingClientRect();
+    const out = {
+      before,
+      on,
+      w: r.width,
+      h: r.height,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      bad: /undefined|NaN/.test(box.textContent),
+    };
+    // 还原，别把这一局改花
+    g.player.relics.clear();
+    for (const id of prev) g.player.addRelic(id);
+    g.ui.showScreen('loadout');
+    return out;
+  });
+  expect(resonance.before.length >= 3, '灯火共鸣列出了每一族', resonance.before.join(' | '));
+  expect(resonance.before.every((x) => /还差|再集|已满/.test(x)), '每一族都写明下一档还差几件', resonance.before.join(' | '));
+  expect(resonance.on.length === 1 && /焰火/.test(resonance.on[0]), '凑齐一族的遗物后面板点亮该族', JSON.stringify(resonance.on));
+  expect(resonance.w > 0 && resonance.h > 0 && resonance.overflow <= 1 && !resonance.bad, '共鸣面板有尺寸且不溢出', JSON.stringify(resonance));
+  await shot('05c-resonance');
   await page.keyboard.press('Tab');
   await sleep(250);
   const sheetClosed = await page.evaluate(() => window.__PROBE__.state());

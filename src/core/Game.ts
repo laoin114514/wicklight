@@ -39,7 +39,7 @@ import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
-import { RELICS, RELIC_MAP } from '../data/relics';
+import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
 import { PASSIVES, baseStats, type PlayerStats } from '../data/upgrades';
 import type { Difficulty, RunStats, SaveData, ShopItem, UpgradeOffer } from '../types';
@@ -822,7 +822,9 @@ export class Game {
       case 'blood_pact': {
         p.shrineMods.maxHpMult *= 0.8;
         const pool = RELICS.filter((r) => !p.relics.has(r.id));
+        const tiers = p.tribeTiers();
         if (pool.length) p.addRelic(this.rng.pick(pool).id);
+        this.announceTribeResonance(tiers);
         this.achievements.unlock('relic_first');
         break;
       }
@@ -1822,9 +1824,11 @@ export class Game {
     }
     this.gold -= price;
     this.forgeUsed = true;
+    const tiers = this.player.tribeTiers();
     this.player.removeRelic(id);
     const next = this.rng.pick(pool);
     this.player.addRelic(next.id);
+    this.announceTribeResonance(tiers);
     this.codex.discover('relic', next.id);
     this.audio.play('evolve');
     this.flash = 0.3;
@@ -1832,6 +1836,21 @@ export class Game {
     this.hud?.toast(`🔥 熔铸：${old?.name ?? id} → ${next.name}`);
     // 不重掷商品：玩家可能正攒钱等某一件，熔铸不该把它换掉
     this.ui?.showScreen('shop');
+  }
+
+  /** 拿到新遗物后，看看是否刚好凑齐了某一族的灯火共鸣，凑齐了就报一声。 */
+  private announceTribeResonance(before: Record<string, number>): void {
+    for (const tribe of TRIBES) {
+      const now = this.player.tribeTier(tribe.id);
+      if (now <= (before[tribe.id] ?? 0)) continue;
+      const tier = tribe.tiers[now - 1];
+      const n = this.player.tribeCount(tribe.id);
+      this.achievements.unlock('resonance');
+      if (TRIBES.filter((t) => this.player.tribeTier(t.id) > 0).length >= 2) this.achievements.unlock('resonance_pair');
+      this.hud?.toast(`灯火共鸣 · ${tribe.icon}${tribe.name} ${n}/${tier.count} — ${tier.blurb}`);
+      this.flash = Math.max(this.flash, 0.22);
+      this.audio.play('evolve');
+    }
   }
 
   rerollShop(): void {
@@ -1848,7 +1867,9 @@ export class Game {
     this.gold -= item.price;
     item.sold = true;
     if (item.kind === 'relic') {
+      const tiers = this.player.tribeTiers();
       this.player.addRelic(item.id);
+      this.announceTribeResonance(tiers);
       this.achievements.unlock('relic_first');
       if (this.player.relics.size >= 4) this.achievements.unlock('relic_hoard');
       this.audio.play('evolve');

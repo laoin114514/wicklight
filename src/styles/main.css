@@ -677,6 +677,8 @@ body {
 .chip i { font-style: normal; font-weight: 800; color: var(--c, #fff); }
 .chip--passive, .chip--relic { padding: 2px 7px; }
 .chip--relic { font-size: 13px; }
+.chip--tri { font-size: 12px; padding: 1px 7px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #ffd24e) 55%, transparent); }
+.chip--tri i { font-size: 10px; }
 .hud__stat--gold b { color: var(--amber-bright); }
 
 /* ── 连杀计量 ── */
@@ -1025,6 +1027,14 @@ body.is-touch .hud__wave { display: none; }
 .lo-bounty b { color: var(--c, #ffd24e); font-size: 13px; }
 .lo-bounty span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-dim); }
 .lo-bounty.is-done { opacity: 0.65; }
+
+.lo-tri { padding: 7px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.03); border-left: 2px solid var(--c, #ffd24e); opacity: 0.72; transition: opacity 0.2s ease; }
+.lo-tri.is-on { opacity: 1; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+.lo-tri__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.lo-tri__head b { color: var(--c, #ffd24e); font-size: 12.5px; }
+.lo-tri__head i { font-style: normal; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.lo-tri.is-on .lo-tri__head i { color: var(--amber-bright); }
+.lo-tri__body { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; color: var(--text-dim); }
 
 /* 触屏左侧已经被构筑信息占了，悬赏追踪改挂到右上角状态栏下面 */
 body.is-touch .hud__bounty { left: auto; right: 12px; top: 136px; }
