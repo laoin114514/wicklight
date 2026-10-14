@@ -1034,6 +1034,53 @@ async function main() {
   expect(trioHud.left >= 0 && trioHud.right <= trioHud.vw && trioHud.h > 0, '多首领血条在视口内且有高度', JSON.stringify(trioHud));
   await shot('13b-endless-trio');
 
+  // ── 无尽：一轮一片战场——补给站先告诉你要去哪儿，出门就真的到那儿 ──
+  const arena = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const before = g.currentStage().theme.name;
+    g.director.wave = 15;
+    g.wave = 15;
+    g.onStageComplete();
+    g.ui.showScreen('shop');
+    return {
+      before,
+      line: (document.querySelector('.shop-arena')?.textContent ?? '').trim(),
+      promised: g.nextArena()?.theme.name ?? null,
+      tier: g.stageIndex,
+      state: g.state,
+      issues: window.__PROBE__.layout('.panel').issues,
+    };
+  });
+  expect(arena.state === 'shop', '无尽这一轮打完进补给站', JSON.stringify(arena));
+  expect(arena.issues.length === 0, '补给站布局正常（多了一行"下一片战场"）', arena.issues.join('; '));
+  expect(!!arena.promised && arena.line.includes(arena.promised), `补给站要写出下一片战场（实际「${arena.line}」）`);
+  await shot('13c-endless-shop');
+
+  const rotated = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const hp = g.player.hp;
+    const oil = g.player.oil;
+    const tier = g.stageIndex;
+    g.enemies.clear();
+    g.leaveShop();
+    return {
+      theme: g.currentStage().theme.name,
+      label: document.querySelector('.hud__stage')?.textContent ?? '',
+      hpSame: g.player.hp === hp,
+      oilSame: g.player.oil === oil,
+      tierSame: g.stageIndex === tier,
+      tier: g.stageIndex,
+      state: g.state,
+    };
+  });
+  expect(rotated.theme === arena.promised, `出门后到的就是承诺的那片战场（承诺 ${arena.promised} / 实际 ${rotated.theme}）`);
+  expect(rotated.theme !== arena.before, `战场确实换了（${arena.before} → ${rotated.theme}）`);
+  expect(rotated.hpSame && rotated.oilSame, '换战场不送血也不送油', JSON.stringify(rotated));
+  expect(rotated.tierSame && arena.tier === rotated.tier, '难度与物价档位不跟着战场走', JSON.stringify(rotated));
+  expect(rotated.state === 'playing', '出门就继续打', JSON.stringify(rotated));
+  await sleep(600);
+  await shot('13d-endless-arena');
+
   // ── 10b. 桌面不该有任何触感：打了一整局，navigator.vibrate 一次都不该被调到 ──
   expect(
     (await page.evaluate(() => window.__PROBE__.vibes.log.length)) === 0,

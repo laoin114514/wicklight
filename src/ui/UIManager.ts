@@ -2,7 +2,7 @@ import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { META_TREE } from '../data/meta';
 import { PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
-import { CODEX_SECTIONS } from '../systems/CodexSystem';
+import { CODEX_SECTIONS, HAZARD_LABEL } from '../systems/CodexSystem';
 import { RELIC_MAP, TRIBES } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -605,6 +605,7 @@ export class UIManager implements UIHost {
       <div class="panel panel--shop panel--vellum">
         <div class="panel__title">${g.shopHeader}</div>
         <div class="shop-wallet">金币 <b>🪙 ${g.gold}</b></div>
+        ${this.nextArenaLine()}
         <div class="shop-grid">${items}</div>
         ${this.forgeBlock()}
         <div class="row-actions">
@@ -619,6 +620,21 @@ export class UIManager implements UIHost {
     this.on('[data-act="reroll"]', () => this.game.rerollShop());
     this.on('[data-act="leave"]', () => this.game.leaveShop());
     this.onAll('[data-forge]', (el) => this.game.forgeRelic(el.dataset.forge as string));
+  }
+
+  /**
+   * 无尽之夜：下一片战场会是什么。
+   *
+   * 战场是一轮一换的，而"换到哪儿"这件事在补给站里就该知道——
+   * 身上没血没油的时候看到下一片是「熔窟」（熔岩 / 陨石雨），和看到「幽林」，买的东西是不一样的。
+   */
+  private nextArenaLine(): string {
+    const stage = this.game.nextArena();
+    if (!stage) return '';
+    const hazards = stage.hazards.map((h) => HAZARD_LABEL[h] ?? h).join(' / ');
+    return `<div class="shop-arena">下一片战场 · <b>${stage.theme.name}</b>${
+      hazards ? `<span>险境：${hazards}</span>` : ''
+    }</div>`;
   }
 
   /** 熔铸台：把一件已有遗物烧掉换一件新的——契约型遗物的代价终于有了出口。 */

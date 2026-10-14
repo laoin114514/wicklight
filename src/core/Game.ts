@@ -262,6 +262,14 @@ export class Game {
   difficulty: Difficulty = 'normal';
   stageIndex = 0;
   endless = false;
+  /**
+   * 无尽之夜用的是哪一片战场（`STAGES` 的下标）。
+   *
+   * 无尽里 `stageIndex` 是**难度与经济档位**——它一直钉在最后一关（首领更硬、物价更高、
+   * 悬赏更深），而战场本身一轮换一片：四位首领轮着来，四个战场也跟着轮，
+   * 每一轮的险境与精英池都换一批。两者分开记，才不用为了换场景去动难度。
+   */
+  endlessArena = 0;
   paused = false;
   pendingLevels = 0;
   private sheetReturn: 'playing' | 'paused' = 'playing';
@@ -423,7 +431,9 @@ export class Game {
     this.player.novaStyle = lantern.id;
     this.applyMetaToPlayer();
 
-    const stage = endless ? STAGES[STAGES.length - 1] : STAGES[0];
+    // 无尽之夜：战场从「幽林」开始，一轮换一片（难度档位不跟着走，见 endlessArena）
+    this.endlessArena = 0;
+    const stage = STAGES[endless ? 0 : this.stageIndex];
     this.loadStage(stage, endless ? STAGES.length - 1 : 0, true);
     this.screenFade = 1;
     this.achievements.reset();
@@ -558,10 +568,17 @@ export class Game {
     this.player.hp = this.player.stats.maxHp;
   }
 
-  private loadStage(stage: import('../types').StageDef, index: number, fresh: boolean): void {
+  private loadStage(
+    stage: import('../types').StageDef,
+    index: number,
+    fresh: boolean,
+    opts: { seed?: number; rest?: boolean; curse?: boolean } = {},
+  ): void {
+    // rest 默认跟着 fresh 走（换关歇一口，重开不歇）；无尽换战场时两个都不要
+    const rest = opts.rest ?? !fresh;
     this.screenFade = 1;
     this.stageIndex = index;
-    this.level = generateLevel(stage, this.startSeed + index * 7919, this.profile.detailScale);
+    this.level = generateLevel(stage, this.startSeed + index * 7919 + (opts.seed ?? 0), this.profile.detailScale);
     this.director.setStage(stage, index);
     if (this.endless) this.director.enableEndless();
     const center = { x: 0, y: 0 };
@@ -581,11 +598,11 @@ export class Game {
     this.pyreChannel = null;
     if (fresh) {
       this.player.oil = this.player.oilMax;
-    } else {
+    } else if (rest) {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + this.player.stats.maxHp * 0.4);
       this.player.oil = Math.min(this.player.oilMax, this.player.oil + this.player.oilMax * 0.5);
     }
-    this.rollCurse(stage, index, fresh);
+    if (opts.curse ?? true) this.rollCurse(stage, index, fresh);
     this.rollBounty();
     this.titleFor(stage);
     this.noteStageTip(stage);
@@ -675,6 +692,29 @@ export class Game {
 
   private titleFor(stage: import('../types').StageDef): void {
     this.hud?.announce(`${stage.theme.name} · ${stage.theme.subtitle}`, true);
+  }
+
+  /**
+   * 无尽之夜：一轮打完，收拾东西去下一片战场。
+   *
+   * 只在补给站里发生（这一轮的结算点），所以不会打到一半把场地抽走；
+   * 换的是战场本身——主题、布景、险境池、精英池、灯台与祭坛全部重铺，
+   * 但**不送血也不送油**（那一口得在补给站里买），难度档位与物价也照旧往上走。
+   */
+  private advanceEndlessArena(round: number): void {
+    const next = round % STAGES.length;
+    this.endlessArena = next;
+    const stage = STAGES[next];
+    // 每片战场进来的次数不同（第 5 轮会再回幽林），种子带上轮次，免得第二次进来一模一样
+    this.loadStage(stage, this.stageIndex, false, { seed: round * 104729, rest: false, curse: false });
+    this.syncCodex();
+  }
+
+  /** 下一片战场（无尽专属）：补给站里先告诉玩家，离开之前就能盘算。 */
+  nextArena(): import('../types').StageDef | null {
+    if (!this.endless) return null;
+    const round = Math.max(1, Math.floor(this.director.wave / 5));
+    return STAGES[round % STAGES.length];
   }
 
   continueStage(): void {
@@ -1278,7 +1318,7 @@ export class Game {
   }
 
   private currentStage() {
-    return this.endless ? STAGES[STAGES.length - 1] : STAGES[this.stageIndex];
+    return STAGES[this.endless ? this.endlessArena : this.stageIndex];
   }
 
   // ─── contexts ───
@@ -2339,7 +2379,8 @@ export class Game {
   leaveShop(): void {
     this.audio.play('ui');
     if (this.endless) {
-      this.rollBounty();
+      // 一轮一片战场：出去之前先把新的铺好（rollBounty 由 loadStage 一并重抽）
+      this.advanceEndlessArena(Math.max(1, Math.floor(this.director.wave / 5)));
       this.state = 'playing';
       this.ui?.showScreen('playing');
       return;

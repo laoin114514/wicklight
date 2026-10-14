@@ -1807,6 +1807,16 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 .shop-wallet b { letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+/* 无尽：下一片战场。像贴在补给站墙上的一行路牌——不抢眼，但出门前一定看得到 */
+.shop-arena {
+  text-align: center;
+  margin: -6px 0 14px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: rgba(230, 220, 200, 0.5);
+}
+.shop-arena b { color: #ffd9a0; letter-spacing: 2px; }
+.shop-arena span { margin-left: 10px; color: rgba(230, 220, 200, 0.34); }
 .forge {
   border-radius: 9px;
   border: 1px solid rgba(192, 138, 62, 0.3);
@@ -2756,6 +2766,7 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .card__blurb { font-size: 11.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .card__hint { margin-top: 5px; font-size: 11px; line-height: 1.35; }
   .card__pips { margin: 3px 0 5px; }
+  .shop-arena { margin: -4px 0 9px; font-size: 11px; }
   .card__pips i { width: 11px; }
   .card__delta { gap: 2px 8px; margin-top: 6px; padding-top: 5px; }
   .card__delta .dl { font-size: 10.5px; }
