@@ -92,7 +92,7 @@ interface Ground {
   r: number;
   life: number;
   dps: number;
-  kind?: 'fire' | 'poison';
+  kind?: 'fire' | 'poison' | 'mud';
 }
 
 interface Decal {
@@ -466,6 +466,7 @@ export class Game {
     if (fresh || (index === 0 && !this.endless)) {
       this.curse = null;
       this.curseGoldMult = 1;
+      this.player.curseOilMult = 1;
       this.director.setCurse(null);
       return;
     }
@@ -478,6 +479,7 @@ export class Game {
     this.director.setCurse(curse.mods);
     this.curseDarkness = curse.mods.darkness ?? 0;
     this.darknessBoost = this.curseDarkness;
+    this.player.curseOilMult = curse.mods.oilDecay ?? 1;
     if (curse.mods.oilBonus) {
       this.player.oil = Math.min(this.player.oilMax, this.player.oil + this.player.oilMax * curse.mods.oilBonus);
     }
@@ -584,6 +586,7 @@ export class Game {
     this.updateHazards(dt);
     this.updateShrines();
 
+    this.updateTerrain();
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
     const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
@@ -814,6 +817,8 @@ export class Game {
       },
       spawnAdd: (defId, x, y) => this.enemies.spawn(defId, x, y, this.director.bossHpMult * 0.6, this.director.bossDmgMult),
       ignitGround: (x, y) => this.addGround(x, y, 60, 4, 10),
+      fog: (x, y, r) => this.addGround(x, y, r, 8, 0, 'mud'),
+      regen: this.curse?.mods.enemyRegen ?? 0,
       spikes: (x, y, r) => {
         this.hazards.push({ kind: 'thorn', timer: 1.15, x, y, r });
       },
@@ -866,6 +871,8 @@ export class Game {
       e.maxHp *= 1.35;
       e.hp = e.maxHp;
       e.speed *= 0.85;
+    } else if (id === 'thorn') {
+      e.damage *= 1.5;
     } else if (id === 'iron') {
       e.maxHp *= 1.7;
       e.hp = e.maxHp;
@@ -1069,6 +1076,15 @@ export class Game {
       this.addGround(e.x, e.y, 82, 3.5, 9, 'fire');
     } else if (e.affix === 'venom') {
       this.addGround(e.x, e.y, 96, 4.5, 7, 'poison');
+    } else if (e.affix === 'fell') {
+      // 「噬魂」：死前把附近同伴喂饱，逼你先拆散成群词缀怪
+      this.enemies.forEach((o) => {
+        if (o === e || !o.active) return;
+        if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 > 220 * 220) return;
+        if (o.hp >= o.maxHp) return;
+        o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.3);
+        this.particles.burst(o.x, o.y, 4, '#8affc1', { speed: 70, size: 2, life: 0.5 });
+      });
     }
     this.events.emit('kill', { x: e.x, y: e.y, defId: e.defId });
     if (this.kills === 1) this.achievements.unlock('first_blood');
@@ -1254,9 +1270,25 @@ export class Game {
     });
   }
 
-  private addGround(x: number, y: number, r: number, life: number, dps: number, kind: 'fire' | 'poison' = 'fire'): void {
+  private addGround(x: number, y: number, r: number, life: number, dps: number, kind: 'fire' | 'poison' | 'mud' = 'fire'): void {
     this.grounds.push({ x, y, r, life, dps, kind });
-    this.particles.shockwave(x, y, '#ff7a2f', r, life);
+    this.particles.shockwave(x, y, kind === 'mud' ? '#9fb7c9' : '#ff7a2f', r, life);
+  }
+
+  /**
+   * 地形减速：踩进「织雾者」的滞行雾里，脚步会沉下去。
+   * 每帧重算并写在玩家身上，由 Player.update 读取（而不是让地面直接改玩家速度，
+   * 免得一个技能把玩家的属性改得收不回来）。
+   */
+  private updateTerrain(): void {
+    let slow = 1;
+    for (const g of this.grounds) {
+      if (g.kind !== 'mud') continue;
+      const dx = this.player.x - g.x;
+      const dy = this.player.y - g.y;
+      if (dx * dx + dy * dy <= g.r * g.r) slow = Math.min(slow, 0.6);
+    }
+    this.player.terrainSlow = slow;
   }
 
   private resolveGrounds(dt: number): void {
@@ -1267,6 +1299,7 @@ export class Game {
         this.grounds.splice(i, 1);
         continue;
       }
+      if (g.kind === 'mud') continue;
       const dx = this.player.x - g.x;
       const dy = this.player.y - g.y;
       if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y);
@@ -2030,8 +2063,33 @@ export class Game {
 
   private drawGrounds(ctx: CanvasRenderingContext2D): void {
     ctx.save();
+    for (const g of this.grounds) {
+      if (g.kind !== 'mud') continue;
+      // 滞行雾是"压暗"而不是"发光"：用普通混合盖一层灰，再用虚线勾出边界，
+      // 让玩家一眼知道"这块地会拖住我"。
+      const fade = clamp(g.life / 8, 0, 1);
+      ctx.globalAlpha = fade * 0.72;
+      const mg = ctx.createRadialGradient(g.x, g.y, g.r * 0.22, g.x, g.y, g.r);
+      mg.addColorStop(0, 'rgba(20,28,38,0.94)');
+      mg.addColorStop(0.72, 'rgba(40,56,72,0.66)');
+      mg.addColorStop(1, 'rgba(70,92,116,0)');
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = fade * (0.42 + 0.12 * Math.sin(g.life * 3));
+      ctx.strokeStyle = '#b6cfe2';
+      ctx.lineWidth = 2.4;
+      ctx.setLineDash([9, 11]);
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
     for (const g of this.grounds) {
+      if (g.kind === 'mud') continue;
       const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
       if (g.kind === 'poison') {
         g2.addColorStop(0, 'rgba(140,235,110,0.42)');

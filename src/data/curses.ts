@@ -11,6 +11,10 @@ export interface CurseMods {
   darkness?: number;
   /** 关卡开始时额外补充的灯油（0~1，占灯油上限比例） */
   oilBonus?: number;
+  /** 所有敌人每秒回复的最大生命比例（0.015 = 1.5%/s） */
+  enemyRegen?: number;
+  /** 灯火衰减倍率（1.55 ≈ 灯油消耗加快 55%） */
+  oilDecay?: number;
 }
 
 export interface CurseDef {
@@ -82,6 +86,24 @@ export const CURSES: CurseDef[] = [
     color: '#ff7a2f',
     goldMult: 1.7,
     mods: { countMult: 1.2, hpMult: 1.15 },
+  },
+  {
+    id: 'whisper',
+    name: '低语',
+    blurb: '所有敌人持续回复生命，金币 +45%',
+    icon: '🫧',
+    color: '#8affc1',
+    goldMult: 1.45,
+    mods: { enemyRegen: 0.015 },
+  },
+  {
+    id: 'starve',
+    name: '枯灯',
+    blurb: '灯火衰减加快 55%，金币 +50%',
+    icon: '💀',
+    color: '#ffb14e',
+    goldMult: 1.5,
+    mods: { oilDecay: 1.55 },
   },
   {
     id: 'nocturne',

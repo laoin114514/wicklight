@@ -10,9 +10,13 @@ export const ENEMIES: EnemyDef[] = [
   { id: 'bomber', name: '爆裂菇', hp: 26, speed: 56, radius: 17, damage: 26, xp: 7, oil: 6, behavior: 'bomber', color: '#c96a2f', minWave: 3, note: '靠近后自爆，伤害极高；留着它等于留一颗随时会响的地雷。' },
   { id: 'splinter', name: '碎魂', hp: 34, speed: 62, radius: 16, damage: 11, xp: 7, oil: 6, behavior: 'chase', color: '#5f86d0', minWave: 4, splits: { id: 'shade', count: 2 }, note: '五面晶体，死亡时炸成两只影蛭——先想好处理余党的手段。' },
   { id: 'lancer', name: '刺脊', hp: 30, speed: 74, radius: 15, damage: 14, xp: 8, oil: 6, behavior: 'charge', color: '#c85a86', minWave: 5, note: '蓄力后沿预警线高速突进，撞上就是重伤，必须靠冲刺让开。' },
+  { id: 'skitter', name: '疾影', hp: 10, speed: 132, radius: 10, damage: 6, xp: 4, oil: 3, behavior: 'dash', color: '#7be0ff', minWave: 3, note: '极脆极快的残影，突进冷却很短；碰一下就碎，但停下不动就会被连扑。' },
+  { id: 'echo', name: '回响', hp: 42, speed: 104, radius: 15, damage: 12, xp: 9, oil: 7, behavior: 'echo', trailDelay: 1.1, color: '#9fd8ff', minWave: 5, note: '不追你，追你一秒前站的地方——直线逃跑会被它从背后咬住，走折线才能甩开。' },
+  { id: 'weaver', name: '织雾者', hp: 74, speed: 38, radius: 19, damage: 11, xp: 13, oil: 11, behavior: 'weaver', color: '#9fb7c9', minWave: 7, note: '走动时在脚下织出滞行雾，雾里你的脚步会沉下去；要么绕开，要么先点掉它。' },
   { id: 'beacon', name: '引灯', hp: 48, speed: 44, radius: 17, damage: 10, xp: 11, oil: 10, behavior: 'beacon', color: '#e8d38a', minWave: 6, note: '提灯亡灵，为周围敌人提供速度光环并照亮四方；优先击杀，能立刻削弱整片敌群。' },
 
   { id: 'wickmother', name: '烛母', hp: 320, speed: 42, radius: 34, damage: 16, xp: 90, oil: 60, behavior: 'chase', color: '#c96a2f', elite: true, minWave: 1, note: '精英 · 厚血高伤，是前期最硬的坎；把它拖到灯火边缘慢慢磨。' },
+  { id: 'siphon', name: '噬灯魅', hp: 210, speed: 62, radius: 24, damage: 15, xp: 60, oil: 44, behavior: 'siphon', color: '#c98fe8', elite: true, minWave: 1, note: '精英 · 吊在中距离持续抽取你的灯火，越拖越暗；它的血不薄，得先冲上去解决。' },
   { id: 'darkless', name: '无光者', hp: 400, speed: 58, radius: 32, damage: 20, xp: 110, oil: 70, behavior: 'chase', color: '#2b2b3a', elite: true, lightShy: true, requiresLight: true, minWave: 1, note: '精英 · 只有被光照到时才能被击破，逼你主动把灯推过去。' },
 
   { id: 'thornlord', name: '荆棘领主', hp: 1500, speed: 34, radius: 50, damage: 20, xp: 380, oil: 200, behavior: 'chase', color: '#6f9c3f', boss: true, phases: 3, note: '首领 · 扇形齐射 + 荆棘地刺 + 召唤灯蛾；地刺成形前有预警圈。' },

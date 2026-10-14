@@ -46,6 +46,9 @@ const BEHAVIOR_LABEL: Record<string, string> = {
   bomber: '贴身自爆',
   charge: '蓄力直线突进',
   beacon: '速度光环',
+  echo: '沿你一秒前的路径追击',
+  weaver: '留下滞行雾',
+  siphon: '吊在中距离抽取灯火',
 };
 
 /** 关卡险境的玩家向说法。 */

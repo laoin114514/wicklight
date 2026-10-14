@@ -14,7 +14,7 @@ export const STAGES: StageDef[] = [
     theme: { id: 'ashenkeep', name: '残堡', subtitle: '被熄灯者占据的废墟', floor: '#141520', wall: '#2a2c42', accent: '#8fa7ff', fog: '#0b0c15', hue: 220 },
     waves: 8,
     boss: 'extinguisher',
-    elites: ['darkless'],
+    elites: ['darkless', 'siphon'],
     hazards: ['collapse', 'wispstorm'],
   },
   {
@@ -22,7 +22,7 @@ export const STAGES: StageDef[] = [
     theme: { id: 'emberhold', name: '熔窟', subtitle: '焚天的巢穴', floor: '#1b0f0c', wall: '#3a1c10', accent: '#ff7a2f', fog: '#120806', hue: 20 },
     waves: 9,
     boss: 'emberwake',
-    elites: ['wickmother', 'darkless'],
+    elites: ['wickmother', 'darkless', 'siphon'],
     hazards: ['eruption', 'meteor', 'oilvoid'],
   },
 ];

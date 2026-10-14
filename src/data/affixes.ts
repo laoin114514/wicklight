@@ -15,6 +15,9 @@ export const AFFIXES: AffixDef[] = [
   { id: 'venom', name: '剧毒', blurb: '死亡时留下一滩毒液', color: '#a8e05f' },
   { id: 'warded', name: '咒盾', blurb: '免疫灼烧与冰缓，并额外减伤 25%', color: '#c9a3ff' },
   { id: 'haste', name: '疾风', blurb: '光环：附近敌人移动速度 +35%', color: '#7be0ff' },
+  { id: 'sappers', name: '蚀油', blurb: '光环：附近你身上的灯油持续流失', color: '#c98fe8' },
+  { id: 'fell', name: '噬魂', blurb: '死亡时为附近同伴回复 30% 生命', color: '#8affc1' },
+  { id: 'thorn', name: '荆棘', blurb: '接触伤害 +50%，且每次接触额外抽走灯油', color: '#c85a86' },
 ];
 
 export const AFFIX_MAP: Record<string, AffixDef> = Object.fromEntries(AFFIXES.map((a) => [a.id, a]));

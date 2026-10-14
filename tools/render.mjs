@@ -207,6 +207,46 @@ const SCENES = {
     }
     fight(24, { spawnEvery: 400 });
   },
+  echo() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    for (let i = 0; i < 4; i += 1) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      game.enemies.spawn('echo', game.player.x + Math.cos(a) * 190, game.player.y + Math.sin(a) * 160, 5, 1);
+    }
+    game.enemies.spawn('skitter', game.player.x + 240, game.player.y + 120, 5, 1);
+    game.enemies.spawn('skitter', game.player.x - 230, game.player.y - 130, 5, 1);
+    fight(30, { spawnEvery: 400 });
+  },
+  weaver() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    for (const [dx, dy] of [[190, -60], [-200, 90], [40, -190]]) {
+      const e = game.enemies.spawn('weaver', game.player.x + dx, game.player.y + dy, 6, 1);
+      e.attackCd = 0;
+    }
+    fight(40, { spawnEvery: 400 });
+  },
+  siphon() {
+    game.newRun('warden', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.enemies.spawn('siphon', game.player.x + 260, game.player.y - 40, 1, 1);
+    game.enemies.spawn('siphon', game.player.x - 250, game.player.y + 60, 1, 1);
+    for (let i = 0; i < 5; i += 1) {
+      const a = (i / 5) * Math.PI * 2;
+      game.enemies.spawn('shade', game.player.x + Math.cos(a) * 150, game.player.y + Math.sin(a) * 130, 5, 1);
+    }
+    fight(24, { spawnEvery: 400 });
+  },
   solo() {
     game.newRun('warden', 'normal', false);
     // 先跑够帧数让转场黑幕完全淡出，再清场，得到"静态肖像"式画面

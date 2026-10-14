@@ -192,6 +192,32 @@ function bodyPath(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: num
       ctx.closePath();
       break;
     }
+    case 'skitter': {
+      // 细长的梭形：一眼看出"很快、很脆"
+      const ca = Math.cos(e.angle);
+      const sa = Math.sin(e.angle);
+      ctx.beginPath();
+      ctx.moveTo(e.x + ca * r * 1.5, e.y + sa * r * 1.5);
+      ctx.lineTo(e.x - sa * r * 0.62, e.y + ca * r * 0.62);
+      ctx.lineTo(e.x - ca * r * 0.9, e.y - sa * r * 0.9);
+      ctx.lineTo(e.x + sa * r * 0.62, e.y - ca * r * 0.62);
+      ctx.closePath();
+      break;
+    }
+    case 'echo': {
+      // 空心环：借用非零填充规则挖掉一侧，做成"回音"般的月牙
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r, 0, TAU);
+      ctx.arc(e.x + Math.cos(e.angle) * r * 0.44, e.y + Math.sin(e.angle) * r * 0.44, r * 0.7, 0, TAU, true);
+      break;
+    }
+    case 'weaver':
+      blob(ctx, e.x, e.y, r, 11, 0.07, wob * 0.5);
+      break;
+    case 'siphon':
+      // 六棱提灯：和「引灯」的梯形区分开，是"吊着你灯火"的那类东西
+      poly(ctx, e.x, e.y, r, 6, Math.PI / 6 + wob * 0.05, 1.06);
+      break;
     case 'wickmother':
       blob(ctx, e.x, e.y, r, 12, 0.09, wob * 0.7);
       break;
@@ -281,6 +307,77 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       ctx.lineWidth = 2.6;
       ctx.beginPath();
       ctx.arc(e.x, e.y - r * 0.6 + bob, r * 0.44, Math.PI, TAU);
+      ctx.stroke();
+      break;
+    }
+    case 'skitter': {
+      ctx.strokeStyle = rgba('#7be0ff', 0.45);
+      ctx.lineWidth = 2;
+      for (const k of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(e.x - Math.cos(e.angle) * r * 1.1, e.y - Math.sin(e.angle) * r * 1.1);
+        ctx.lineTo(
+          e.x - Math.cos(e.angle) * (r * 1.1 + 18) + Math.cos(e.angle + k * 1.4) * 8,
+          e.y - Math.sin(e.angle) * (r * 1.1 + 18) + Math.sin(e.angle + k * 1.4) * 8,
+        );
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'echo': {
+      // 逐层散开的回音环：它追的是"过去的你"，所以轮廓本身就带着时间差
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = '#9fd8ff';
+      ctx.lineWidth = 2;
+      for (let i = 1; i <= 3; i += 1) {
+        ctx.globalAlpha = (0.26 - i * 0.06) * (0.7 + Math.sin(time * 3 + w - i) * 0.3);
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r * (1 + i * 0.42), 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
+    case 'weaver': {
+      ctx.strokeStyle = rgba('#dfeaf5', 0.3);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i += 1) {
+        const a = w * 0.5 + (i / 4) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * r * 0.4, e.y + Math.sin(a) * r * 0.4);
+        ctx.lineTo(e.x + Math.cos(a + 0.55) * r * 1.45, e.y + Math.sin(a + 0.55) * r * 1.45);
+        ctx.stroke();
+      }
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.16 + Math.sin(time * 2.4 + w) * 0.05;
+      const wg = ctx.createRadialGradient(e.x, e.y, r * 0.3, e.x, e.y, r * 1.9);
+      wg.addColorStop(0, 'rgba(159,183,201,0.5)');
+      wg.addColorStop(1, 'rgba(159,183,201,0)');
+      ctx.fillStyle = wg;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.9, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      break;
+    }
+    case 'siphon': {
+      // 空芯里的"被抽走的火"：越亮说明它抽得越起劲
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const pull = 0.4 + Math.sin(time * 5 + w) * 0.22;
+      const sg = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 0.9);
+      sg.addColorStop(0, `rgba(255,240,200,${0.5 * pull})`);
+      sg.addColorStop(1, 'rgba(201,143,232,0)');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 0.9, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(20,10,30,0.8)';
+      ctx.lineWidth = 2.4;
+      poly(ctx, e.x, e.y, r * 0.62, 6, Math.PI / 6, 1.06);
       ctx.stroke();
       break;
     }
@@ -468,6 +565,8 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
   }
 
   if (e.boss) bossAura(ctx, e, time);
+  // 回响是"过去的你的影子"，所以整体压成半透明，跟实体敌人区分开
+  if (id === 'echo' && e.hitFlash <= 0) ctx.globalAlpha = 0.82;
   shadow(ctx, e);
   bodyPath(ctx, e, id, time);
   litFill(ctx, e, px, py, body, r);
@@ -559,6 +658,26 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
+  }
+
+  if (e.def.behavior === 'siphon' && e.hitFlash <= 0) {
+    const dx = px - e.x;
+    const dy = py - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 460) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.34 + 0.16 * Math.sin(time * 9);
+      ctx.strokeStyle = '#c98fe8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 9]);
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
   }
 
   if (e.affix) {

@@ -32,7 +32,19 @@ export interface WeaponDef {
   evolved?: boolean;
 }
 
-export type EnemyBehavior = 'chase' | 'dash' | 'ranged' | 'dive' | 'tank' | 'drain' | 'bomber' | 'charge' | 'beacon';
+export type EnemyBehavior =
+  | 'chase'
+  | 'dash'
+  | 'ranged'
+  | 'dive'
+  | 'tank'
+  | 'drain'
+  | 'bomber'
+  | 'charge'
+  | 'beacon'
+  | 'echo'
+  | 'weaver'
+  | 'siphon';
 
 export interface EnemyDef {
   id: string;
@@ -53,6 +65,8 @@ export interface EnemyDef {
   phases?: number;
   /** 死亡时分裂出的小怪 */
   splits?: { id: string; count: number };
+  /** 「回响」沿玩家走过的路径追击时的延迟（秒） */
+  trailDelay?: number;
   /** 图鉴里的一句话说明 */
   note?: string;
 }

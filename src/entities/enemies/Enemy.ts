@@ -64,6 +64,10 @@ export interface EnemyContext {
   snuffLight: (amount: number) => void;
   spawnAdd: (defId: string, x: number, y: number) => void;
   ignitGround: (x: number, y: number) => void;
+  /** 在战场上留下一片「滞行雾」（织雾者） */
+  fog: (x: number, y: number, r: number) => void;
+  /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
+  regen: number;
   spikes: (x: number, y: number, r: number) => void;
   shake: (amount: number) => void;
 }
@@ -71,6 +75,9 @@ export interface EnemyContext {
 export class EnemySystem {
   private nextId = 1;
   private ctxRef: EnemyContext | null = null;
+  /** 玩家最近几秒的轨迹：给「回响」用的"你一秒前站的地方" */
+  private trail: { x: number; y: number; t: number }[] = [];
+  private clock = 0;
   private pool = new Pool<Enemy>(() => ({
     active: false,
     id: 0,
@@ -185,8 +192,27 @@ export class EnemySystem {
     e.burnTimer = 3;
   }
 
+  /** 取 delay 秒前的玩家位置（轨迹不足时返回 null）。 */
+  private trailAt(delay: number): { x: number; y: number } | null {
+    const target = this.clock - delay;
+    let best: { x: number; y: number; t: number } | null = null;
+    for (let i = this.trail.length - 1; i >= 0; i -= 1) {
+      const s = this.trail[i];
+      if (s.t <= target) {
+        best = s;
+        break;
+      }
+    }
+    if (!best) return null;
+    if (this.clock - best.t > delay * 2.2 + 0.6) return null;
+    return { x: best.x, y: best.y };
+  }
+
   update(dt: number, ctx: EnemyContext): void {
     this.ctxRef = ctx;
+    this.clock += dt;
+    this.trail.push({ x: ctx.px, y: ctx.py, t: this.clock });
+    if (this.trail.length > 360) this.trail.splice(0, this.trail.length - 360);
     // 引灯 / 疾风光环：每帧重算，让"优先击杀辅助怪"成为有意义的决策
     for (const e of this.pool.all) if (e.active) e.buff = 1;
     for (const e of this.pool.all) {
@@ -199,10 +225,23 @@ export class EnemySystem {
         if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= rr2) o.buff = Math.max(o.buff, 1.35);
       }
     }
+    // 「蚀油」：贴着你时持续抽走灯油，逼你拉开距离
+    for (const e of this.pool.all) {
+      if (!e.active || e.affix !== 'sappers') continue;
+      const dx = ctx.px - e.x;
+      const dy = ctx.py - e.y;
+      if (dx * dx + dy * dy > 150 * 150) continue;
+      ctx.snuffLight(dt * 0.02);
+      if (Math.random() < dt * 5) ctx.burst(ctx.px, ctx.py, 1, '#c98fe8', { speed: 46, size: 2, life: 0.45 });
+    }
     for (const e of this.pool.all) {
       if (!e.active) continue;
       e.wobble += dt * 4;
       if (e.spawnTimer > 0) e.spawnTimer -= dt;
+      if (ctx.regen > 0 && e.hp < e.maxHp) {
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ctx.regen * dt);
+        if (Math.random() < dt * 1.5) ctx.burst(e.x, e.y, 1, '#8affc1', { speed: 24, size: 2, life: 0.4 });
+      }
       if (e.affix === 'regen' && e.hp < e.maxHp) {
         e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.025 * dt);
         if (Math.random() < dt * 2) ctx.burst(e.x, e.y, 1, '#8affc1', { speed: 30, size: 2, life: 0.4 });
@@ -315,6 +354,47 @@ export class EnemySystem {
         }
         break;
       }
+      case 'echo': {
+        // 追的是"你一秒前站的地方"，而不是你本人——所以直线逃会被抄近路
+        const past = this.trailAt(e.def.trailDelay ?? 1);
+        const tx = past ? past.x : ctx.px;
+        const ty = past ? past.y : ctx.py;
+        const ex = tx - e.x;
+        const ey = ty - e.y;
+        const ed = Math.hypot(ex, ey) || 1;
+        const ux = ex / ed;
+        const uy = ey / ed;
+        const drift = Math.sin(e.wobble * 0.9) * 0.18;
+        e.vx = (ux - uy * drift) * e.speed * speedMul;
+        e.vy = (uy + ux * drift) * e.speed * speedMul;
+        e.angle = Math.atan2(ey, ex);
+        if (Math.random() < dt * 3) ctx.burst(e.x, e.y, 1, '#9fd8ff', { speed: 22, size: 2, life: 0.5 });
+        break;
+      }
+      case 'weaver': {
+        // 缓慢逼近，边走边在脚下织出滞行雾
+        e.vx = nx * e.speed * speedMul * 0.7;
+        e.vy = ny * e.speed * speedMul * 0.7;
+        e.attackCd -= dt;
+        if (e.attackCd <= 0 && d < 640) {
+          e.attackCd = 3.6;
+          ctx.fog(e.x, e.y, 134);
+          ctx.burst(e.x, e.y, 12, '#9fb7c9', { speed: 64, size: 4, life: 0.7 });
+        }
+        break;
+      }
+      case 'siphon': {
+        // 吊在中距离持续抽灯油：站着不动只会越来越黑
+        const keep = 300;
+        const dir = d > keep + 30 ? 1 : d < keep - 30 ? -1 : 0;
+        e.vx = nx * e.speed * speedMul * dir;
+        e.vy = ny * e.speed * speedMul * dir;
+        if (d < 460) {
+          ctx.snuffLight(dt * 0.025);
+          if (Math.random() < dt * 8) ctx.burst(e.x, e.y, 1, '#c98fe8', { speed: 30, size: 2, life: 0.5 });
+        }
+        break;
+      }
       case 'beacon': {
         e.vx = nx * e.speed * speedMul * 0.8;
         e.vy = ny * e.speed * speedMul * 0.8;
@@ -364,7 +444,8 @@ export class EnemySystem {
     e.y += e.vy * dt;
 
     if (e.def.behavior !== 'bomber' && d < e.radius + 16) {
-      ctx.damagePlayer(e.damage, e.x, e.y, e.def.behavior === 'drain' ? 22 : 0);
+      const drain = e.def.behavior === 'drain' ? 22 : e.affix === 'thorn' ? 9 : 0;
+      ctx.damagePlayer(e.damage, e.x, e.y, drain);
     }
   }
 
@@ -442,6 +523,7 @@ export class EnemySystem {
 
   clear(): void {
     this.pool.clear();
+    this.trail.length = 0;
   }
 
   get count(): number {

@@ -75,6 +75,10 @@ export class Player {
   private hitFlash = 0;
   damageMult = 1;
   oilDecayPerSec = 0.018;
+  /** 地形减速（织雾者的滞行雾）：每帧由 Game 重新写入，1 = 不受影响 */
+  terrainSlow = 1;
+  /** 夜咒「枯灯」带来的灯火衰减倍率 */
+  curseOilMult = 1;
   revives = 0;
   lastDamageSource = { x: 0, y: 0 };
 
@@ -95,6 +99,8 @@ export class Player {
     this.addPassive(model.passive, 1);
     this.oil = 1;
     this.brightness = 1;
+    this.terrainSlow = 1;
+    this.curseOilMult = 1;
     this.invuln = 0;
     this.dashTimer = 0;
     this.dashCd = 0;
@@ -212,7 +218,7 @@ export class Player {
     }
 
     // Oil decay / burning
-    this.oil = Math.max(0, this.oil - this.oilDecayPerSec * s.oilDecayMult * dt);
+    this.oil = Math.max(0, this.oil - this.oilDecayPerSec * s.oilDecayMult * this.curseOilMult * dt);
     if (this.oil <= 0) {
       this.hp -= 3 * dt;
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
@@ -248,8 +254,9 @@ export class Player {
       this.vy = this.dashDirY * ds;
     } else {
       const accel = 2400 * dt;
-      this.vx += (mvx * s.moveSpeed - this.vx) * Math.min(1, accel / Math.max(1, s.moveSpeed));
-      this.vy += (mvy * s.moveSpeed - this.vy) * Math.min(1, accel / Math.max(1, s.moveSpeed));
+      const walk = s.moveSpeed * this.terrainSlow;
+      this.vx += (mvx * walk - this.vx) * Math.min(1, accel / Math.max(1, s.moveSpeed));
+      this.vy += (mvy * walk - this.vy) * Math.min(1, accel / Math.max(1, s.moveSpeed));
     }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
@@ -537,6 +544,27 @@ export class Player {
 
     ctx.save();
     ctx.translate(this.x, this.y + bob);
+
+    // ── 滞行雾：脚被拖住时给一个明确的"黏"提示，免得玩家以为手感出了问题 ──
+    if (this.terrainSlow < 1) {
+      ctx.save();
+      const pulse = 0.5 + Math.sin(time * 6) * 0.16;
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = '#dceaf5';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([7, 8]);
+      ctx.beginPath();
+      ctx.ellipse(0, R * 0.55, R * 1.7, R * 0.85, 0, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = '#9fb7c9';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(0, R * 0.55, R * 1.25, R * 0.62, 0, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // ── 冲刺残影（在身体之下） ──
     if (this.dashTimer > 0) {
