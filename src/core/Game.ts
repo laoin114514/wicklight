@@ -2813,7 +2813,18 @@ export class Game {
     // 每帧对整块 3000x2200 区域做 pattern 填充在软件光栅化下要 7ms，所以烘焙成一张位图后按需重绘。
     const baked = this.floorLayer(theme);
     if (baked) {
+      // 地面位图是 0.58 倍分辨率再放大的（省内存），双线性放大要按目标像素做滤波，
+      // 一次整屏读改写就是几毫秒。掌上设备改用最近邻：地面本来就是噪点贴图，
+      // 硬边缘反而更像碎石子，而且 94% 的面积还压在暗幕底下。
+      // 桌面保持双线性（屏幕更大、看得更仔细，不差这几毫秒）。
+      // 地面位图是 0.58 倍分辨率再放大的（省内存），双线性放大要按目标像素做滤波，
+      // 一次整屏读改写就是几毫秒。掌上设备改用最近邻：地面本来就是噪点贴图，
+      // 硬边缘反而更像碎石子，而且 94% 的面积还压在暗幕底下（冻结同一帧逐像素比对：
+      // 均值 0.65/255，差异全在石子边缘）。桌面保持双线性——屏幕更大，看得更仔细。
+      const smooth = ctx.imageSmoothingEnabled;
+      if (this.profile.handheld) ctx.imageSmoothingEnabled = false;
       ctx.drawImage(baked, -lvl.halfW, -lvl.halfH, lvl.halfW * 2, lvl.halfH * 2);
+      ctx.imageSmoothingEnabled = smooth;
     } else {
       const floorGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(lvl.halfW, lvl.halfH));
       floorGrad.addColorStop(0, theme.wall);

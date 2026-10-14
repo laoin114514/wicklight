@@ -212,7 +212,13 @@ export class LightSystem {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     try {
+      // 光照贴图在手机档是半分辨率，贴回来要放大一倍。整张图全是低频柔光渐变，
+      // 最近邻取样在这一层看不出来（冻结同一帧逐像素比对：均值 0.06/255、最大 2），
+      // 但在软件光栅化/低端 GPU 上省掉一次整屏滤波就是 2ms 上下。
+      const smooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(c, 0, 0, w, h);
+      ctx.imageSmoothingEnabled = smooth;
     } catch {
       /* ignore */
     }
