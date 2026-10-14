@@ -46,6 +46,13 @@ export class BountySystem {
     return def;
   }
 
+  /** 直接指定一张悬赏（今日灯芯用）。 */
+  force(def: BountyDef): BountyDef {
+    this.lastId = def.id;
+    this.state = { def, kind: def.kind, progress: 0, target: def.target, done: false, settled: false };
+    return def;
+  }
+
   clear(): void {
     this.state = null;
   }

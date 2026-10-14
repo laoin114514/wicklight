@@ -8,6 +8,9 @@ import { WEAPON_MAP, weaponAt } from '../data/weapons';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import type { RunRecord } from '../types';
 import { DIFFICULTIES, DIFFICULTY_ORDER } from '../systems/DifficultySystem';
+import { buildDailyPlan, dailyLabel } from '../systems/DailySystem';
+import { BOUNTY_MAP } from '../data/bounties';
+import { CURSE_MAP } from '../data/curses';
 import type { Game, GameState, UIHost } from '../core/Game';
 import type { Difficulty, MetaNodeDef, UpgradeOffer } from '../types';
 
@@ -67,6 +70,7 @@ export class UIManager implements UIHost {
       case 'meta': this.meta(); break;
       case 'codex': this.codex(); break;
       case 'records': this.records(); break;
+      case 'daily': this.daily(); break;
       case 'achievements': this.achievements(); break;
       case 'settings': this.settings(); break;
       default: this.screen.innerHTML = ''; this.screen.className = 'screen is-hidden'; break;
@@ -101,12 +105,17 @@ export class UIManager implements UIHost {
         <div class="subtitle">灯芯 · 让光活下去</div>
         <div class="menu-buttons">
           <button class="btn btn--primary" data-act="play">开始冒险</button>
-          <button class="btn ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">无尽之夜${endlessUnlocked ? '' : ' · 通关幽林解锁'}</button>
-          <button class="btn" data-act="meta">余烬解锁 <b>${save.embers}</b></button>
-          <button class="btn" data-act="codex">图鉴 <b>${this.game.codex.seenCount()}/${this.game.codex.total()}</b></button>
-          <button class="btn" data-act="records">生涯档案</button>
-          <button class="btn" data-act="achievements">成就 <b>${save.achievements.length}/${ACHIEVEMENTS.length}</b></button>
-          <button class="btn" data-act="settings">设置</button>
+          <div class="menu-duo">
+            <button class="btn ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">无尽之夜${endlessUnlocked ? '' : '<i class="btn__note">通关幽林解锁</i>'}</button>
+            <button class="btn btn--daily" data-act="daily">今日灯芯<i class="btn__note">${dailyLabel(buildDailyPlan())}</i></button>
+          </div>
+          <div class="menu-duo">
+            <button class="btn" data-act="meta">余烬解锁 <b>${save.embers}</b></button>
+            <button class="btn" data-act="codex">图鉴 <b>${this.game.codex.seenCount()}/${this.game.codex.total()}</b></button>
+            <button class="btn" data-act="records">生涯档案</button>
+            <button class="btn" data-act="achievements">成就 <b>${save.achievements.length}/${ACHIEVEMENTS.length}</b></button>
+          </div>
+          <button class="btn btn--slim" data-act="settings">设置</button>
         </div>
         <div class="menu-foot">
           <span>最高关卡 ${cleared}/3</span>
@@ -123,6 +132,7 @@ export class UIManager implements UIHost {
       this.endless = true;
       this.openSelect();
     });
+    this.on('[data-act="daily"]', () => { this.returnState = 'menu'; this.game.openMenu('daily'); });
     this.on('[data-act="meta"]', () => { this.returnState = 'menu'; this.game.openMenu('meta'); });
     this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.codexFocus = null; this.game.openMenu('codex'); });
     this.on('[data-act="records"]', () => { this.returnState = 'menu'; this.game.openMenu('records'); });
@@ -475,6 +485,7 @@ export class UIManager implements UIHost {
       <div class="panel panel--small">
         <div class="panel__title">灯火熄灭</div>
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
+        ${this.dailyLine()}
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
@@ -494,6 +505,7 @@ export class UIManager implements UIHost {
         <div class="panel__title">焚尽长夜</div>
         <div class="subtitle">你举着灯，走完了三段黑暗。</div>
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
+        ${this.dailyLine()}
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
@@ -643,6 +655,14 @@ export class UIManager implements UIHost {
     return `<div class="hl-row">${badges.join('')}</div>`;
   }
 
+  /** 今日灯芯的成绩行（只在今日灯芯的结算里出现）。 */
+  private dailyLine(): string {
+    if (!this.game.dailyPlan) return '';
+    const score = this.game.dailyScore;
+    const best = this.game.dailyBest ? ' · 刷新个人最好' : '';
+    return `<div class="daily-score ${this.game.dailyBest ? 'is-best' : ''}">今日灯芯 <b>${score}</b> 分${best}</div>`;
+  }
+
   /** 本局成就奖励（和局内余烬分开显示，免得玩家以为是同一笔）。 */
   private achievementEmbersLine(): string {
     const n = this.game.achievementEmbers;
@@ -680,6 +700,7 @@ export class UIManager implements UIHost {
           <b style="color:${lantern?.color ?? 'var(--amber)'}">${lantern?.name ?? r.lantern}</b>
           <span class="rec-run__diff">${diff}</span>
           <span class="rec-run__where">${where}</span>
+          ${r.daily ? '<span class="rec-run__daily">今日灯芯</span>' : ''}
         </div>
         <div class="rec-run__sub">
           击杀 ${r.kills} · Lv ${r.level} · ${UIManager.clock(r.time)} · 连杀 ${r.bestCombo}${r.bossKills ? ` · 首领 ${r.bossKills}` : ''}
@@ -687,6 +708,40 @@ export class UIManager implements UIHost {
       </div>
       <div class="rec-run__side"><b>+${r.embers}</b><span>${UIManager.ago(r.at)}</span></div>
     </div>`;
+  }
+
+  /** 今日灯芯：一天的固定剧本，成绩之间才有比较的意义。 */
+  private daily(): void {
+    const plan = buildDailyPlan();
+    const d = this.game.dailySave();
+    const lantern = LANTERN_MAP[plan.lantern];
+    const rows: [string, string][] = [
+      ['灯火', `${lantern?.name ?? plan.lantern}（${lantern?.title ?? ''}）`],
+      ['难度', DIFFICULTIES[plan.difficulty].label],
+      ['夜咒', plan.curses.map((id, i) => `${i + 1}关 ${id ? CURSE_MAP[id]?.name ?? id : '无'}`).join(' · ')],
+      ['悬赏', plan.bounties.map((id, i) => `${i + 1}关 ${BOUNTY_MAP[id]?.name ?? id}`).join(' · ')],
+      ['随机种子', `${plan.seed}`],
+    ];
+    const best = d.bestScore > 0
+      ? `<div class="daily-best">今日最佳 <b>${d.bestScore}</b> 分 · 第 ${d.bestStage} 关 · 击杀 ${d.bestKills}${d.cleared ? ' · 已通关' : ''} · 尝试 ${d.attempts} 次</div>`
+      : `<div class="daily-best daily-best--none">今天还没有人举起灯 · 尝试 <b>${d.attempts}</b> 次</div>`;
+    this.show(`
+      <div class="panel panel--daily">
+        <div class="panel__title">今日灯芯 · ${plan.key}</div>
+        <div class="subtitle">同一个夜晚，同一套条件——比的只是谁打得更远。</div>
+        <div class="cx-rows">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+        ${best}
+        <div class="row-actions">
+          <button class="btn" data-act="back">返回</button>
+          <button class="btn btn--primary" data-act="daily-start">点燃今日灯芯</button>
+        </div>
+      </div>
+    `);
+    this.on('[data-act="back"]', () => this.game.goMenu());
+    this.on('[data-act="daily-start"]', () => {
+      this.returnState = 'menu';
+      this.game.startDailyRun(plan.key);
+    });
   }
 
   private records(): void {
@@ -700,6 +755,7 @@ export class UIManager implements UIHost {
       ['累计守夜', UIManager.hours(rec.totalTime)],
       ['通关次数', `${rec.clearedRuns}`],
       ['完成悬赏', `${rec.bounties}`],
+      ['今日灯芯', this.game.dailySave().bestScore > 0 ? `${this.game.dailySave().bestScore} 分` : '未出手'],
       ['无尽最佳', `${save.bestEndlessWave} 波`],
       ['当前余烬', `${save.embers}`],
     ]

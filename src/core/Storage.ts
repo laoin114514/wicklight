@@ -1,4 +1,5 @@
 import { defaultRecords } from '../systems/RecordsSystem';
+import { defaultDaily } from '../systems/DailySystem';
 import type { SaveData, SettingsData } from '../types';
 
 const KEY = 'wicklight.save.v1';
@@ -30,6 +31,7 @@ export function defaultSave(): SaveData {
     codex: [],
     records: defaultRecords(),
     history: [],
+    daily: defaultDaily(),
     settings: { ...defaultSettings },
   };
 }
@@ -68,6 +70,7 @@ export class Storage {
           codex: Array.isArray(parsed.codex) ? parsed.codex : base.codex,
           records: parsed.records && typeof parsed.records === 'object' ? { ...base.records, ...parsed.records } : base.records,
           history: Array.isArray(parsed.history) ? parsed.history : base.history,
+          daily: parsed.daily && typeof parsed.daily === 'object' ? { ...base.daily, ...parsed.daily } : base.daily,
         };
         return this.memory;
       }

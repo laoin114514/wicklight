@@ -161,6 +161,8 @@ export interface RunStats {
   lantern: string;
   stageId: string;
   endless: boolean;
+  /** 是否今日灯芯 */
+  daily: boolean;
 }
 
 /** 单局战报（生涯档案里"最近对局"用的那一条）。 */
@@ -184,6 +186,8 @@ export interface RunRecord {
   damageDealt: number;
   bossKills: number;
   embers: number;
+  /** 是否今日灯芯 */
+  daily?: boolean;
 }
 
 /** 单盏灯火的累计战绩。 */
@@ -217,6 +221,19 @@ export interface RecordsData {
   lanterns: Record<string, LanternRecord>;
 }
 
+/** 今日灯芯（每日挑战）的成绩记录。 */
+export interface DailySave {
+  /** 这份成绩属于哪一天（YYYY-MM-DD） */
+  key: string;
+  attempts: number;
+  bestScore: number;
+  bestKills: number;
+  bestStage: number;
+  cleared: boolean;
+  /** 最佳成绩用的灯火 */
+  bestLantern: string;
+}
+
 export interface SaveData {
   version: number;
   embers: number;
@@ -233,6 +250,8 @@ export interface SaveData {
   records: RecordsData;
   /** 最近若干局的战报，最新的在前 */
   history: RunRecord[];
+  /** 今日灯芯的成绩（每天重置） */
+  daily: DailySave;
   settings: SettingsData;
 }
 

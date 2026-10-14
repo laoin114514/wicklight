@@ -71,6 +71,10 @@ npm run preview
 - **3 个主题关卡**：幽林 → 残堡 → 熔窟，程序化生成竞技场并铺满主题布景（树木/蘑菇、立柱/瓦砾、
   晶簇/熔岩裂隙），含关卡事件（陨石雨、塌方、熔岩喷发、浓雾、相位风暴、灯油抽取）。
 - **无尽之夜**：单场无尽波次，每 5 波出现 Boss，三只首领轮番登场并逐轮变强，排名看最高波数。
+- **今日灯芯（每日挑战）**：同一天里所有人面对**同一个夜晚**——灯火、难度、每一关的夜咒与悬赏
+  全部由日期推导（纯函数，不看运气），随机种子也来自日期，于是成绩之间才有比较的意义。
+  面板里能看到今天的全部条件与个人最好成绩，局内依旧是随机应变的（固定的是条件，不是过程）。
+  成绩按"推进"计分（击杀 2 分、每关 120 分、通关额外 400 分），跨天自动重置。
 - **局外成长**：每局结算获得「余烬」，在解锁树中永久解锁新灯火、开局增益（生命、灯油、复活、重掷等）。
 - **构筑总览**：`Tab`（或暂停面板）随时翻看当前这一局的全部筹码——武器与等级、遗物、
   被动层数、本关夜咒、当前悬赏、以及伤害倍率 / 冷却 / 暴击 / 移速 / 灯油耗率等关键属性。
@@ -123,7 +127,7 @@ node tools/render.mjs --scene boss1 --crop 560,240,260,180 --zoom 4
 ## 测试
 
 ```bash
-npm test          # 13 套离线测试（Node + 自研软件光栅化 Canvas）
+npm test          # 15 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 ```
@@ -133,7 +137,7 @@ npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长
 `tools/playtest.mjs` 会用 Playwright 启动**真实 Chromium**，通过内置的零依赖静态服务器打开构建产物，
 用真实键盘/鼠标走一遍完整流程，并把每一屏截图写到 `/tmp/wl/shots/`：
 
-- 菜单 → 图鉴 →（打完一局后）点开条目看数值 → 生涯档案 → 选灯火 / 难度 → 开局 →
+- 菜单 → 图鉴 →（打完一局后）点开条目看数值 → 生涯档案 → 今日灯芯（条件与剧本一致）→ 选灯火 / 难度 → 开局 →
   真实按键移动 / 冲刺 / 燃爆（同时校验 HUD 上的悬赏追踪）→ 暂停 → 构筑总览（含进化路线）→
   升级面板 → 商店 → 祭坛 → 死亡结算 → 余烬解锁树 → 设置 → 成就 → 生涯档案（战报已记录）→ 无尽之夜；
 - 同时对每一屏做**布局体检**（元素是否零尺寸、是否超出视口、页面是否出现滚动条、
@@ -157,6 +161,9 @@ npx playwright install chromium && npx playwright install-deps chromium
 - `data`：武器等级曲线单调、进化链闭合、遗物/夜咒字段完整，叠加全部遗物后属性仍然有限可用。
 - `codex`：图鉴条目无重复且条条有名称与说明、分类不为空；击杀敌人后立刻记录、
   玩家持有的武器/被动/遗物会被扫描进来、发现是幂等的、进度确实写进存档。
+- `daily`：同一天推导出的剧本必须逐字节一致、不同日期必须不同；剧本本身合法可行
+  （第一关没有夜咒、猎杀目标当关真能刷出来）；开局后灯火 / 难度 / 种子 / 每关的夜咒与悬赏
+  都真的来自剧本；成绩记尝试次数、只留最好的一次、跨天重置；老存档缺 `daily` 也能平滑升级。
 - `guide`：图鉴条目都查得到数值（且数值里不会混进 `undefined` / `NaN`）、按 key 取条目可复现、
   详情页渲染干净、未发现条目不给点；构筑总览写出武器与所需被动的进度对照、条件齐了才标"可进化"；
   升级池在条件满足时确实给出进化卡，卡面会解释进化条件与还差多少。
@@ -219,7 +226,8 @@ wicklight/
 │   ├── data/    weapons · upgrades · enemies · stages · lanterns · meta · achievements · bounties
 │   ├── entities/ Player · Bullet(Projectile) · Pickup · Particle · enemies/Enemy(+behaviors)
 │   ├── systems/ Director · LevelGen · CollisionSystem · UpgradeSystem · LootSystem
-│   │            MetaSystem · AchievementSystem · CodexSystem · RecordsSystem · BountySystem · DifficultySystem
+│   │            MetaSystem · AchievementSystem · CodexSystem · RecordsSystem · BountySystem
+│   │            DailySystem · DifficultySystem
 │   ├── ui/      HUD · UIManager · TouchControls
 │   ├── styles/  main.css
 │   ├── main.ts · types.ts

@@ -145,6 +145,7 @@ export class RecordsSystem {
       damageDealt: stats.damageDealt,
       bossKills: stats.bossKills,
       embers: stats.embers,
+      daily: stats.daily,
     };
     this.save.history.unshift(entry);
     if (this.save.history.length > HISTORY_CAP) this.save.history.length = HISTORY_CAP;

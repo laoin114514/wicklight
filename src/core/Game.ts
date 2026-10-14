@@ -29,6 +29,10 @@ import { CodexSystem, type CodexEntry } from '../systems/CodexSystem';
 import { RecordsSystem, type RecordHighlight } from '../systems/RecordsSystem';
 import { BountySystem } from '../systems/BountySystem';
 import type { BountyDef } from '../data/bounties';
+import { BOUNTY_MAP } from '../data/bounties';
+import { CURSE_MAP } from '../data/curses';
+import { buildDailyPlan, dailyKey, dailyLabel, dailyScore, defaultDaily, type DailyPlan } from '../systems/DailySystem';
+import type { DailySave } from '../types';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -54,6 +58,7 @@ export type GameState =
   | 'meta'
   | 'codex'
   | 'records'
+  | 'daily'
   | 'achievements'
   | 'settings';
 
@@ -141,12 +146,17 @@ export class Game {
   codex: CodexSystem;
   records: RecordsSystem;
   bounties: BountySystem;
+  /** 今日灯芯的剧本（不是今日灯芯则为 null）。 */
+  dailyPlan: DailyPlan | null = null;
   /** 这一局的结局，结算界面据此换文案。 */
   runOutcome: 'clear' | 'defeat' | null = null;
   /** 这一局刷新掉的纪录，结算界面拿去做"新纪录"徽章。 */
   recordHighlights: RecordHighlight[] = [];
   /** 本局由成就奖励额外发放的余烬（与局内收益分开显示）。 */
   achievementEmbers = 0;
+  /** 今日灯芯：本局得分 / 是否刷新个人最好 */
+  dailyScore = 0;
+  dailyBest = false;
   /** 图鉴扫描的节流计时（秒） */
   private codexTimer = 0;
   private codexBatching = false;
@@ -266,13 +276,15 @@ export class Game {
     this.ui?.showScreen(state);
   }
 
-  newRun(lanternId: string, difficulty: Difficulty, endless: boolean): void {
+  newRun(lanternId: string, difficulty: Difficulty, endless: boolean, daily: DailyPlan | null = null): void {
     const lantern = LANTERN_MAP[lanternId] ?? LANTERNS[0];
     this.lanternId = lantern.id;
     this.difficulty = difficulty;
     this.endless = endless;
+    this.dailyPlan = daily;
     this.stageIndex = 0;
-    this.startSeed = (Math.random() * 1e9) | 0;
+    // 今日灯芯用日期派生的固定种子：条件一样，过程仍旧看本事
+    this.startSeed = daily ? daily.seed : (Math.random() * 1e9) | 0;
     this.rng.reseed(this.startSeed);
     this.resetRunState();
 
@@ -337,6 +349,8 @@ export class Game {
     this.runOutcome = null;
     this.recordHighlights = [];
     this.achievementEmbers = 0;
+    this.dailyScore = 0;
+    this.dailyBest = false;
     this.bounties.reset();
     this.codex.reset();
     this.codexTimer = 0;
@@ -400,9 +414,20 @@ export class Game {
    */
   private rollBounty(): void {
     const depth = this.endless ? STAGES.length - 1 + Math.floor(this.wave / 5) : this.stageIndex;
-    const def = this.bounties.roll(this.rng, depth);
+    const plan = this.dailyPlan;
+    // 今日灯芯的悬赏也从剧本里来（无尽模式退回按深度抽）
+    const forced = plan && !this.endless ? plan.bounties[Math.min(this.stageIndex, plan.bounties.length - 1)] : null;
+    const forcedDef = forced ? BOUNTY_MAP[forced] : null;
+    const def = forcedDef && this.bountyAvailable(forcedDef, depth) ? this.bounties.force(forcedDef) : this.bounties.roll(this.rng, depth);
     const where = this.endless ? `第 ${this.wave} 波` : '本关';
     this.hud?.toast(`${def.icon} 悬赏 · ${def.name}（${where}）`);
+  }
+
+  /** 该悬赏在当前深度是否可行（要打的敌人得真刷得出来）。 */
+  private bountyAvailable(def: BountyDef, depth: number): boolean {
+    if (def.kind !== 'hunt') return true;
+    const enemy = def.enemy ? ENEMY_MAP[def.enemy] : null;
+    return !!enemy && (enemy.minWave ?? 1) <= 1 + depth;
   }
 
   /** 悬赏完成：发金币与补给。奖励给金币而非余烬，等于把出价换成"下一关更强"。 */
@@ -445,7 +470,9 @@ export class Game {
       return;
     }
     const pool = CURSES.filter((c) => !this.endless || c.id !== 'longnight');
-    const curse = this.rng.pick(pool);
+    // 今日灯芯：夜咒由日期决定，而不是当场抽——这样大家的夜晚才是同一个
+    const forced = this.dailyPlan && !this.endless ? this.dailyPlan.curses[index] : null;
+    const curse = (forced ? CURSE_MAP[forced] : null) ?? this.rng.pick(pool);
     this.curse = curse;
     this.curseGoldMult = curse.goldMult;
     this.director.setCurse(curse.mods);
@@ -1470,10 +1497,43 @@ export class Game {
     this.save.best = Math.max(this.save.best, this.stageIndex + 1);
     this.runOutcome = outcome;
     this.recordHighlights = this.records.record(this.runStats(), cleared);
+    if (this.dailyPlan) this.recordDaily();
     if (this.save.runs >= 25) this.achievements.unlock('runs25');
     if (this.save.records.clearedRuns >= 3) this.achievements.unlock('clears3');
     this.storage.save(this.save);
     this.events.emit('gameOver', { stats: this.runStats() });
+  }
+
+  /** 今日灯芯的成绩（跨天自动重置成新的一天）。 */
+  dailySave(): DailySave {
+    const key = dailyKey();
+    if (this.save.daily.key !== key) {
+      this.save.daily = { ...defaultDaily(), key };
+      this.storage.save(this.save);
+    }
+    return this.save.daily;
+  }
+
+  /** 今日灯芯结算：记次数、留最好的一次。 */
+  private recordDaily(): void {
+    const plan = this.dailyPlan;
+    if (!plan) return;
+    const d = this.save.daily;
+    if (d.key !== plan.key) Object.assign(d, defaultDaily(), { key: plan.key });
+    d.attempts += 1;
+    const stats = this.runStats();
+    const cleared = this.runOutcome === 'clear';
+    const score = dailyScore({ kills: stats.kills, stage: stats.stage, level: stats.level, bossKills: stats.bossKills, cleared });
+    this.dailyScore = score;
+    if (score > d.bestScore) {
+      this.dailyBest = true;
+      d.bestScore = score;
+      d.bestKills = stats.kills;
+      d.bestStage = stats.stage;
+      d.bestLantern = stats.lantern;
+      d.cleared = cleared;
+    }
+    this.storage.save(this.save);
   }
 
   /** 成就解锁：发余烬奖励 + 提示。奖励计进本局统计，结算界面单列一行。 */
@@ -1506,10 +1566,18 @@ export class Game {
       lantern: this.lanternId,
       stageId: this.currentStage().id,
       endless: this.endless,
+      daily: !!this.dailyPlan,
     };
   }
 
   /** Tab：随时翻看当前构筑（等同暂停，但不打断节奏感）。 */
+  /** 开始今日灯芯：灯火 / 难度 / 每一关的夜咒与悬赏都由日期决定。 */
+  startDailyRun(key: string = dailyKey()): void {
+    const plan = buildDailyPlan(key);
+    this.newRun(plan.lantern, plan.difficulty, false, plan);
+    this.hud?.announce(`今日灯芯 · ${dailyLabel(plan)}`, true);
+  }
+
   toggleSheet(): void {
     if (this.state === 'loadout') {
       this.state = this.sheetReturn;

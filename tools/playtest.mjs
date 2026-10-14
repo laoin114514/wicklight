@@ -195,6 +195,15 @@ async function main() {
 
   const menuCanvas = await page.evaluate(() => window.__PROBE__.canvasStats());
   expect(menuCanvas && menuCanvas.mean > 6, '菜单画布真的画了东西（不是纯黑）', JSON.stringify(menuCanvas));
+  // 主菜单按钮排得太长会把页脚挤出面板，这里钉死它
+  const menuFits = await page.evaluate(() => {
+    const panel = document.querySelector('.panel--menu');
+    const foot = document.querySelector('.menu-foot');
+    const pb = panel.getBoundingClientRect();
+    const fb = foot.getBoundingClientRect();
+    return { over: Math.round(fb.bottom - pb.bottom), scroll: Math.round(panel.scrollHeight - panel.clientHeight), h: Math.round(pb.height), vh: window.innerHeight };
+  });
+  expect(menuFits.over <= 2 && menuFits.scroll <= 2, '主菜单的全部内容都在面板内（不需要滚动）', JSON.stringify(menuFits));
 
   // ── 1b. 图鉴（编年史）──
   const codexBefore = await page.evaluate(() => window.__WICKLIGHT__.game.codex.seenCount());
@@ -563,6 +572,39 @@ async function main() {
   await sleep(1500);
   await shot('13-endless');
 
+  // ── 11. 今日灯芯：全服同一个夜晚 ──
+  await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
+  await sleep(400);
+  await page.click('[data-act="daily"]');
+  await sleep(350);
+  const dailyLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(dailyLayout.issues.length === 0, '今日灯芯面板布局正常', dailyLayout.issues.join('; '));
+  const dailyText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  const dailyParts = ['今日灯芯', '灯火', '难度', '夜咒', '悬赏', '点燃今日灯芯'].filter((k) => !dailyText.includes(k));
+  expect(dailyParts.length === 0, '今日灯芯面板内容齐全', dailyParts.join(','));
+  expect(!/undefined|NaN/.test(dailyText), '今日灯芯没有缺字段', dailyText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
+  await shot('16-daily');
+  await page.click('[data-act="daily-start"]');
+  await sleep(1300);
+  const daily = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const plan = window.__WICKLIGHT__.daily.buildDailyPlan();
+    return {
+      state: g.state, seed: g.startSeed, planSeed: plan.seed,
+      lantern: g.lanternId, planLantern: plan.lantern,
+      difficulty: g.difficulty, planDifficulty: plan.difficulty,
+      bounty: g.bounties.state ? g.bounties.state.def.id : null, planBounty: plan.bounties[0],
+    };
+  });
+  expect(daily.state === 'playing', '今日灯芯能开局', JSON.stringify(daily));
+  expect(daily.seed === daily.planSeed, '今日灯芯使用日期派生的种子', JSON.stringify(daily));
+  expect(daily.lantern === daily.planLantern && daily.difficulty === daily.planDifficulty, '灯火与难度来自今日剧本', JSON.stringify(daily));
+  expect(daily.bounty === daily.planBounty, '第一关悬赏来自今日剧本', JSON.stringify(daily));
+  const dailyClash = await page.evaluate(() => window.__PROBE__.overlaps('.hud__topleft', '.hud__bounty'));
+  expect(dailyClash.length === 0, '今日灯芯里 HUD 依然不打架', dailyClash.join('; '));
+  await sleep(600);
+  await shot('16b-daily-play');
+
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const mobileErrors = [];
   mobile.on('pageerror', (e) => mobileErrors.push(String(e)));
@@ -583,6 +625,13 @@ async function main() {
     return r;
   });
   expect(m.hOverflow <= 1, '移动端竖屏无横向溢出', `hOverflow=${m.hOverflow}`);
+  const mTitle = await mobile.evaluate(() => {
+    const t = document.querySelector('.panel--menu .title');
+    const panel = document.querySelector('.panel--menu');
+    if (!t || !panel) return null;
+    return { w: Math.round(t.getBoundingClientRect().width), panel: Math.round(panel.clientWidth), scroll: Math.round(panel.scrollWidth), clip: Math.round(panel.scrollWidth - panel.clientWidth) };
+  });
+  expect(mTitle && mTitle.clip <= 1, '移动端主菜单标题不会被面板切掉', JSON.stringify(mTitle));
   expect(m.panels.every((p) => p.h > 0), '移动端面板元素有高度');
   await mobile.screenshot({ path: join(SHOTS, '14-mobile-menu.png') });
   await mobile.click('[data-act="play"]');
