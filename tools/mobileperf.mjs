@@ -177,6 +177,7 @@ const instrument = () => {
     if (kill === 'glow') g.drawPyreGlow = () => {};
     if (kill === 'hud') g.hud.update = () => {};
     if (kill === 'entities') { g.enemies.draw = () => {}; g.particles.draw = () => {}; g.floaters.draw = () => {}; }
+    if (kill === 'player') g.player.draw = () => {};
   }
   if (window.__MP_DPR__) {
     // render() 每帧都会调 setProfile，所以把两个入口都钉死，避免它把 maxDpr 改回去

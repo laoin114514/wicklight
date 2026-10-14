@@ -2688,6 +2688,56 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .card__blurb { line-height: 1.35; }
   .card__hint { display: none; }
 }
+/* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘 ─────────────────────────
+   两点都是手机上才有的问题：
+   · 触屏没有键盘，`Tab` 键帽与"空格 / Q"的字样只会让人对着屏幕找按键；
+   · 横屏 HUD 是左右两列，而提示卡默认在屏幕正中——320~390 高的横屏里
+     它会压在生命/灯油/经验条上（量过：844×390 下压掉经验条右半截）。
+   改法：键帽在触屏上直接不显示；公告与提示卡都搬到"两列之间"的那条中带上，
+   而且是**公告在上、提示卡在下**——两者本来会在开局同时出现（关卡提示卡 + 关卡名公告），
+   一上一下就不会互相盖住，也不必去猜提示卡堆了多高。
+   ⚠ 位置是量出来的，别想当然：公告 132px 是"左上那一列的下沿（102px）再让 5px"，
+   提示卡 168px 是"公告的下沿（157px）再让 5px"；两列 HUD 的高度在 320~520 高的横屏里
+   是定值（左上 16..102、左下构筑芯片到 151、右侧记分列 16..146），所以能用固定 px。 */
+body.is-touch .key { display: none; }
+@media (orientation: landscape) and (max-height: 520px) {
+  /* 公告：别在 42%（正好压在提示卡上），抬到两列之间的上沿；顺带收一号字，
+     长公告（"精英来袭：xxx · 词缀"）在窄横屏上才不会钻到左右两列底下。 */
+  body.is-touch .announce {
+    top: calc(132px + env(safe-area-inset-top));
+    font-size: clamp(14px, 1.9vw, 20px);
+  }
+  body.is-touch .announce.is-big { font-size: clamp(17px, 2.3vw, 26px); }
+  /* 提示卡：左右内边距就是两列的宽度（左 224 / 右 224 对称，卡片正好居中），
+     下沿让它自己往下堆——最下面那几张就算碰到摇杆/按钮也是半透明的旧消息。 */
+  body.is-touch .toast-root {
+    padding: calc(168px + env(safe-area-inset-top)) 224px 0 224px;
+  }
+  body.is-touch .toast--tip { max-width: 100%; }
+  .toast--tip { padding: 8px 14px 9px; }
+  .toast--tip b { font-size: 12.5px; }
+  .toast--tip span { font-size: 11px; line-height: 1.35; }
+}
+/* 568~720（小手机横屏）：右侧那一列只有 150px 宽、左下又多一块构筑芯片，
+   224px 的对称内边距会把提示卡挤成一条细缝；改成"左让 104、右让 176"，
+   卡片落在 104..392 这条缝里，两边都留得下。 */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 720px) {
+  body.is-touch .toast-root {
+    padding-right: calc(176px + env(safe-area-inset-right));
+    padding-left: calc(104px + env(safe-area-inset-left));
+  }
+}
+/* 320 上下：公告与提示卡各再收一点，别挡住半个战场 */
+@media (orientation: landscape) and (max-height: 380px) {
+  body.is-touch .announce { top: calc(130px + env(safe-area-inset-top)); }
+  body.is-touch .toast-root {
+    padding-top: calc(158px + env(safe-area-inset-top));
+    gap: 4px;
+  }
+  .toast--tip { padding: 6px 12px 7px; }
+  .toast--tip span { font-size: 10.5px; }
+}
+
 /* 320~380（最小的横屏窗口，iPhone SE 竖屏高度那种）：只求五行按钮 / 三张卡都在屏幕里 */
 @media (orientation: landscape) and (max-height: 380px) {
   .panel { padding: 10px 14px; }

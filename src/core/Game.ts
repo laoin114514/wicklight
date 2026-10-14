@@ -8,7 +8,7 @@ import { Settings } from './Settings';
 import { Storage, type Storage as StorageType } from './Storage';
 import { EventBus, type GameEvents } from './Events';
 import { clamp } from './MathUtils';
-import { perfProfile, type PerfProfile } from './Perf';
+import { isTouchDevice, perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
 import { Player, type PlayerContext } from '../entities/Player';
 import { EnemySystem, type Enemy, type EnemyContext, type LightCtx } from '../entities/enemies/Enemy';
@@ -378,7 +378,12 @@ export class Game {
     this.hintQueue = this.save.hintsSeen
       ? []
       : [
-          { at: 3, text: '自动开火 · 空格冲刺（有无敌帧）· Q 燃爆清场' },
+          {
+            at: 3,
+            text: isTouchDevice()
+              ? '自动开火 · 右下角的冲刺有无敌帧 · 燃爆可以清场'
+              : '自动开火 · 空格冲刺（有无敌帧）· Q 燃爆清场',
+          },
           { at: 11, text: '🏮 停在没有点亮的灯台旁，可以把它点亮' },
           { at: 22, text: '祭坛、商店与首领都在等你：别在黑暗里站太久' },
         ];
@@ -2486,12 +2491,16 @@ export class Game {
    */
   private drawTargetPointers(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const cam = this.camera;
-    // 按比例收，窄屏（竖屏手机）上才不会被压成负数、把箭头甩到屏幕中间
-    const left = Math.min(244, w * 0.3);
-    const right = Math.min(134, w * 0.17);
+    // 按比例收，窄屏（竖屏手机）上才不会被压成负数、把箭头甩到屏幕中间。
+    // 掌上设备另有两条硬约束：横屏 HUD 是"左右两列"——左边生命/灯油/经验 + 构筑芯片，
+    // 右边记分 + 悬赏 + 灯台。画布在 DOM 之下，箭头钻到那两列底下就真的看不见了，
+    // 所以手机把整个环收进两列之间（左边留到构筑芯片右沿，右边按记分列的宽度让开）。
+    const handheld = this.profile.handheld;
+    const left = handheld ? Math.min(258, w * 0.34) : Math.min(244, w * 0.3);
+    const right = handheld ? Math.min(222, w * 0.36) : Math.min(134, w * 0.17);
     // 顶部留得更多：屏幕正中偏上是公告 / 图鉴 / 成就的常驻位，箭头挤进去会被它们盖住
-    const top = Math.min(196, h * 0.32);
-    const bottom = Math.min(84, h * 0.17);
+    const top = handheld ? Math.min(198, h * 0.34) : Math.min(196, h * 0.32);
+    const bottom = handheld ? Math.min(96, h * 0.3) : Math.min(84, h * 0.17);
     const targets: { x: number; y: number; label: string; color: string }[] = [];
     for (const py of this.level.pyres) if (!py.lit) targets.push({ x: py.x, y: py.y, label: '灯台', color: '#ffb15e' });
     for (const sh of this.level.shrines) if (!sh.used) targets.push({ x: sh.x, y: sh.y, label: '祭坛', color: '#9dc4ff' });

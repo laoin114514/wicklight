@@ -1,4 +1,5 @@
 import type { Game } from '../core/Game';
+import { isTouchDevice } from '../core/Perf';
 import { haptic } from '../core/Haptics';
 
 /**
@@ -29,7 +30,9 @@ export class TouchControls {
     this.root = document.getElementById('touch-root') as HTMLElement;
     this.stick = document.getElementById('touch-stick') as HTMLElement;
     this.knob = this.stick.querySelector('.touch-stick__knob') as HTMLElement;
-    this.isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    // 和性能档位用同一套判定（core/Perf）：两处各拍一个条件的话，
+    // 会出现"性能按手机算、摇杆却不显示"这种自相矛盾的状态。
+    this.isTouch = isTouchDevice();
     if (!this.isTouch) {
       this.root.style.display = 'none';
       return;
