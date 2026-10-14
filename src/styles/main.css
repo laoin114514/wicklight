@@ -2366,3 +2366,71 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
 }
 .hl b { font-family: var(--font-display); letter-spacing: 0; }
 .hl--more { opacity: 0.72; }
+
+
+/* ── 10. 凡是"名字"，都用衬线；顺带把 4 盏灯摆成 2×2 ──────────────── */
+.lantern__name,
+.shop-item__name,
+.curse-card__name,
+.shrine-card__name,
+.rec-lantern__name,
+.cx-head__name,
+.ach__name,
+.node__name,
+.lo-row__name,
+.diff b,
+.hl-row b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+/* 4 盏灯在 3 列里会留一个洞，宽屏上摆成 2×2 */
+@media (min-width: 640px) {
+  .panel--select .lantern-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+
+/* ── 11. 奖励标签：别再用"胶囊"，做成一枚小铜牌 ───────────────────── */
+.ach__reward {
+  border-radius: 3px;
+  padding: 3px 8px 4px;
+  border: 1px solid rgba(192, 138, 62, 0.38);
+  background: linear-gradient(180deg, rgba(56, 42, 22, 0.7), rgba(18, 13, 7, 0.7));
+  box-shadow: inset 0 1px 0 rgba(255, 226, 168, 0.12);
+  color: #e6cf9f;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+.ach__reward.is-ok {
+  color: #b9f7d4;
+  border-color: rgba(138, 255, 193, 0.34);
+  background: linear-gradient(180deg, rgba(20, 56, 40, 0.7), rgba(8, 22, 16, 0.7));
+}
+
+
+/* ── 12. 今日灯芯：条件不该被挤成竖排的字 ─────────────────────────── */
+/* 值太长时 flex 会把两字标签压到 1 个字宽，读起来像竖排。
+   改成账本式的清单：标签固定一列，值占剩下的宽度，行与行之间一道虚线。 */
+.cx-rows span { flex: 0 0 auto; white-space: nowrap; }
+.panel--daily .cx-rows {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.panel--daily .cx-rows > div {
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 2px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px dashed rgba(198, 158, 98, 0.24);
+  background: none;
+  box-shadow: none;
+}
+.panel--daily .cx-rows span {
+  flex: 0 0 72px;
+  color: rgba(228, 210, 178, 0.62);
+  font-size: 11.5px;
+  letter-spacing: 2px;
+}
+.panel--daily .cx-rows b { flex: 1; text-align: left; line-height: 1.55; }
