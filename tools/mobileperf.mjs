@@ -100,35 +100,64 @@ const instrument = () => {
       };
     }
     window.__MP_OPS__ = () => counts;
+    // 逐个子系统的命令条数要靠"进出一趟数差值"，这里给出一个读当前总数的口子
+    window.__MP_OPS_TOTAL__ = () => counts.total;
   }
   const g = window.__WICKLIGHT__.game;
   const acc = {};
+  const opsAcc = {};
   const per = {};
   let on = false;
+  const opsTotal = () => (typeof window.__MP_OPS_TOTAL__ === 'function' ? window.__MP_OPS_TOTAL__() : 0);
   const wrap = (obj, key, name) => {
     const orig = obj[key];
     if (typeof orig !== 'function') return;
     obj[key] = function (...a) {
       if (!on) return orig.apply(this, a);
       const t = performance.now();
+      const o0 = opsTotal();
       const r = orig.apply(this, a);
+      opsAcc[name] = (opsAcc[name] || 0) + (opsTotal() - o0);
       acc[name] = (acc[name] || 0) + (performance.now() - t);
       return r;
     };
   };
   wrap(g, 'drawWorld', 'world');
+  // drawWorld 内部的每一块单独数一遍命令条数：真机上 CPU 侧开销正比于命令数，
+  // 光知道"world 占了 1500 条"不够，得知道是敌人还是地面陈设。
+  wrap(g, 'drawFloor', 'floor');
+  wrap(g, 'drawDecals', 'decals');
+  wrap(g, 'drawGrounds', 'grounds');
+  wrap(g, 'drawHazards', 'hazards');
+  wrap(g, 'drawShrines', 'shrines');
+  wrap(g, 'drawPyres', 'pyres');
+  wrap(g, 'drawArcs', 'arcs');
+  wrap(g, 'drawBeams', 'beams');
+  for (const [obj, key, name] of [
+    [g.pickups, 'draw', 'pickups'],
+    [g.projectiles, 'draw', 'projectiles'],
+    [g.enemies, 'draw', 'enemies'],
+    [g.player, 'draw', 'player'],
+    [g.particles, 'draw', 'particles'],
+    [g.floaters, 'draw', 'floaters'],
+  ]) {
+    wrap(obj, key, name);
+  }
   wrap(g, 'drawPyreGlow', 'pyreGlow');
   wrap(g, 'drawFrostHaze', 'frost');
   wrap(g, 'drawTargetPointers', 'pointers');
   wrap(g.light, 'render', 'light');
-  wrap(g.postfx, 'applyBloom', 'bloom');
-  wrap(g.postfx, 'applyGrade', 'grade');
+  wrap(g.postfx, 'applyGlow', 'glow');
   wrap(g.postfx, 'applyMain', 'post');
   wrap(g.hud, 'update', 'hud');
 
   for (const kill of (window.__MP_KILL__ || [])) {
-    if (kill === 'bloom') g.postfx.applyBloom = () => {};
-    if (kill === 'grade') g.postfx.applyGrade = () => {};
+    // 泛光与暖光现在合成一趟（applyGlow），消融要分开掐：bloom 只掐泛光源，grade 只掐暖光
+    if (kill === 'bloom') g.postfx.bloomSource = () => null;
+    if (kill === 'grade') {
+      const orig = g.postfx.applyGlow.bind(g.postfx);
+      g.postfx.applyGlow = (c, w, h) => orig(c, w, h, null);
+    }
     if (kill === 'shade') g.postfx.applyMain = () => {};
     if (kill === 'light') g.light.render = () => {};
     // 光照贴图改回全分辨率：量"半分辨率省下多少"，而不是把光照整个关掉
@@ -182,6 +211,7 @@ const instrument = () => {
     start() { for (const k of Object.keys(acc)) delete acc[k]; on = true; },
     stop() { on = false; },
     frame() { const c = { ...acc }; for (const k of Object.keys(acc)) delete acc[k]; return c; },
+    ops() { const c = { ...opsAcc }; for (const k of Object.keys(opsAcc)) delete opsAcc[k]; return c; },
     info() {
       const r = g.renderer;
       return {
@@ -268,7 +298,16 @@ try {
     const g = window.__WICKLIGHT__.game;
     g.settings.data.quality = q;
     g.settings.data.adaptive = ad;
-    g.newRun('warden', 'nightmare', true);
+    // 钉死种子：两次测量的地图、刷怪序列、悬赏都一样，帧时间才有可比性
+    // （否则每次跑都是一张新地图 / 一波新怪，噪声比要优化的那几毫秒还大）。
+    g.newRun('warden', 'nightmare', true, {
+      key: 'perf',
+      seed: 20260214,
+      lantern: 'warden',
+      difficulty: 'nightmare',
+      curses: [],
+      bounties: [],
+    });
     g.director.wave = wave;
     g.player.stats.maxHp = 1e7;
     g.player.hp = 1e7;
@@ -294,6 +333,7 @@ try {
     const g = window.__WICKLIGHT__.game;
     const dts = [];
     const sums = {};
+    const opsSums = {};
     let last = performance.now();
     MP.start();
     const t0 = performance.now();
@@ -304,6 +344,8 @@ try {
         last = now;
         const f = MP.frame();
         for (const k of Object.keys(f)) sums[k] = (sums[k] || 0) + f[k];
+        const o = MP.ops();
+        for (const k of Object.keys(o)) opsSums[k] = (opsSums[k] || 0) + o[k];
         if (now - t0 < soak * 1000) requestAnimationFrame(tick);
         else resolve();
       };
@@ -325,6 +367,7 @@ try {
       max: +sorted[n - 1].toFixed(2),
       fps: Math.round(1000 / avg(body)),
       stages,
+      stageOps: Object.fromEntries(Object.entries(opsSums).map(([k, v]) => [k, +(v / n).toFixed(0)])),
       info: MP.info(),
     };
   }, SOAK);
@@ -347,7 +390,19 @@ try {
     );
   }
   const st = out.stages;
-  const known = ['world', 'light', 'bloom', 'grade', 'post', 'hud', 'pyreGlow', 'frost', 'pointers'];
+  const known = ['world', 'light', 'glow', 'post', 'hud', 'pyreGlow', 'frost', 'pointers'];
+  const so = out.stageOps || {};
+  const breakOut = ['floor', 'decals', 'grounds', 'hazards', 'shrines', 'pyres', 'pickups', 'projectiles', 'enemies', 'player', 'arcs', 'beams', 'particles', 'floaters'];
+  if (so.world) {
+    const listed = breakOut.map((k) => [k, so[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    console.log(`\nworld 的 ${so.world} 条命令拆开（条/帧）：`);
+    for (const [k, v] of listed) {
+      const bar = '█'.repeat(Math.min(40, Math.round(v / 25)));
+      console.log(`  ${k.padEnd(12)} ${String(v).padStart(5)}  ${bar}`);
+    }
+    const rest = so.world - listed.reduce((a, [, v]) => a + v, 0);
+    console.log(`  ${'（合批/其它）'.padEnd(10)} ${String(rest).padStart(5)}`);
+  }
   const sum = known.reduce((a, k) => a + (st[k] || 0), 0);
   console.log(`\n帧数 ${out.frames} · 平均 ${out.avg}ms (${out.fps}fps) · p50 ${out.p50} · p95 ${out.p95} · 最慢 ${out.max}`);
   console.log(`画面 ${out.info.canvas} (${out.info.mp}MPx) dpr ${out.info.dpr} scale ${out.info.scale}`);

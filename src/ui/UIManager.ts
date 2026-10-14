@@ -12,6 +12,8 @@ import { buildDailyPlan, dailyLabel } from '../systems/DailySystem';
 import { BOUNTY_MAP } from '../data/bounties';
 import { CURSE_MAP } from '../data/curses';
 import type { Game, GameState, UIHost } from '../core/Game';
+import { haptic, hapticsAvailable } from '../core/Haptics';
+import { isHandheld } from '../core/Perf';
 import type { Difficulty, MetaNodeDef, UpgradeOffer } from '../types';
 
 export class UIManager implements UIHost {
@@ -991,6 +993,8 @@ export class UIManager implements UIHost {
 
   private settings(): void {
     const s = this.game.settings.data;
+    // 只有"掌上设备 + 浏览器支持震动"才显示触感开关，桌面上多一行没意义
+    const showHaptics = hapticsAvailable() && isHandheld();
     this.show(`
       <div class="panel panel--small panel--board">
         <div class="panel__title">设置</div>
@@ -1006,6 +1010,10 @@ export class UIManager implements UIHost {
           <label>动态分辨率</label>
           <button class="toggle ${s.adaptive ? 'is-on' : ''}" data-toggle="adaptive">${s.adaptive ? '开' : '关'}</button>
         </div>
+        ${showHaptics ? `<div class="setting setting--row">
+          <label>触感反馈</label>
+          <button class="toggle ${s.vibrate !== false ? 'is-on' : ''}" data-toggle="vibrate">${s.vibrate !== false ? '开' : '关'}</button>
+        </div>` : ''}
         <div class="setting setting--row">
           <label>画质</label>
           <div class="seg">
@@ -1023,6 +1031,13 @@ export class UIManager implements UIHost {
         const b = input.nextElementSibling as HTMLElement;
         b.textContent = `${Math.round(Number(input.value) * 100)}%`;
       });
+    });
+    this.on('[data-toggle="vibrate"]', (el) => {
+      const v = this.game.settings.data.vibrate === false;
+      this.game.settings.set('vibrate', v);
+      el.classList.toggle('is-on', v);
+      el.textContent = v ? '开' : '关';
+      if (v) haptic(14);
     });
     this.on('[data-toggle="adaptive"]', (el) => {
       const v = !this.game.settings.data.adaptive;

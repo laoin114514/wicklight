@@ -15,6 +15,7 @@ export const defaultSettings: SettingsData = {
   quality: 'high',
   showFps: false,
   bloom: true,
+  vibrate: true,
 };
 
 export function defaultSave(): SaveData {

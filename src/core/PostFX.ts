@@ -1,6 +1,9 @@
 import type { Settings } from './Settings';
 import type { PerfProfile } from './Perf';
 
+/** 单层泛光整屏叠加用的 alpha（叠两层那条路是 1 + 0.28）。 */
+const BLOOM_ADD_ALPHA = 0.78;
+
 interface Band {
   y: number;
   h: number;
@@ -13,15 +16,6 @@ export class PostFX {
   private vh = 0;
   private shade: HTMLCanvasElement | null = null;
   private sizeKey = '';
-  private gradeCache: {
-    ctx: CanvasRenderingContext2D;
-    px: number;
-    py: number;
-    w: number;
-    h: number;
-    strength: number;
-    grad: CanvasGradient;
-  } | null = null;
   private bands: Band[] = [];
   private grainSeed = 0;
   private scanCanvas: HTMLCanvasElement | null = null;
@@ -118,6 +112,9 @@ export class PostFX {
     b.drawImage(this.bloomA, 0, 0, bw, bh, 0, 0, bw, bh);
     b.globalCompositeOperation = 'multiply';
     b.drawImage(this.bloomA, 0, 0, bw, bh, 0, 0, bw, bh);
+    // 自乘完把状态复位：接着 applyGlow 可能还要往这张小图上叠暖光（加法）
+    b.globalCompositeOperation = 'lighter';
+    b.globalAlpha = 1;
     return { bw, bh };
   }
 
@@ -134,7 +131,7 @@ export class PostFX {
       // 直接把它放大叠回主画布，省一次整块写入 + 一次整块读取（手机上这两下都在帧预算里）。
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.78;
+      ctx.globalAlpha = BLOOM_ADD_ALPHA;
       ctx.drawImage(b, -w * 0.015, -h * 0.015, w * 1.03, h * 1.03);
       ctx.restore();
       return;
@@ -190,29 +187,70 @@ export class PostFX {
     ctx.restore();
   }
 
+  /**
+   * 泛光 + 暖色分级一起做。
+   *
+   * 两者都是**加法**叠加，而加法可结合：先在 1/6 分辨率的泛光小图上把暖光也画进去，
+   * 再整屏叠一次 —— 于是整屏的"读改写"少一次。手机横屏实测这一次就是 4~6ms，
+   * 比泛光本身还贵（暖光那一层全屏 5% 的橙光，代价几乎全在混合，不在渐变求值）。
+   * 只在**单层叠加**（手机档）时这么做：叠两层那条路有两次不同 alpha 的加法，
+   * 暖光会被加两遍，颜色就不对了。
+   */
+  applyGlow(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    grade: { px: number; py: number; strength: number } | null,
+  ): void {
+    const g = grade && grade.strength > 0 ? grade : null;
+    const enabled = this.bloomPasses > 0 && this.settings.data.bloom;
+    const src = enabled ? this.bloomSource(ctx, w, h) : null;
+    if (!src) {
+      if (g) this.applyGrade(ctx, w, h, g.px, g.py, g.strength);
+      return;
+    }
+    if (g && this.bloomPasses <= 1) this.paintGrade(this.bloomBCtx, src.bw, src.bh, w, h, g);
+    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses);
+  }
+
+  /**
+   * 把暖光画进泛光小图。小图是 bw×bh，坐标整体缩一下就行；
+   * alpha 要先除以上面那次整屏叠加的 {BLOOM_ADD_ALPHA}——暖光被"叠回来"时会乘上它，
+   * 预除之后最终加到屏幕上的量与原实现逐项相等。
+   * 5% 的柔光放大 6 倍看不出差别（同一页里逐像素比对：均值 0.13/255、最大 2）。
+   */
+  private paintGrade(
+    bctx: CanvasRenderingContext2D | null,
+    bw: number,
+    bh: number,
+    w: number,
+    h: number,
+    g: { px: number; py: number; strength: number },
+  ): void {
+    if (!bctx) return;
+    const sx = bw / w;
+    const sy = bh / h;
+    const r = Math.min(w, h) * 0.64 * sx;
+    const k = (1 / BLOOM_ADD_ALPHA) * g.strength;
+    bctx.save();
+    bctx.globalCompositeOperation = 'lighter';
+    const grad = bctx.createRadialGradient(g.px * sx, g.py * sy, 0, g.px * sx, g.py * sy, r);
+    grad.addColorStop(0, `rgba(255,174,96,${Math.min(1, 0.05 * k).toFixed(4)})`);
+    grad.addColorStop(0.45, `rgba(255,138,62,${Math.min(1, 0.018 * k).toFixed(4)})`);
+    grad.addColorStop(1, 'rgba(255,120,40,0)');
+    bctx.fillStyle = grad;
+    bctx.fillRect(0, 0, bw, bh);
+    bctx.restore();
+  }
+
   /** 暖色分级：在灯火最亮处叠加一层很轻的橙光，让画面"暖",暗部相对偏冷。 */
   applyGrade(ctx: CanvasRenderingContext2D, w: number, h: number, px: number, py: number, strength = 1): void {
     if (strength <= 0) return;
-    const cached = this.gradeCache;
-    let g: CanvasGradient;
-    if (
-      cached &&
-      cached.ctx === ctx &&
-      cached.px === px &&
-      cached.py === py &&
-      cached.w === w &&
-      cached.h === h &&
-      cached.strength === strength
-    ) {
-      g = cached.grad;
-    } else {
-      const r = Math.min(w, h) * 0.64;
-      g = ctx.createRadialGradient(px, py, 0, px, py, r);
-      g.addColorStop(0, `rgba(255,174,96,${(0.05 * strength).toFixed(3)})`);
-      g.addColorStop(0.45, `rgba(255,138,62,${(0.018 * strength).toFixed(3)})`);
-      g.addColorStop(1, 'rgba(255,120,40,0)');
-      this.gradeCache = { ctx, px, py, w, h, strength, grad: g };
-    }
+    const r = Math.min(w, h) * 0.64;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, `rgba(255,174,96,${(0.05 * strength).toFixed(3)})`);
+    g.addColorStop(0.45, `rgba(255,138,62,${(0.018 * strength).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(255,120,40,0)');
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = g;

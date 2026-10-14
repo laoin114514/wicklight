@@ -1182,6 +1182,85 @@ async function main() {
   expect(resumed.state === 'playing', '点了继续就接着打', JSON.stringify(resumed));
   expect(resumed.wake === true, '打起来要申请屏幕常亮', JSON.stringify(resumed));
 
+  // 摇杆死区：手指按在中心附近的抖动不该让角色慢慢漂；推开要有输入；松手要归零
+  const stickFeel = await mobile.evaluate(() => {
+    const stick = document.getElementById('touch-stick');
+    const base = stick.querySelector('.touch-stick__base') || stick;
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const fire = (type, x, y) => {
+      const t = new Touch({ identifier: 7, target: stick, clientX: x, clientY: y });
+      const empty = type === 'touchend' || type === 'touchcancel';
+      stick.dispatchEvent(
+        new TouchEvent(type, {
+          touches: empty ? [] : [t],
+          targetTouches: empty ? [] : [t],
+          changedTouches: [t],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+    const ctl = window.__WICKLIGHT__.touch;
+    fire('touchstart', cx + 4, cy + 3);
+    const jitter = +Math.hypot(ctl.moveX, ctl.moveY).toFixed(3);
+    fire('touchmove', cx + 40, cy + 6);
+    const pushed = +Math.hypot(ctl.moveX, ctl.moveY).toFixed(3);
+    fire('touchend', cx + 40, cy + 6);
+    const released = +Math.hypot(ctl.moveX, ctl.moveY).toFixed(3);
+    return { jitter, pushed, released };
+  });
+  expect(stickFeel.jitter === 0, '摇杆死区：手指按在中间不产生移动', JSON.stringify(stickFeel));
+  expect(stickFeel.pushed > 0.3, '摇杆推开有输入（死区之外照常跟手）', JSON.stringify(stickFeel));
+  expect(stickFeel.released === 0, '摇杆松手立刻归零', JSON.stringify(stickFeel));
+
+  // 触屏按钮的 touchcancel：来电话 / 系统手势打断时不能卡在"按着"的状态
+  const cancelSafe = await mobile.evaluate(() => {
+    const btn = document.querySelector('[data-action="dash"]');
+    const ctl = window.__WICKLIGHT__.touch;
+    const t = new Touch({ identifier: 9, target: btn, clientX: 0, clientY: 0 });
+    const send = (type) =>
+      btn.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [t],
+          targetTouches: type === 'touchend' ? [] : [t],
+          changedTouches: [t],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    send('touchstart');
+    const down = ctl.dash;
+    send('touchcancel');
+    const afterCancel = ctl.dash;
+    send('touchstart');
+    send('touchend');
+    const afterEnd = ctl.dash;
+    return { down, afterCancel, afterEnd };
+  });
+  expect(cancelSafe.down === true, '按下冲刺按钮会进入"按着"状态', JSON.stringify(cancelSafe));
+  expect(cancelSafe.afterCancel === false, 'touchcancel（来电 / 系统手势）要松开冲刺，不能卡住', JSON.stringify(cancelSafe));
+  expect(cancelSafe.afterEnd === false, '抬起冲刺按钮要松开', JSON.stringify(cancelSafe));
+
+  // 手机上的设置面板多一项触感开关，点一下要真的翻转并存进设置
+  await mobile.evaluate(() => window.__WICKLIGHT__.game.togglePause());
+  await sleep(320);
+  await mobile.click('[data-act="settings"]');
+  await sleep(320);
+  const hapBefore = await mobile.evaluate(() => {
+    const el = document.querySelector('[data-toggle="vibrate"]');
+    return { has: !!el, text: el ? el.textContent.trim() : null, value: window.__WICKLIGHT__.game.settings.data.vibrate };
+  });
+  expect(hapBefore.has, '手机设置里有触感反馈开关', JSON.stringify(hapBefore));
+  await mobile.click('[data-toggle="vibrate"]');
+  await sleep(200);
+  const hapAfter = await mobile.evaluate(() => {
+    const el = document.querySelector('[data-toggle="vibrate"]');
+    return { text: el ? el.textContent.trim() : null, value: window.__WICKLIGHT__.game.settings.data.vibrate };
+  });
+  expect(hapAfter.value === !hapBefore.value && hapAfter.text !== hapBefore.text, '触感开关点得动、写得进设置', JSON.stringify({ hapBefore, hapAfter }));
+
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));
   expect(pageErrors.length === 0, '无未捕获异常', pageErrors.slice(0, 4).join(' | '));

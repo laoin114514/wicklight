@@ -291,6 +291,8 @@ export interface SettingsData {
   quality: 'low' | 'medium' | 'high';
   showFps: boolean;
   bloom: boolean;
+  /** 触感反馈（手机上的短震动）。老存档没有这一项，按"开"处理。 */
+  vibrate: boolean;
 }
 
 export interface InputState {

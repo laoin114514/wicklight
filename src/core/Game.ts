@@ -74,6 +74,9 @@ export interface ShrineOffer {
   color: string;
 }
 
+/** 地面网格的格距（世界单位）。 */
+const GRID_STEP = 150;
+
 const SHRINE_OFFERS: ShrineOffer[] = [
   { id: 'blood_pact', name: '血契', blurb: '生命上限 -20%，换取一件随机遗物。', icon: '🩸', color: '#ff4d6d' },
   { id: 'kindle', name: '燃薪', blurb: '伤害 +12%，但灯油消耗 +18%。', icon: '🔥', color: '#ff9d2e' },
@@ -2377,8 +2380,7 @@ export class Game {
     if (this.attract) {
       this.drawAttract(ctx, w, h, this.time);
       ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
-      this.postfx.applyGrade(ctx, w, h, w * 0.5, h * 0.72, 0.8);
-      this.postfx.applyBloom(ctx, w, h);
+      this.postfx.applyGlow(ctx, w, h, { px: w * 0.5, py: h * 0.72, strength: 0.8 });
       this.postfx.applyMain(ctx, w, h);
       if (this.screenFade > 0) {
         ctx.fillStyle = `rgba(2,3,6,${this.screenFade.toFixed(3)})`;
@@ -2396,9 +2398,8 @@ export class Game {
 
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
-    // 暖色分级：让灯火最亮的地方偏暖，暗部偏冷，画面立刻有"分级"而不是灰蒙蒙
-    this.postfx.applyGrade(ctx, w, h, this.renderer.width / 2, this.renderer.height / 2, 1);
-    this.postfx.applyBloom(ctx, w, h);
+    // 暖色分级 + 泛光：两件都是加法叠加，合成一趟做（手机上省一次整屏读改写）
+    this.postfx.applyGlow(ctx, w, h, { px: this.renderer.width / 2, py: this.renderer.height / 2, strength: 1 });
     this.postfx.applyMain(ctx, w, h);
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(255,242,214,${this.flash.toFixed(3)})`;
@@ -2830,23 +2831,22 @@ export class Game {
       }
     }
 
+    // 地面网格：横竖 ~36 条线。逐条 stroke 要 144 条画布命令，合成一条路径后只要 74 条，
+    // 而且像素结果逐位相同（同一条路径、同样的描边参数，光栅化出来的线段一模一样）。
     ctx.save();
     ctx.globalAlpha = 0.07;
     ctx.strokeStyle = theme.wall;
     ctx.lineWidth = 2;
-    const grid = 150;
-    for (let x = -lvl.halfW; x <= lvl.halfW; x += grid) {
-      ctx.beginPath();
+    ctx.beginPath();
+    for (let x = -lvl.halfW; x <= lvl.halfW; x += GRID_STEP) {
       ctx.moveTo(x, -lvl.halfH);
       ctx.lineTo(x, lvl.halfH);
-      ctx.stroke();
     }
-    for (let y = -lvl.halfH; y <= lvl.halfH; y += grid) {
-      ctx.beginPath();
+    for (let y = -lvl.halfH; y <= lvl.halfH; y += GRID_STEP) {
       ctx.moveTo(-lvl.halfW, y);
       ctx.lineTo(lvl.halfW, y);
-      ctx.stroke();
     }
+    ctx.stroke();
     ctx.restore();
 
     // 主题布景
@@ -2901,7 +2901,6 @@ export class Game {
 
   /** 烘焙好的静态地面层（渐变 + 贴图），按主题/尺寸缓存。 */
   private floorCache: { key: string; canvas: HTMLCanvasElement | null } | null = null;
-
   private floorLayer(theme: import('../types').StageTheme): HTMLCanvasElement | null {
     const lvl = this.level;
     const key = `${theme.id}|${lvl.halfW}x${lvl.halfH}`;
