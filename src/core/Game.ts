@@ -413,6 +413,10 @@ export class Game {
   vortexCount = 0;
   /** 本局一个漩涡里同时拽住过几只（结算与成就「一网打尽」看这个） */
   vortexBest = 0;
+  /** 收尾那一下拢住最多的一次（结算里"最狠的一网"） */
+  vortexCaught = 0;
+  /** 那一网打出的最高伤害（基础 + 每收到一只的奖励；结算里跟在「最狠的一网 n 只」后面） */
+  vortexPayoff = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -575,6 +579,8 @@ export class Game {
     this.vortexes.length = 0;
     this.vortexCount = 0;
     this.vortexBest = 0;
+    this.vortexCaught = 0;
+    this.vortexPayoff = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -2287,11 +2293,7 @@ export class Game {
       this.light.addLight(v.x, v.y, VORTEX.lightRadius, VORTEX.lightIntensity);
       this.light.addGlow(v.x, v.y, v.radius * 0.55, 0.2);
       // 同时拽住几只：首领不算（它站在那儿不是被卷进来的）
-      let held = 0;
-      this.enemies.forEach((e) => {
-        if (e.boss) return;
-        if ((e.x - v.x) ** 2 + (e.y - v.y) ** 2 <= v.radius * v.radius) held += 1;
-      });
+      const held = this.countHeld(v.x, v.y, v.radius);
       if (held > 0) {
         this.vortexBest = Math.max(this.vortexBest, held);
         if (held >= VORTEX.crowd) this.achievements.unlock('vortex_crowd');
@@ -2300,19 +2302,67 @@ export class Game {
       if (v.drag > 0) this.dragEnemyShots(v, dt);
       if (v.life > 0) continue;
       // 收尾：缩成一下炸。**没有击退**——它的用处是把人拢在一块儿，最后把人推开就白拢了。
+      // 伤害随"这一下真的打到几只"涨：数的是**收尾圈里**的那些（不是吸力圈里）——
+      // 圈边那些还在往外挣的、够不着吸力中心的，本来就不会被这一下打到，不该算进账里。
+      // 它们已经被拽到中心、正好吃满伤害（`blast` 的边缘衰减按 d/radius 算，中心是 1 倍）。
+      const caught = this.countHeld(v.x, v.y, v.radius * VORTEX.burst);
+      const dmg = v.damage + VORTEX.reward * caught;
+      // 「收网」看的是**收到几只**，不是打出多少点：伤害会随等级（24→68）和灯火（0.65~1.35 倍）飘，
+      // 同一个操作能差两倍；只数才不会（data/vortex.ts 的 haul 那一段写了为什么）。
+      const netted = caught >= VORTEX.haul;
+      this.vortexCaught = Math.max(this.vortexCaught, caught);
+      this.vortexPayoff = Math.max(this.vortexPayoff, Math.round(dmg));
+      if (netted) this.achievements.unlock('vortex_payoff');
       this.vortexes.splice(i, 1);
-      this.blast(v.x, v.y, v.radius * VORTEX.burst, v.damage, {
+      this.blast(v.x, v.y, v.radius * VORTEX.burst, dmg, {
         knockback: 0,
         burn: v.burn,
         ring: '#8fb8ff',
         spark: '#dcefff',
-        sparkCount: 20,
+        sparkCount: 20 + caught * 3,
         // 冷色的武器不该在地上留一道烧焦：这里只留一圈被"抽过风"的冷痕
         decal: 'rgba(16,22,44,0.5)',
       });
-      this.audio.play('vortex_burst');
+      // 拢得多，那一下就越大越响：多一圈外环、更重的屏震、头顶上一个数。
+      // 为什么要做大：这一条改动本身是"拢得好有回报"，可回报要是看不见，玩家就学不会挑时机。
+      if (caught >= 3) {
+        // 那圈收尾的环按结果上色：收成了是金的，没收成还是原来那圈青的（同一个东西的两种状态，
+        // 不是多炸一圈——多一圈就会和升级那圈金环撞脸，也把画面弄乱）。
+        this.particles.shockwave(
+          v.x,
+          v.y,
+          netted ? '#ffd24e' : '#a8d8ff',
+          v.radius * VORTEX.burst * (1.6 + Math.min(caught, 12) * 0.06) * (netted ? 1.15 : 1),
+          netted ? 0.66 : 0.55,
+        );
+        // 收成那一行用**浅金**写在金环上面：同一支金色会和环糊在一起，浅一号才在环上读得出来。
+        this.floaters.label(v.x, v.y - 34, `收网 ${caught} 只 · ${Math.round(dmg)}`, netted ? '#ffe9a8' : '#cfe8ff', netted ? 19 : 17);
+        this.camera.addTrauma(Math.min(0.42, 0.1 + caught * 0.03), this.settings.data.shake * this.settings.motionScale);
+      }
+      // 收成的那一下再补一次更重的屏震：门槛是"一次 10 只"，而 9 只和 10 只在画面上本来一模一样——
+      // 玩家只会看到一串数，学不会自己这一网离收成还差多远。成 / 不成两种颜色 + 一次更沉的手感 +
+      // 一层往上走的音（`vortex_net`），那串飘字才变成一个能读懂的量表。
+      // 这里刻意**不加**第二个字：头顶本来就飘着"收网 n 只"，再叠一个"收网"既挤又重，
+      // 成就条自己会弹出来报名字。
+      if (netted) {
+        this.camera.addTrauma(0.2, this.settings.data.shake * this.settings.motionScale);
+      }
+      this.audio.play(netted ? 'vortex_net' : 'vortex_burst');
       this.camera.addTrauma(0.16, this.settings.data.shake * this.settings.motionScale);
     }
+  }
+
+  /**
+   * 圈里站着几只（首领不算：它站在那儿不是被卷进来的，也不该为"收网"的伤害加成出力）。
+   * 吸入圈和收尾圈共用这一个判据，所以"拽住几只"和"这一下打到几只"不会两套口径。
+   */
+  private countHeld(x: number, y: number, radius: number): number {
+    let n = 0;
+    this.enemies.forEach((e) => {
+      if (e.boss) return;
+      if ((e.x - x) ** 2 + (e.y - y) ** 2 <= radius * radius) n += 1;
+    });
+    return n;
   }
 
   /**
@@ -2352,6 +2402,9 @@ export class Game {
    *
    * 也因此 `VORTEX.pull` 是"往里拽的速度"（px/s），它和怪自己的速度在同一个量纲上打架：
    * 石守 34、影蛭 68、灯蛾 96、疾影 132——所以靠外一点的疾影挣得开，石守只能被拖着走。
+   *
+   * 衰减用 `pullShape` 而不是线性（见 data/vortex.ts）：线性衰减下画出来的那道边界是空头承诺，
+   * 圈边上的怪一步都不动；垫起来之后"站在线里的都会被收走"才是真的。
    */
   private applyVortexPull(e: Enemy): void {
     if (!this.vortexes.length) return;
@@ -2361,7 +2414,7 @@ export class Game {
       const d = Math.hypot(dx, dy);
       if (d > v.radius || d < 0.5) continue;
       const resist = e.boss ? VORTEX.bossPull : e.def.elite ? VORTEX.elitePull : 1;
-      const force = VORTEX.pull * (1 - d / v.radius) * resist;
+      const force = VORTEX.pull * (1 - d / v.radius) ** VORTEX.pullShape * resist;
       e.vx += (dx / d) * force;
       e.vy += (dy / d) * force;
     }

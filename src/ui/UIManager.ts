@@ -570,6 +570,7 @@ export class UIManager implements UIHost {
         ${g.mineMothHits > 0 ? `<div><span>灯上的蛾</span><b>${g.mineMothHits} 只</b></div>` : ''}
         ${g.vortexCount > 0 ? `<div><span>旋灯</span><b>${g.vortexCount} 盏</b></div>` : ''}
         ${g.vortexBest > 1 ? `<div><span>一次拽住</span><b>${g.vortexBest} 只</b></div>` : ''}
+        ${g.vortexCaught >= 3 ? `<div><span>最狠的一网</span><b>${g.vortexCaught} 只 · ${g.vortexPayoff}</b></div>` : ''}
         ${g.mineSnuffed > 0 ? `<div><span>被吹灭</span><b>${g.mineSnuffed} 颗</b></div>` : ''}
         ${g.grazeCount > 0 ? `<div><span>掠影</span><b>${g.grazeCount} 次</b></div>` : ''}
         ${g.player.blazeCount > 0 ? `<div><span>灯焰高涨</span><b>${g.player.blazeCount} 次</b></div>` : ''}

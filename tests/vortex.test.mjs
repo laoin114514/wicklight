@@ -58,6 +58,22 @@ function statue(game, x, y, id = 'shade') {
   return e;
 }
 
+/** 把"飘字"和"环"记下来：收成那一下会多一个字、多一圈金环，这两样得能被测到。 */
+function spy(game) {
+  const seen = { labels: [], rings: [] };
+  const fl = game.floaters.label.bind(game.floaters);
+  game.floaters.label = (x, y, text, color, size) => {
+    seen.labels.push({ text, color, size });
+    return fl(x, y, text, color, size);
+  };
+  const sw = game.particles.shockwave.bind(game.particles);
+  game.particles.shockwave = (x, y, color, size, life) => {
+    seen.rings.push({ color, size });
+    return sw(x, y, color, size, life);
+  };
+  return seen;
+}
+
 const run = (game, frames, dt = 1 / 60) => {
   for (let i = 0; i < frames; i += 1) {
     game.setInput(0, 0, false, false);
@@ -142,8 +158,11 @@ test('旋灯：转完缩成一下炸，而且不把人推开', async (t) => {
   const VORTEX = VORTEX_OF();
   game.placeVortex(0, 0, 40, 120, 0, 0);
   const inside = statue(game, 40, 0);
-  // 在吸入半径（120）里，但在收缩爆炸之外（120 × 0.72 = 86.4，再加怪自己那圈 13 也够不着 110）
-  const edge = statue(game, 110, 0);
+  // 挣脱的那只：疾影是**走着**的（玩家摆在 700px 外，所以它本来就朝外走）——
+  // 吸力在圈边拉不住它，收尾自然也够不着它。这一条钉的是这一版的新口径：**拽不动的，就打不着**。
+  const runner = game.enemies.spawn('skitter', 108, 0, 1, 0);
+  runner.hp = 1e6;
+  runner.maxHp = 1e6;
   const outside = statue(game, 300, 0);
   // 先让它真的被拽进去一段（这 10 帧里吸力在工作），再让它到点——
   // 不先跑这几帧的话"没被推开"就成了废话：它本来就一步没动。
@@ -154,7 +173,7 @@ test('旋灯：转完缩成一下炸，而且不把人推开', async (t) => {
   run(game, 2);
   assert.equal(game.vortexes.length, 0, '到点就收（漩涡从场上消失）');
   assert.ok(inside.hp < 1e6, `圈里的吃到那一下（hp=${inside.hp}）`);
-  assert.equal(edge.hp, 1e6, '收缩半径外的没吃到');
+  assert.equal(runner.hp, 1e6, '挣脱出去的那只没吃到（它一直朝外走，吸力拉不住）');
   assert.equal(outside.hp, 1e6, '远处那只更没吃到');
   // 没有击退：它被拽进来之后不该又被推出去（拢起来是为了让下一发打得疼）
   const after = Math.hypot(inside.x, inside.y);
@@ -163,7 +182,83 @@ test('旋灯：转完缩成一下炸，而且不把人推开', async (t) => {
   assert.ok(game.ui.statsBlock().includes('旋灯'), '结算面板里应写出转了几盏');
   assert.ok(game.ui.statsBlock().includes('一次拽住'), '结算面板里应写出最多一次拽住几只');
   assert.equal(game.vortexBest, 2, `这一下同时拽住 2 只（实际 ${game.vortexBest}）`);
+  // 但真正吃到收尾的只有 1 只：数的是**收尾圈里**的，不是吸入圈里的——
+  // 圈边上还在往外挣的那只不该算进"收网"的账里
+  assert.equal(game.vortexCaught, 1, `真正被这一下打到的只有 1 只（实际 ${game.vortexCaught}）`);
+  assert.equal(game.vortexPayoff, 40 + VORTEX.reward, `伤害 = 基础 + 打到的那几只（实际 ${game.vortexPayoff}）`);
   assert.ok(VORTEX.life > 0.5, '拽的时长该够把一圈人收拢，不该是一闪而过');
+});
+
+test('旋灯：收网——打到的每一只都让收尾更疼', async (t) => {
+  const game = await open(t, 'payoff');
+  const VORTEX = VORTEX_OF();
+  assert.ok(VORTEX.reward > 0, '每多打到一只，收尾就该加一笔');
+  game.placeVortex(0, 0, 40, 120, 0, 0);
+  for (let i = 0; i < 5; i += 1) statue(game, 24 + i * 9, 0);
+  run(game, 12); // 先让吸力把它们拽到中心——"拢"这一步是这一下伤害的来源
+  game.vortexes[0].life = 0.01;
+  run(game, 2);
+  assert.equal(game.vortexCaught, 5, `这一下打到 5 只（实际 ${game.vortexCaught}）`);
+  assert.equal(game.vortexPayoff, 40 + VORTEX.reward * 5, `伤害 = 基础 + 5 × 每只的奖励（实际 ${game.vortexPayoff}）`);
+  assert.ok(game.ui.statsBlock().includes('最狠的一网'), '结算面板里要写出最狠的一网');
+
+  // 一只都没拢到：只有基础伤害，而且够不到「收网」
+  const lone = await open(t, 'payoff-none');
+  lone.placeVortex(0, 0, 40, 120, 0, 0);
+  lone.vortexes[0].life = 0.01;
+  run(lone, 2);
+  assert.equal(lone.vortexCaught, 0, '一个人都没拢到');
+  assert.equal(lone.vortexPayoff, 40, `那就只有基础伤害（实际 ${lone.vortexPayoff}）`);
+  assert.equal(lone.save.achievements.includes('vortex_payoff'), false, '一只都没拢到，当然够不到「收网」');
+});
+
+test('旋灯：一次收网打到 10 只解「收网」（数的是只数，不是伤害）', async (t) => {
+  const game = await open(t, 'net');
+  const VORTEX = VORTEX_OF();
+  assert.equal(game.save.achievements.includes('vortex_payoff'), false, '开局不该有这个成就');
+  // 门槛数的是"收尾圈里按住了几只"：伤害那条路走不通——它随等级（基础 24→68）和灯火
+  // （0.65~1.35 倍）飘，同一个操作能差两倍；而且数伤害的话进化那把（基础 166）空放都能白送。
+  assert.ok(Number.isInteger(VORTEX.haul), `门槛该是个整只数（实际 ${VORTEX.haul}）`);
+  assert.ok(VORTEX.haul > VORTEX.crowd, `该比「一网打尽」那一档（${VORTEX.crowd} 只）更高：前者数吸力圈，后者数更小的收尾圈`);
+  const seen = spy(game);
+  // 十只摆在**收尾圈外、吸入圈里**——这一下要真收到它们，靠的就是吸力把它们拽进来
+  const n = VORTEX.haul;
+  const R = 150;
+  game.placeVortex(0, 0, 68, R, 0, 0);
+  for (let i = 0; i < n; i += 1) {
+    const a = (i / n) * Math.PI * 2;
+    statue(game, Math.cos(a) * 140, Math.sin(a) * 140);
+  }
+  run(game, 4);
+  assert.equal(game.vortexCaught, 0, `刚扔下去的时候一只都不在收尾圈里（收尾圈 ${(R * VORTEX.burst).toFixed(0)}px、它们摆在 140px 上）`);
+  run(game, 74); // 拽满这一盏的寿命
+  assert.equal(game.vortexes.length, 0, '到点就收');
+  assert.equal(game.vortexCaught, n, `吸力把它们全拽进来了（实际 ${game.vortexCaught} 只）`);
+  assert.equal(game.vortexPayoff, 68 + VORTEX.reward * n, `收尾伤害 = 基础 + 每只的奖励（实际 ${game.vortexPayoff}）`);
+  assert.ok(game.save.achievements.includes('vortex_payoff'), '这一网收到 10 只，该解锁「收网」');
+  assert.equal(game.mineCount, 0, '这一段没碰过伏灯');
+  // 收成那一下在画面上要看得出来：那一串字变金变大、地上多一圈金环
+  const netLabel = seen.labels.find((l) => l.text.startsWith('收网 ') && l.text.includes('只'));
+  assert.ok(netLabel, `头顶上飘出"按住了几只"（${seen.labels.map((l) => l.text).join(' / ')}）`);
+  assert.equal(netLabel.color, '#ffe9a8', `收成的那一串字该是金色的（实际 ${netLabel.color}）`);
+  assert.ok(netLabel.size > 17, `收成的那一串字该更大一号（实际 ${netLabel.size}）`);
+  assert.ok(seen.rings.some((r) => r.color === '#ffd24e'), '收成那一下多一圈金环');
+
+  // 差一只就不是收网：10 只的门槛，9 只不该解锁（也不能像数伤害那样白送）
+  const shy = await open(t, 'net-shy');
+  const shySeen = spy(shy);
+  shy.placeVortex(0, 0, 68, R, 0, 0);
+  for (let i = 0; i < n - 1; i += 1) {
+    const a = (i / (n - 1)) * Math.PI * 2;
+    statue(shy, Math.cos(a) * 140, Math.sin(a) * 140);
+  }
+  run(shy, 78);
+  assert.equal(shy.vortexCaught, n - 1, `这一网只收到 ${shy.vortexCaught} 只`);
+  assert.equal(shy.save.achievements.includes('vortex_payoff'), false, '差一只就不算收网');
+  assert.ok(!shySeen.rings.some((r) => r.color === '#ffd24e'), '没到门槛就不该有金环');
+  const shyLabel = shySeen.labels.find((l) => l.text.startsWith('收网 '));
+  assert.ok(shyLabel && shyLabel.color === '#cfe8ff', `没到门槛的那一串还是原来那个颜色（实际 ${shyLabel?.color}）`);
+  assert.ok(shyLabel.size === 17, `也没变大（实际 ${shyLabel.size}）`);
 });
 
 test('旋灯：进化那把连弹幕一起卷（卷到中心就吞掉）', async (t) => {

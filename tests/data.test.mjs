@@ -82,6 +82,13 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(vortex.crowd >= 4, '「一网打尽」的门槛不该同时拽两三只就够');
   assert.ok(vortex.life > 0.5 && vortex.life < 3, '拽的时长该够把一圈人收拢，又不至于把人按在原地');
   assert.ok(vortex.lightRadius > 0 && vortex.lightIntensity > 0, '漩涡中心那盏灯要真的照亮周围');
+  assert.ok(vortex.pullShape > 0 && vortex.pullShape < 1, '吸力要往外侧垫起来（1 = 线性，圈边会变成空头承诺：看着进去了，其实一步不动）');
+  assert.ok(vortex.reward > 0, '收尾伤害要随"这一下打到几只"涨，不然"拢"这件事在它自己身上没有账');
+  assert.ok(
+    Number.isInteger(vortex.haul) && vortex.haul > vortex.crowd && vortex.haul <= 16,
+    `「收网」的门槛要是比「一网打尽」更高的整只数（实际 ${vortex.haul}）`,
+  );
+  assert.ok(vortex.spin > 1, '旋臂转得起来才像"在吸"，不该是慢慢挪');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

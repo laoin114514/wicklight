@@ -827,11 +827,26 @@ async function main() {
       e.spawnTimer = 0;
       foes.push(e);
     }
-    const st = (window.__VORT__ = { foes, log: [], shot: null, center: null, frames: 0 });
+    const st = (window.__VORT__ = { foes, log: [], shot: null, center: null, base: 0, frames: 0, labels: [], rings: [] });
+    // 收成那一下会多飘一个字、多一圈金环：这两样也得在真浏览器里量一遍（不是只有单测）。
+    // 四只的场面收不成网——门槛是"一次 10 只"，所以这儿应该一个字都不多。
+    const fl = g.floaters.label.bind(g.floaters);
+    g.floaters.label = (x, y, text, color, size) => {
+      st.labels.push({ text, color });
+      return fl(x, y, text, color, size);
+    };
+    const sw = g.particles.shockwave.bind(g.particles);
+    g.particles.shockwave = (x, y, color, size, life) => {
+      st.rings.push(color);
+      return sw(x, y, color, size, life);
+    };
     const step = () => {
       const gg = window.__WICKLIGHT__.game;
       const v = gg.vortexes[0];
-      if (v && !st.center) st.center = { x: v.x, y: v.y };
+      if (v && !st.center) {
+        st.center = { x: v.x, y: v.y };
+        st.base = v.damage; // 收尾伤害 = 这个数 + 每拢住一只的奖励（下面要对账）
+      }
       st.log.push({
         n: gg.vortexes.length,
         count: gg.vortexCount,
@@ -852,7 +867,21 @@ async function main() {
   const vort = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     const st = window.__VORT__;
-    return { log: st.log, center: st.center, shot: st.shot, left: g.vortexes.length, count: g.vortexCount, best: g.vortexBest };
+    return {
+      log: st.log,
+      center: st.center,
+      shot: st.shot,
+      base: st.base,
+      labels: st.labels,
+      rings: st.rings,
+      net: g.save.achievements.includes('vortex_payoff'),
+      left: g.vortexes.length,
+      count: g.vortexCount,
+      best: g.vortexBest,
+      caught: g.vortexCaught,
+      payoff: g.vortexPayoff,
+      reward: window.__WICKLIGHT__.data.vortex.reward,
+    };
   });
   const vLog = vort.log;
   expect(vort.count >= 1, '真开火路径真的扔出了一盏旋灯（走的 Player 那条分支，不是直接摆）', `vortexCount=${vort.count}`);
@@ -868,13 +897,37 @@ async function main() {
     `平均距离 ${spreadAtFire.toFixed(0)} → ${closest.toFixed(0)}px`,
   );
   expect(vort.best >= 3, '一个漩涡里同时拽住好几只（结算面板那个数真的会涨）', `一次拽住 ${vort.best} 只`);
+  // 收网：收尾那一下的伤害 = 基础 + 每打到一只加一笔。这是 v58 给这把武器补的"回报"——
+  // 拢得好不好，在它自己身上也有一笔账。
+  expect(vort.caught >= 3, '收尾真的把拢住的那几只一起打了（数的是收尾圈里的，不是吸入圈里的）', `这一下打到 ${vort.caught} 只`);
+  expect(
+    vort.payoff === Math.round(vort.base + vort.reward * vort.caught),
+    '收尾伤害对得上账（基础 + 每一只的奖励）',
+    `${vort.base} + ${vort.reward} × ${vort.caught} = ${vort.payoff}`,
+  );
+  // 「收网」数的是**只数**，不是伤害：伤害随等级和灯火飘（同一个操作能差两倍），只数才不会。
+  // 四只的场面离门槛（10 只）还远——所以这一局里飘字该是普通色、不该有金环、更不该解锁。
+  const catchLine = vort.labels.find((l) => l.text.startsWith('收网 ') && l.text.includes('只'));
+  expect(!!catchLine, '收网那一下头顶上飘出"按住了几只 · 伤害"', catchLine ? catchLine.text : vort.labels.map((l) => l.text).join(' / '));
+  expect(catchLine.color === '#cfe8ff', '四只还不够门槛，那串字还是原来那个颜色（金色是收成了才给的）', catchLine?.color ?? '');
+  expect(!vort.rings.includes('#ffd24e'), '没到门槛就不该有那一圈金环', vort.rings.join(' '));
+  expect(vort.net === false, '四只的场面收不成网（门槛是一次 10 只）');
+  const netRow = await page.evaluate(() => window.__WICKLIGHT__.game.ui.statsBlock());
+  expect(netRow.includes('最狠的一网'), '结算面板里写出了"最狠的一网"', netRow.includes('一次拽住') ? '一次拽住那行也在' : '');
   expect(vLog.some((r) => r.n === 0) || vort.left === 0, '转完那 1.2 秒它就收了（不是一直挂在地上）', `剩 ${vort.left} 盏`);
   const vortCodex = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
-    return { w: g.codex.entry('weapon:vortex')?.name ?? '', m: g.codex.entry('weapon:vortex_maelstrom')?.name ?? '', k: g.codex.has('mechanic', 'vortex') };
+    const mech = g.codex.entry('mechanic:vortex');
+    return {
+      w: g.codex.entry('weapon:vortex')?.name ?? '',
+      m: g.codex.entry('weapon:vortex_maelstrom')?.name ?? '',
+      k: g.codex.has('mechanic', 'vortex'),
+      rows: (mech?.rows ?? []).map((r) => r[0]).join('/'),
+    };
   });
   expect(vortCodex.w.includes('旋灯') && vortCodex.m.includes('漩涡'), '图鉴收录了旋灯与它的进化', JSON.stringify(vortCodex));
   expect(vortCodex.k, '扔出第一盏旋灯之后，图鉴「机制」章多出一条', JSON.stringify(vortCodex));
+  expect(vortCodex.rows.includes('收网'), '图鉴里写清了「收网」这一行（拢得多，那一下才够疼）', vortCodex.rows);
   if (vort.shot) {
     await writeFile(join(SHOTS, '03f-vortex.png'), Buffer.from(String(vort.shot).split(',')[1], 'base64'));
     ok('漩涡转到一半的那一帧存了下来', '03f-vortex.png');
