@@ -53,6 +53,7 @@ export type GameState =
   | 'paused'
   | 'loadout'
   | 'shop'
+  | 'curse'
   | 'shrine'
   | 'victory'
   | 'dead'
@@ -269,6 +270,10 @@ export class Game {
   flash = 0;
   /** 本关夜咒（风险 / 回报修正） */
   curse: CurseDef | null = null;
+  /** 下一关可选的三条夜咒（开战前由玩家自己挑一条） */
+  curseOffers: CurseDef[] = [];
+  /** 玩家挑好的那条，等 loadStage 时真正降临 */
+  private pendingCurse: CurseDef | null = null;
   private curseGoldMult = 1;
   private slowmoScale = 0.35;
   private frameCooldowns = { hurt: 0 };
@@ -547,7 +552,10 @@ export class Game {
     const pool = CURSES.filter((c) => !this.endless || c.id !== 'longnight');
     // 今日灯芯：夜咒由日期决定，而不是当场抽——这样大家的夜晚才是同一个
     const forced = this.dailyPlan && !this.endless ? this.dailyPlan.curses[index] : null;
-    const curse = (forced ? CURSE_MAP[forced] : null) ?? this.rng.pick(pool);
+    // 玩家在岔口挑好的那条优先；没挑过（测试直接调 loadStage）才现抽
+    const chosen = this.pendingCurse;
+    this.pendingCurse = null;
+    const curse = chosen ?? (forced ? CURSE_MAP[forced] : null) ?? this.rng.pick(pool);
     this.curse = curse;
     this.curseGoldMult = curse.goldMult;
     this.director.setCurse(curse.mods);
@@ -576,6 +584,44 @@ export class Game {
     this.state = 'playing';
     this.syncCodex();
     this.ui?.showScreen('playing');
+  }
+
+  /**
+   * 离开商店后的岔口：下一关的夜咒由玩家自己挑。
+   *
+   * 夜咒原本是"随机降临"的——难度确实变了，但玩家只能被动接受。
+   * 让它在三条里选一条，风险—回报就真的成了玩家的决定：
+   * 是拿「群潮」换 35% 金币，还是赌「深潜」那 45% 但摸黑走完全程。
+   * 今日灯芯的夜咒由日期定死（大家的夜晚要是同一个），不参与挑选。
+   */
+  private openCurseChoice(nextIndex: number): void {
+    const forced = this.dailyPlan ? this.dailyPlan.curses[nextIndex] : null;
+    if (forced) {
+      this.pendingCurse = CURSE_MAP[forced] ?? null;
+      this.continueStage();
+      return;
+    }
+    const pool = [...CURSES];
+    const offers: CurseDef[] = [];
+    for (let i = 0; i < 3 && pool.length; i += 1) {
+      const [pick] = pool.splice(Math.floor(this.rng.next() * pool.length), 1);
+      offers.push(pick);
+    }
+    // 按回报从轻到重排，取舍一眼看得出来
+    offers.sort((a, b) => a.goldMult - b.goldMult);
+    this.curseOffers = offers;
+    this.state = 'curse';
+    this.audio.setMood('calm');
+    this.ui?.showScreen('curse');
+  }
+
+  chooseCurse(id: string): void {
+    if (this.state !== 'curse') return;
+    const chosen = this.curseOffers.find((c) => c.id === id) ?? this.curseOffers[0] ?? null;
+    this.curseOffers = [];
+    this.pendingCurse = chosen;
+    this.audio.play('ui');
+    this.continueStage();
   }
 
   private finishCampaign(): void {
@@ -1902,7 +1948,11 @@ export class Game {
       this.ui?.showScreen('playing');
       return;
     }
-    this.continueStage();
+    if (this.stageIndex + 1 >= STAGES.length) {
+      this.continueStage();
+      return;
+    }
+    this.openCurseChoice(this.stageIndex + 1);
   }
 
   private handleDeath(): void {

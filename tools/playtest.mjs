@@ -538,19 +538,62 @@ async function main() {
   const forgeLayout = await page.evaluate(() => window.__PROBE__.layout('.forge'));
   expect(forgeLayout.issues.length === 0, '熔铸台在面板里没有溢出', forgeLayout.issues.join('; '));
   await page.click('[data-act="leave"]');
+  await sleep(400);
+
+  // ── 6c. 夜咒岔口：下一关的夜咒由玩家自己挑一条 ──
+  const curseChoice = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const cards = [...document.querySelectorAll('[data-curse]')];
+    const box = document.querySelector('.panel--curse');
+    return {
+      state: g.state,
+      ids: cards.map((c) => c.dataset.curse),
+      golds: cards.map((c) => c.querySelector('.curse-card__gold')?.textContent ?? ''),
+      rebate: [...g.curseOffers].map((c) => c.goldMult),
+      hasPanel: !!box,
+      w: box ? Math.round(box.getBoundingClientRect().width) : 0,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      bad: /undefined|NaN/.test(box ? box.textContent : ''),
+    };
+  });
+  expect(curseChoice.state === 'curse', '离开商店后进入夜咒岔口', curseChoice.state);
+  expect(
+    curseChoice.ids.length === 3 && new Set(curseChoice.ids).size === 3,
+    '夜咒岔口给出三条不同的夜咒',
+    curseChoice.ids.join(','),
+  );
+  expect(curseChoice.golds.every((t) => /金币 ×\d/.test(t)), '每条夜咒都标出金币回报', curseChoice.golds.join(' | '));
+  expect(
+    curseChoice.rebate.every((v, i, a) => i === 0 || a[i - 1] <= v),
+    '夜咒按回报从轻到重排',
+    curseChoice.rebate.join(','),
+  );
+  expect(
+    curseChoice.hasPanel && curseChoice.w > 0 && curseChoice.overflow <= 1 && !curseChoice.bad,
+    '夜咒岔口布局正常',
+    JSON.stringify(curseChoice),
+  );
+  await shot('07d-curse-choice');
+
+  // 挑回报最高的那一条，落地的夜咒必须就是它挑的
+  const picked = curseChoice.ids[curseChoice.ids.length - 1];
+  await page.click(`[data-curse="${picked}"]`);
   await sleep(900);
 
-  // 进入第二关后，HUD 应出现夜咒芯片（每关随机降临）
+  // 进入第二关后，HUD 应出现夜咒芯片，而且正是玩家挑的那条
   const curse = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     const el = document.querySelector('.hud__curse, .js-curse');
     return {
+      state: g.state,
       hasCurse: !!g.curse,
+      curseId: g.curse ? g.curse.id : null,
       curseName: g.curse ? g.curse.name : null,
       chipVisible: !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0,
     };
   });
-  expect(curse.hasCurse, '第二关降临了夜咒', String(curse.curseName));
+  expect(curse.state === 'playing', '挑完夜咒进入下一关', curse.state);
+  expect(curse.hasCurse && curse.curseId === picked, '落地的夜咒正是玩家挑的那条', `${curse.curseId} vs ${picked}`);
   expect(curse.chipVisible, 'HUD 显示夜咒芯片');
   await shot('07b-curse-hud');
 

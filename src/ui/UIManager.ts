@@ -64,6 +64,7 @@ export class UIManager implements UIHost {
       case 'paused': this.paused(); break;
       case 'loadout': this.loadout(); break;
       case 'shop': this.shop(); break;
+      case 'curse': this.curse(); break;
       case 'shrine': this.shrine(); break;
       case 'victory': this.victory(); break;
       case 'dead': this.dead(); break;
@@ -507,6 +508,37 @@ export class UIManager implements UIHost {
         </div>
         <div class="forge__row">${chips}</div>
       </div>`;
+  }
+
+  /**
+   * 夜咒岔口：离开商店之后，下一关的夜咒由玩家从三条里挑一条。
+   * 卡片按回报从轻到重排，把"要钱还是要命"摆到台面上。
+   */
+  private curse(): void {
+    const g = this.game;
+    const stage = STAGES[Math.min(g.stageIndex + 1, STAGES.length - 1)];
+    const cards = g.curseOffers
+      .map(
+        (c) => `
+      <button class="curse-card" data-curse="${c.id}" style="--accent:${c.color}">
+        <div class="curse-card__icon">${c.icon}</div>
+        <div class="curse-card__name">${c.name}</div>
+        <div class="curse-card__blurb">${c.blurb}</div>
+        <div class="curse-card__gold">金币 ×${c.goldMult.toFixed(2)}</div>
+      </button>`,
+      )
+      .join('');
+    this.show(`
+      <div class="panel panel--curse">
+        <div class="panel__title">夜咒</div>
+        <div class="subtitle">下一关是「${stage.theme.name}」——向夜借多少，由你开口。</div>
+        <div class="curse-grid">${cards}</div>
+        <div class="curse-hint">夜咒不会缺席：挑一条，然后带着它走完这一关。</div>
+      </div>
+    `);
+    this.onAll('[data-curse]', (el) => {
+      this.game.chooseCurse(el.dataset.curse as string);
+    });
   }
 
   private shrine(): void {

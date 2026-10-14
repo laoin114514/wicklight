@@ -112,8 +112,15 @@ test('无头环境下可启动、刷怪、升级、通关、Boss、元进度、�
   assert.ok(game.player.relics.size > relicsBefore, '遗物应计入构筑');
   game.leaveShop();
 
+  // 离开商店后先过夜咒岔口：下一关的夜咒由玩家自己挑一条
+  assert.equal(game.state, 'curse', '离开商店后应先进入夜咒岔口');
+  assert.equal(game.curseOffers.length, 3, '夜咒岔口应给出三条候选');
+  const offered = game.curseOffers.map((c) => c.id);
+  game.chooseCurse(offered[1]);
+
   // 进入第二关 + Boss 阶段切换
   assert.equal(game.state, 'playing');
+  assert.equal(game.curse?.id, offered[1], '降临的夜咒应是玩家挑的那条');
   game.enemies.clear();
   const boss = game.enemies.spawn('extinguisher', 240, 0, 1, 1);
   game.enemies.update(1 / 60, game.enemyCtx());
@@ -172,7 +179,9 @@ test('无头环境下可启动、刷怪、升级、通关、Boss、元进度、�
 
   // 之后的关卡推进与胜利结算
   game.leaveShop();
-  assert.equal(game.state, 'playing', '离开商店应回到战斗');
+  assert.equal(game.state, 'curse', '离开商店后仍要先挑夜咒');
+  game.chooseCurse(game.curseOffers[0].id);
+  assert.equal(game.state, 'playing', '挑完夜咒应回到战斗');
   assert.equal(game.stageIndex, 2, '应推进到第三关');
   assert.ok(game.curse, '第三关同样应有夜咒');
   // 一路打到底：关卡总数以后还会变，所以这里循环推进而不是写死关数
@@ -180,6 +189,7 @@ test('无头环境下可启动、刷怪、升级、通关、Boss、元进度、�
   while (game.state !== 'victory' && marchToVictory < 12) {
     marchToVictory += 1;
     if (game.state === 'shop') game.leaveShop();
+    else if (game.state === 'curse') game.chooseCurse(game.curseOffers[0].id);
     else game.onStageComplete();
   }
   assert.equal(game.state, 'victory', `打完最后一关应进入胜利结算（实际 ${game.state}）`);
