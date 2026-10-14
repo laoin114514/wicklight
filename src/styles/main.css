@@ -2820,3 +2820,237 @@ body.is-touch .key { display: none; }
   opacity: 1;
   pointer-events: auto;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   18. 主菜单：把"八个一样的盒子"改成一块招牌 + 一本账
+
+   现状：主菜单是八个一模一样的圆角方块（三行两列 + 一个瘦的），
+   唯一的层级差异是"开始冒险"涂成了琥珀色。玩家的抱怨"UI 太同质化"
+   主要就来自这一屏——信息量不小，但看上去只有一种东西：盒子。
+
+   改法是把这一屏拆成两种"东西"，各司其职：
+     · 左边（menu-main）：立刻要做的事。一件主行动（点燃灯芯）+ 两个长夜玩法，
+       竖着排，尺寸递减，越靠上越亮——眼睛扫一眼就知道"该点哪儿"。
+     · 右边（menu-ledger）：翻看的账。余烬 / 图鉴 / 档案 / 成就 / 设置
+       压成一列薄账目，右侧一列黄铜数字，行与行之间一条发丝细线。
+   于是同一屏里有了"招牌 / 账本"两种材质，横向排开还顺手把横屏矮屏的
+   纵向空间省下来（844×390 原来要把页脚挤掉，现在是两列并排）。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--menu { width: min(94vw, 720px); }
+
+.menu-head { text-align: center; }
+.menu-head .title { margin-bottom: 4px; }
+.menu-head .subtitle { margin-bottom: 0; }
+
+.menu-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 12px;
+  margin: 16px 0 12px;
+  text-align: left;
+}
+.menu-main { display: grid; gap: 10px; align-content: start; }
+.menu-runs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* 主行动：一块浇出来的黄铜牌子，标题大、说明小，左上一个灯芯印记 */
+.menu-main .btn--hero {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  border-radius: var(--radius-plate);
+}
+.menu-main .btn--hero .btn__glyph {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 17px;
+  color: #3a1f04;
+  background: radial-gradient(circle at 50% 34%, #fff6d8, #ffc766 52%, #e9871f 100%);
+  box-shadow: 0 0 16px rgba(255, 170, 60, 0.5), inset 0 -2px 5px rgba(120, 50, 0, 0.35);
+}
+.menu-main .btn--hero .btn__label { font-size: 19px; font-weight: 800; letter-spacing: 5px; }
+.menu-main .btn--hero .btn__sub {
+  grid-column: 2;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  color: rgba(58, 30, 4, 0.62);
+}
+
+/* 两种长夜：铁牌 + 一枚印记，说明写在下面一行 */
+.menu-runs .btn--run {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+  align-items: center;
+  padding: 11px 13px;
+  border-radius: var(--radius-plate);
+  text-align: left;
+}
+.menu-runs .btn--run .btn__glyph {
+  grid-row: 1 / span 2;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--brass-hi);
+  text-shadow: 0 0 12px rgba(255, 170, 60, 0.45);
+  text-align: center;
+}
+.menu-runs .btn--run .btn__label { font-size: 14px; letter-spacing: 2px; }
+.menu-runs .btn--run .btn__note { color: var(--text-dim); letter-spacing: 1px; }
+.menu-runs .btn--run:hover .btn__glyph { color: #fff0c8; }
+
+/* 账本：薄行 + 发丝分隔线，右侧一列黄铜数字 */
+.menu-ledger {
+  display: grid;
+  grid-auto-rows: 1fr;
+  align-content: stretch;
+  border: 1px solid rgba(192, 138, 62, 0.22);
+  border-radius: var(--radius-plate);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.14)),
+    repeating-linear-gradient(180deg, rgba(255, 214, 150, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 6px);
+  box-shadow: inset 0 1px 0 rgba(255, 226, 168, 0.06), inset 0 0 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.ledger-row {
+  pointer-events: auto;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 3px 1fr auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 14px 11px 0;
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: 1.5px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid rgba(192, 138, 62, 0.13);
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.ledger-row:first-child { border-top: 0; }
+.ledger-row:hover {
+  color: #fff3d6;
+  background: linear-gradient(90deg, rgba(255, 160, 60, 0.16), rgba(255, 160, 60, 0.02) 72%);
+}
+.ledger-row__mark {
+  height: 16px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass-lo));
+  opacity: 0.5;
+}
+.ledger-row:hover .ledger-row__mark { opacity: 1; }
+.ledger-row__name { flex: 1; }
+.ledger-row__val {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass-hi);
+  text-shadow: 0 0 10px rgba(255, 170, 60, 0.3);
+}
+/* 只有"数得出来的"才配黄铜数字；设置那行是一句提示，压回暗色小字 */
+.ledger-row__val--hint {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: rgba(182, 169, 143, 0.72);
+  text-shadow: none;
+}
+
+/* 招牌是冷的，只有顶上那盏灯是暖的。
+   原来的招牌是一整片棕（木 + 琥珀径向渐变铺满），两列内容再好看，
+   底色一律"棕"就还是会糊成一块——这里把它换回锻铁：冷底 + 只留顶部一盏灯影。
+   注意别在这里写 .panel--banner::after：那一条是招牌的内框与两颗钉头，
+   同一元素上再写一次 ::after 会把它整个顶掉（后写的赢）。 */
+.panel--banner {
+  background:
+    radial-gradient(120% 66% at 50% -16%, rgba(255, 172, 72, 0.2), rgba(255, 172, 72, 0) 62%),
+    repeating-linear-gradient(0deg, rgba(255, 214, 150, 0.016) 0 1px, rgba(0, 0, 0, 0) 1px 4px),
+    linear-gradient(180deg, #17171c 0%, #101014 48%, #08080b 100%);
+  border-color: rgba(192, 138, 62, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 224, 156, 0.1),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 0 110px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 0 120px rgba(255, 150, 50, 0.1),
+    0 36px 90px rgba(0, 0, 0, 0.7);
+}
+
+/* 生涯摘要贴着左列下沿：它和"主行动"是一伙的（都在说"你现在什么水平"），
+   落在左列也让两列的底边齐平，不再有一块空出来的左下角 */
+.menu-main .menu-foot {
+  align-self: end;
+  justify-content: flex-start;
+  margin-top: 10px;
+  column-gap: 16px;
+  row-gap: 2px;
+  text-align: left;
+}
+
+/* 大屏：两列都按比例放大，别让 1440 的屏幕上出现一块 620px 的小牌子
+   （左列的主行动撑高一点，两列的底边也就自然对齐了） */
+@media (min-width: 900px) {
+  .panel--menu { width: min(92vw, 860px); }
+  .menu-body { gap: 16px; margin: 20px 0 14px; }
+  .menu-head .title { margin-bottom: 6px; }
+  .menu-main { gap: 12px; }
+  .menu-main .btn--hero { padding: 22px 22px; grid-template-columns: 42px 1fr; column-gap: 16px; }
+  .menu-main .btn--hero .btn__glyph { width: 42px; height: 42px; font-size: 20px; }
+  .menu-main .btn--hero .btn__label { font-size: 22px; letter-spacing: 7px; }
+  .menu-main .btn--hero .btn__sub { font-size: 11.5px; }
+  .menu-runs { gap: 12px; }
+  .menu-runs .btn--run { padding: 15px 16px; grid-template-columns: 24px 1fr; column-gap: 11px; }
+  .menu-runs .btn--run .btn__glyph { font-size: 19px; }
+  .menu-runs .btn--run .btn__label { font-size: 15px; }
+  .ledger-row { padding: 15px 16px 15px 0; font-size: 14.5px; gap: 13px; }
+  .ledger-row__val { font-size: 13.5px; }
+  .menu-main .menu-foot { font-size: 11.5px; column-gap: 18px; }
+}
+
+/* 矮横屏：两列并排省下的纵向空间，正好把原来藏起来的页脚放回来
+   （它是只读的一行生涯摘要，横屏里权重最低——放不下才藏，放得下就该在） */
+@media (orientation: landscape) and (max-height: 520px) {
+  .panel--menu .menu-foot { display: flex; margin-top: 2px; font-size: 10.5px; gap: 4px 14px; }
+}
+
+/* 矮横屏：两列并排本来就省纵向空间，这里再把留白与字号各收一号，
+   保证"开始冒险 / 无尽之夜 / 今日灯芯 / 五条账目"全部不滚动就能点到 */
+@media (orientation: landscape) and (max-height: 520px) {
+  .menu-body { margin: 11px 0 8px; gap: 10px; }
+  .menu-main { gap: 8px; }
+  .menu-runs { gap: 8px; }
+  .menu-head .title { margin-bottom: 2px; }
+  .menu-main .btn--hero { padding: 11px 14px; grid-template-columns: 28px 1fr; column-gap: 10px; }
+  .menu-main .btn--hero .btn__glyph { width: 28px; height: 28px; font-size: 14px; }
+  .menu-main .btn--hero .btn__label { font-size: 16px; letter-spacing: 4px; }
+  .menu-main .btn--hero .btn__sub { font-size: 10px; letter-spacing: 1px; }
+  .menu-runs .btn--run { padding: 9px 11px; grid-template-columns: 18px 1fr; column-gap: 8px; }
+  .menu-runs .btn--run .btn__glyph { font-size: 15px; }
+  .menu-runs .btn--run .btn__label { font-size: 13px; }
+  .ledger-row { padding: 8px 12px 8px 0; font-size: 12.5px; gap: 9px; }
+  .ledger-row__val { font-size: 12px; }
+}
+/* 320~380 那种最矮的横屏：账目只留名字，数字先收掉，优先保证点得到 */
+@media (orientation: landscape) and (max-height: 380px) {
+  .menu-body { margin: 8px 0 6px; }
+  .menu-main .btn--hero .btn__sub { display: none; }
+  .menu-runs .btn--run { padding: 7px 10px; }
+  .ledger-row { padding: 6px 10px 6px 0; font-size: 12px; }
+  .ledger-row__val { display: none; }
+}
+/* 竖屏 / 窄屏：两列排不下，退回上下两段，账本仍然是一条条的行 */
+@media (max-width: 560px) {
+  .menu-body { grid-template-columns: minmax(0, 1fr); }
+}

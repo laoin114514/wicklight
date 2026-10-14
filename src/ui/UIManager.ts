@@ -104,28 +104,54 @@ export class UIManager implements UIHost {
     const cleared = Math.min(save.best, 3);
     this.show(`
       <div class="panel panel--menu panel--banner">
-        <div class="title">WICK<span>LIGHT</span></div>
-        <div class="subtitle">灯芯 · 让光活下去</div>
-        <div class="menu-buttons">
-          <button class="btn btn--primary" data-act="play">开始冒险</button>
-          <div class="menu-duo">
-            <button class="btn ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">无尽之夜${endlessUnlocked ? '' : '<i class="btn__note">通关幽林解锁</i>'}</button>
-            <button class="btn btn--daily" data-act="daily">今日灯芯<i class="btn__note">${dailyLabel(buildDailyPlan())}</i></button>
-          </div>
-          <div class="menu-duo">
-            <button class="btn" data-act="meta">余烬解锁 <b>${save.embers}</b></button>
-            <button class="btn" data-act="codex">图鉴 <b>${this.game.codex.seenCount()}/${this.game.codex.total()}</b></button>
-            <button class="btn" data-act="records">生涯档案</button>
-            <button class="btn" data-act="achievements">成就 <b>${save.achievements.length}/${ACHIEVEMENTS.length}</b></button>
-          </div>
-          <button class="btn btn--slim" data-act="settings">设置</button>
+        <div class="menu-head">
+          <div class="title">WICK<span>LIGHT</span></div>
+          <div class="subtitle">灯芯 · 让光活下去</div>
         </div>
-        <div class="menu-foot">
-          <span>最高关卡 ${cleared}/3</span>
-          <span>余烬 ${save.embers}</span>
-          <span>总击杀 ${save.killsTotal}</span>
-          <span>无尽最佳 ${save.bestEndlessWave} 波</span>
-          <span>生涯 ${save.runs} 局</span>
+        <div class="menu-body">
+          <div class="menu-main">
+            <button class="btn btn--primary btn--hero" data-act="play">
+              <span class="btn__glyph">✦</span>
+              <span class="btn__label">开始冒险</span>
+              <span class="btn__sub">幽林 → 长夜之城</span>
+            </button>
+            <div class="menu-runs">
+              <button class="btn btn--run ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">
+                <span class="btn__glyph">∞</span>
+                <span class="btn__label">无尽之夜</span>
+                <i class="btn__note">${endlessUnlocked ? '一波接一波' : '通关幽林解锁'}</i>
+              </button>
+              <button class="btn btn--run btn--daily" data-act="daily">
+                <span class="btn__glyph">☾</span>
+                <span class="btn__label">今日灯芯</span>
+                <i class="btn__note">${dailyLabel(buildDailyPlan())}</i>
+              </button>
+            </div>
+          </div>
+          <div class="menu-ledger">
+            <button class="ledger-row" data-act="meta">
+              <span class="ledger-row__mark"></span><span class="ledger-row__name">余烬解锁</span><b class="ledger-row__val">${save.embers}</b>
+            </button>
+            <button class="ledger-row" data-act="codex">
+              <span class="ledger-row__mark"></span><span class="ledger-row__name">图鉴</span><b class="ledger-row__val">${this.game.codex.seenCount()}/${this.game.codex.total()}</b>
+            </button>
+            <button class="ledger-row" data-act="records">
+              <span class="ledger-row__mark"></span><span class="ledger-row__name">生涯档案</span><b class="ledger-row__val">${save.runs} 局</b>
+            </button>
+            <button class="ledger-row" data-act="achievements">
+              <span class="ledger-row__mark"></span><span class="ledger-row__name">成就</span><b class="ledger-row__val">${save.achievements.length}/${ACHIEVEMENTS.length}</b>
+            </button>
+            <button class="ledger-row" data-act="settings">
+              <span class="ledger-row__mark"></span><span class="ledger-row__name">设置</span><b class="ledger-row__val ledger-row__val--hint">画质 · 触感 · 音效</b>
+            </button>
+          </div>
+          <div class="menu-foot">
+            <span>最高关卡 ${cleared}/3</span>
+            <span>余烬 ${save.embers}</span>
+            <span>总击杀 ${save.killsTotal}</span>
+            <span>无尽最佳 ${save.bestEndlessWave} 波</span>
+            <span>生涯 ${save.runs} 局</span>
+          </div>
         </div>
       </div>
     `);
