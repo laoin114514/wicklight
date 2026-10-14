@@ -96,6 +96,12 @@ export interface EnemyContext {
    * 回响（追的是你一秒前站的地方）不在此列，这两种怪的性格才不会被抹平。
    */
   lureTarget?: (x: number, y: number) => { x: number; y: number } | null;
+  /**
+   * 地上亮着的伏灯（最近的，超过 maxDist 返回 null）。**只有灯蛾认这个**：
+   * 「它们扑的是光，不是你」——你埋的那颗雷本来就是一盏灯，蛾拐过去扑它，然后自己踩响。
+   * 别的行为不接这条线：不然地上摆一片雷就成了"把全场引开"的万能开关。
+   */
+  mineLure?: (x: number, y: number, maxDist: number) => { x: number; y: number } | null;
   /** 站在灯台边时把灯焰抽掉一点（吹灯客） */
   quench: (x: number, y: number, dt: number) => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
@@ -103,6 +109,9 @@ export interface EnemyContext {
   spikes: (x: number, y: number, r: number) => void;
   shake: (amount: number) => void;
 }
+
+/** 蛾能从多远发现地上那盏灯（和 data/mines.ts 的 `lure` 是同一个意思，这里只用来查表） */
+const MINE_LURE = 380;
 
 export class EnemySystem {
   private nextId = 1;
@@ -378,6 +387,20 @@ export class EnemySystem {
         break;
       }
       case 'dive': {
+        // 蛾扑的是光：地上那盏灯比"当前目标"更近，就先扑灯（多半就踩响在它身上）。
+        // 这一条只在蛾身上接：别的怪不会因为地上摆了雷就集体改道。
+        const lamp = ctx.mineLure?.(e.x, e.y, MINE_LURE) ?? null;
+        if (lamp) {
+          const lx = lamp.x - e.x;
+          const ly = lamp.y - e.y;
+          const ld = Math.hypot(lx, ly) || 1;
+          if (ld < d) {
+            e.angle = Math.atan2(ly, lx);
+            e.vx = (lx / ld) * e.speed * speedMul;
+            e.vy = (ly / ld) * e.speed * speedMul;
+            break;
+          }
+        }
         e.vx = nx * e.speed * speedMul;
         e.vy = ny * e.speed * speedMul;
         break;

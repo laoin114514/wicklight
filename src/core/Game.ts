@@ -382,6 +382,10 @@ export class Game {
   mineCount = 0;
   /** 本局连爆过的最长一串有几颗（结算用；1 = 只是单响） */
   mineChainBest = 0;
+  /** 本局被吹灯客吹灭过几颗雷（结算用；> 0 才写那一行） */
+  mineSnuffed = 0;
+  /** 本局被伏灯炸到的灯蛾总数（成就「以灯为饵」看这个） */
+  mineMothHits = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -539,6 +543,8 @@ export class Game {
     this.mines.length = 0;
     this.mineCount = 0;
     this.mineChainBest = 0;
+    this.mineSnuffed = 0;
+    this.mineMothHits = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -1453,6 +1459,8 @@ export class Game {
       // 吹灯客的目标：最近的亮灯台，或者你刚放下的那盏弃灯（谁近扑谁）
       pyreTarget: (x, y) => this.nearestLitOrLamp(x, y, 1600),
       lureTarget: (x, y) => this.nearestLamp(x, y),
+      // 灯蛾扑的是**光**：地上的伏灯也算（只有上弦之后的那颗才算"亮着"）
+      mineLure: (x, y, maxDist) => this.nearestArmedMine(x, y, maxDist),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
       spikes: (x, y, r) => {
@@ -2167,13 +2175,75 @@ export class Game {
         steppedDist = near;
       }
     }
-    if (stepped >= 0) this.detonateMine(this.mines[stepped], stepped);
+    if (stepped < 0) return;
+    // 走进你的触发圈的**如果是吹灯客**，那颗雷不炸——被它吹灭了。
+    // 它本来就是"专扑灯"的那种怪，而伏灯是一盏灯：这一条不靠着再给一个范围常数，
+    // 而是把"你的触发圈"直接反过来用（它扑得进来，就吹得灭）。
+    // 于是它成了伏灯唯一的天敌：埋在地上的一整条路，它一边走一边给你掐灭——
+    // 想用雷，就先把吹灯客点掉。
+    if (this.snufferInRange(this.mines[stepped])) this.snuffMine(stepped);
+    else this.detonateMine(this.mines[stepped], stepped);
+  }
+
+  /** 这颗雷的触发圈里有没有吹灯客（有的话它不是"被踩响"，而是"被吹灭"）。 */
+  private snufferInRange(m: Mine): boolean {
+    let hit = false;
+    this.enemies.forEach((e) => {
+      if (e.defId !== 'snuffer') return;
+      const reach = m.trigger + e.radius;
+      if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= reach * reach) hit = true;
+    });
+    return hit;
+  }
+
+  /** 吹灯客一口气吹灭脚边那颗雷：不炸、不留火，只留一小撮紫烟。 */
+  private snuffMine(index: number): void {
+    const m = this.mines[index];
+    this.mines.splice(index, 1);
+    this.mineSnuffed += 1;
+    this.particles.burst(m.x, m.y - 8, 10, '#b6a6ff', { speed: 70, size: 2.2, life: 0.5 });
+    this.audio.play('quench');
+  }
+
+  /** 最近的、**已经上弦**的伏灯（灯蛾扑的就是它）。 */
+  private nearestArmedMine(x: number, y: number, maxDist: number): { x: number; y: number } | null {
+    let best: Mine | null = null;
+    let bestD = maxDist * maxDist;
+    for (const m of this.mines) {
+      if (m.arm > 0 && m.fuse <= 0) continue;
+      const d = (m.x - x) ** 2 + (m.y - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
   }
 
   /** 伏灯被踩响：一圈爆炸（进化的那颗还会在脚下留一片火）。 */
   private detonateMine(m: Mine, index: number): void {
     this.mines.splice(index, 1);
     const radius = m.radius * (1 + (this.player.stats.areaMult - 1) * 0.5);
+    // 「以灯为饵」：先数一眼这一炸够得着几只蛾，再炸（炸完它们就没了，数不出来）
+    let moths = 0;
+    const p = this.player;
+    this.enemies.forEach((e) => {
+      if (e.defId !== 'moth') return;
+      // 判据和 blast 一字不差（半径再加怪自己那一圈）：数出来的就是"真被这炸打到的"。
+      // 但还得再补一条：**它离这盏灯比离你更近**——这一条才是"被灯引过去"，
+      // 也正是蛾改道去扑灯用的那条规则（Enemy.behave 里的 `ld < d`）。
+      // 少了这一条，「以灯为饵」就变成"顺手炸死几只蛾"，一盏灯扔哪儿都算数。
+      const reach = radius + e.radius;
+      const dm = (e.x - m.x) ** 2 + (e.y - m.y) ** 2;
+      const dp = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      if (dm <= reach * reach && dm < dp) moths += 1;
+    });
+    if (moths > 0) {
+      this.mineMothHits += moths;
+      // 「以灯为饵」看的是**一次**炸到几只，而不是攒够多少只：
+      // 攒数的话随便扔雷都会慢慢够，而"把一群蛾引到同一盏灯上"才是这件事的难点。
+      if (moths >= MINE.mothBait) this.achievements.unlock('mine_moth');
+    }
     const hits = this.blast(m.x, m.y, radius, m.damage, {
       knockback: MINE.knockback,
       burn: m.fire,

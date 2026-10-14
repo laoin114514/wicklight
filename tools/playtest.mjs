@@ -702,6 +702,50 @@ async function main() {
     fail('连爆中间那一帧存了下来', '采样器没抓到引信烧着的那一帧');
   }
 
+  // ── 3a7. 它是一盏灯：蛾拐过来扑它；吹灯客踩进来是把它吹灭 ──
+  // 两条都只在地皮上成立，而且是"看几秒钟"才看得出来的事，所以放在真帧里跑一遍。
+  const baitBefore = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.enemies.clear();
+    g.mines.length = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    // 灯摆在人斜上方 240px：蛾离灯 180px、离人 420px——扑最近的那盏光就该拐弯
+    g.placeMine(0, -240, 40, 70, 40, 0);
+    g.mines[0].arm = 0;
+    for (let i = 0; i < 3; i += 1) g.enemies.spawn('moth', -40 + i * 40, -420, 1, 0);
+    return { mines: g.mines.length, hits: g.mineMothHits };
+  });
+  await sleep(2400);
+  const baited = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { mines: g.mines.length, hits: g.mineMothHits, alive: g.enemies.count };
+  });
+  expect(baitBefore.mines === 1, '灯摆好了', JSON.stringify(baitBefore));
+  expect(baited.mines === 0, '蛾真的拐过来扑它，把灯踩响了', JSON.stringify(baited));
+  expect(baited.hits > baitBefore.hits, '这一炸数到了蛾（「以灯为饵」的计数）', JSON.stringify(baited));
+  expect(baited.alive < 3, '至少炸死了一只蛾', `剩 ${baited.alive} 只`);
+  const snuffBefore = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.enemies.clear();
+    g.mines.length = 0;
+    g.placeMine(0, -120, 40, 70, 40, 0);
+    g.mines[0].arm = 0;
+    const e = g.enemies.spawn('snuffer', 0, -190, 1, 0);
+    e.hp = 1e6;
+    e.maxHp = 1e6;
+    return { snuffed: g.mineSnuffed, chains: g.mineChainBest, hp: Math.round(g.player.hp) };
+  });
+  await sleep(1500);
+  const snuffed = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { mines: g.mines.length, snuffed: g.mineSnuffed, chains: g.mineChainBest, hp: Math.round(g.player.hp) };
+  });
+  expect(snuffed.snuffed === snuffBefore.snuffed + 1, '吹灯客踩进圈里，那颗雷被吹灭', JSON.stringify(snuffed));
+  expect(snuffed.mines === 0, '地上那颗没了');
+  expect(snuffed.chains === snuffBefore.chains, '它没炸——连爆计数一动没动', JSON.stringify(snuffed));
+  expect(snuffed.hp >= snuffBefore.hp, '玩家一滴血都没掉', `${snuffBefore.hp} → ${snuffed.hp}`);
+
   // 图鉴里认得这两件：名字与进化都该在
   const mineCodex = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;

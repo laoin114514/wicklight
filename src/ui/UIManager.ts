@@ -567,6 +567,8 @@ export class UIManager implements UIHost {
         ${g.lampCount > 0 ? `<div><span>分灯</span><b>${g.lampCount} 盏</b></div>` : ''}
         ${g.mineCount > 0 ? `<div><span>伏灯</span><b>${g.mineCount} 颗</b></div>` : ''}
         ${g.mineChainBest > 1 ? `<div><span>最长一串</span><b>${g.mineChainBest} 颗</b></div>` : ''}
+        ${g.mineMothHits > 0 ? `<div><span>灯上的蛾</span><b>${g.mineMothHits} 只</b></div>` : ''}
+        ${g.mineSnuffed > 0 ? `<div><span>被吹灭</span><b>${g.mineSnuffed} 颗</b></div>` : ''}
         ${g.grazeCount > 0 ? `<div><span>掠影</span><b>${g.grazeCount} 次</b></div>` : ''}
         ${g.player.blazeCount > 0 ? `<div><span>灯焰高涨</span><b>${g.player.blazeCount} 次</b></div>` : ''}
       </div>`;

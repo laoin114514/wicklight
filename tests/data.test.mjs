@@ -65,6 +65,8 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(mine.chainFuse > 0 && mine.chainFuse < mine.arm, '连爆的引信要短到"一串"听起来像一串，又不为 0（同一帧一起炸就只剩一团白光）');
   assert.ok(mine.chainFuse >= 2 / 60, '引信至少得让人看见几帧，不然连爆在画面上是"瞬移"');
   assert.ok(mine.chainBest >= 3, '「一串灯」的门槛不该一颗雷加一颗邻居就够');
+  assert.ok(mine.lure > 100, '灯蛾该从一段距离外就闻到这盏灯，不然"拿它当饵"立不住');
+  assert.ok(mine.mothBait >= 3, '「以灯为饵」的门槛不该一颗雷炸到一只蛾就够');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

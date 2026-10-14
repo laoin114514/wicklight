@@ -47,6 +47,9 @@ async function open(t, tag = '', px = 700, py = 700) {
   game.player.y = py;
   game.player.stats.maxHp = 1e6;
   game.player.hp = 1e6;
+  // 也别让"打死几只怪就弹出升级面板"搅进来：面板一挂，整局就是暂停的——
+  // 伏灯的寿命、引信、踩响全停在那儿（v56 量"炸到几只蛾"时就是这么少了两只）。
+  game.xpToNext = 1e9;
   // 开局那把武器（守夜人是环形火环）会在脚边一直打转，把"这一炸掉了多少"搅成一团。
   // 场面要干净：这一局只留测试自己摆的东西，需要伏灯的时候再单独装上。
   game.player.weapons.clear();
@@ -350,6 +353,135 @@ test('伏灯：一次炸到五只解「伏击」', async (t) => {
   for (const e of pack) assert.ok(e.hp < 1e6, '圈里的五只都该吃到这一炸');
   assert.ok(game.save.achievements.includes('mine_multi'), '一次炸到五只应解锁「伏击」');
   assert.ok(game.ui.statsBlock().includes('伏灯'), '结算面板里应写出布了多少颗伏灯');
+});
+
+test('伏灯：它是一盏灯——灯蛾会拐过来扑它，然后自己踩响', async (t) => {
+  // 蛾的图鉴上写着"它们扑的是光，不是你"。这一条要证明那句话是真的：
+  // 地上亮着的伏灯也算光，蛾会改道去扑它，而不是继续追人。
+  const game = await open(t, 'moth');
+  const MINE = MINE_OF();
+  // 蛾在 (100,700)，人躲在 (700,700)（`open` 默认就把人放在那儿）
+  const moth = game.enemies.spawn('moth', 100, 700, 1, 0);
+  // 没摆雷的时候：它朝人（+x）飞
+  run(game, 30, 0, 0);
+  assert.ok(moth.x > 130, `没有灯的时候蛾朝人飞（x=${Math.round(moth.x)}）`);
+
+  // 摆一盏**上弦好的**灯在它正上方（比人近得多）
+  game.placeMine(100, 400, 40, 60, 34, 0);
+  const mine = game.mines[0];
+  mine.arm = 0;
+  const before = Math.hypot(moth.x - mine.x, moth.y - mine.y);
+  run(game, 40, 0, 0);
+  const after = Math.hypot(moth.x - mine.x, moth.y - mine.y);
+  assert.ok(after < before - 20, `地上亮着的伏灯该把蛾吸过去（${Math.round(before)} → ${Math.round(after)}）`);
+  assert.ok(moth.y < 700 - 50, `它是往那盏灯飞的（y=${Math.round(moth.y)}）`);
+  // 扑上去就等于自己踩响：雷没了、蛾也没了
+  run(game, 180, 0, 0);
+  assert.equal(game.mines.length, 0, '蛾扑到灯上，把它踩响了');
+  assert.ok(moth.hp <= 0, `那一下就把蛾炸死了（hp=${moth.hp}）`);
+
+  // 没上弦的那颗不算"亮着的灯"（芯还是冷青色的），蛾不该理它
+  const cold = await open(t, 'moth-cold');
+  const moth2 = cold.enemies.spawn('moth', 100, 700, 1, 0);
+  cold.placeMine(100, 400, 40, 60, 34, 0);
+  cold.mines[0].arm = MINE.arm;
+  run(cold, 30, 0, 0);
+  assert.ok(moth2.x > 130, `还没上弦的雷不算灯，蛾不拐弯（x=${Math.round(moth2.x)}）`);
+  assert.equal(cold.mines.length, 1, '那颗雷还在地上');
+
+  // 只有蛾认这条线：别的怪不会因为地上摆了雷就集体改道
+  const shade = await open(t, 'moth-shade');
+  const walker = shade.enemies.spawn('shade', 100, 700, 1, 0);
+  shade.placeMine(100, 400, 40, 60, 34, 0);
+  shade.mines[0].arm = 0;
+  run(shade, 30, 0, 0);
+  assert.ok(walker.x > 130, `影蛭照旧追人，不会被灯牵走（x=${Math.round(walker.x)}）`);
+});
+
+test('伏灯：吹灯客踩进触发圈是把雷吹灭，不是把它踩响', async (t) => {
+  // 伏灯是一盏灯，而吹灯客是"专扑灯"的那种怪——它是伏灯唯一的天敌：
+  // 埋在地上的一整条路，它能一边走一边掐灭。想用雷，就先把吹灯客点掉。
+  const game = await open(t, 'snuff');
+  game.placeMine(0, 0, 40, 60, 34, 0);
+  game.mines[0].arm = 0;
+  const snuffer = game.enemies.spawn('snuffer', 0, 30, 1, 0);
+  snuffer.hp = 1e6;
+  snuffer.maxHp = 1e6;
+  const hpBefore = game.player.hp;
+  run(game, 4, 0, 0);
+  assert.equal(game.mines.length, 0, '雷没了');
+  assert.equal(game.mineSnuffed, 1, '它是被吹灭的（记在结算里）');
+  assert.ok(snuffer.hp === 1e6, `吹灯客不该吃到这一炸（hp=${snuffer.hp}）`);
+  assert.equal(game.player.hp, hpBefore, '玩家一滴血都不该掉');
+  assert.ok(game.ui.statsBlock().includes('被吹灭'), '结算面板里应写出被吹灭了几颗');
+  // 同一颗雷换成普通怪踩：照炸不误（吹灭这条只对吹灯客成立）
+  const other = await open(t, 'snuff-shade');
+  other.placeMine(0, 0, 40, 60, 34, 0);
+  other.mines[0].arm = 0;
+  const shade = statue(other, 0, 30);
+  run(other, 4, 0, 0);
+  assert.equal(other.mines.length, 0, '影蛭踩上来照炸');
+  assert.equal(other.mineSnuffed, 0, '这一颗不是被吹灭的');
+  assert.ok(shade.hp < 1e6, '它该吃到那一炸');
+  // 没炸过、也没被吹灭的一局，结算里不该冒出"被吹灭"那一行
+  const clean = await open(t, 'snuff-clean');
+  assert.ok(!clean.ui.statsBlock().includes('被吹灭'), '没被吹灭过就不写那一行');
+});
+
+test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t) => {
+  const game = await open(t, 'bait');
+  const MINE = MINE_OF();
+  assert.equal(game.save.achievements.includes('mine_moth'), false, '开局不该有这个成就');
+  assert.ok(MINE.mothBait >= 3, '一次炸到一只蛾就该算的话，"把它们引到同一盏灯上"这件事就不成立了');
+  // 用真的蛾（18 血，一炸就死），不改成打不死的——不然同一只蛾会被下一炸再数一遍
+  const flock = [0, 12, 24].map((x) => game.enemies.spawn('moth', x, 0, 1, 0));
+  game.placeMine(0, 0, 40, 70, 34, 0);
+  game.mines[0].arm = 0;
+  run(game, 2, 0, 0);
+  assert.equal(game.mineMothHits, 3, `这一炸数出 3 只（实际 ${game.mineMothHits}）`);
+  assert.ok(flock.every((e) => e.hp <= 0), '圈里那三只都该被炸死');
+  assert.equal(game.save.achievements.includes('mine_moth'), false, '三只还不够——门槛要的是"一群"');
+  assert.ok(game.ui.statsBlock().includes('灯上的蛾'), '结算面板里会写出这一局灯上落过几只蛾');
+  assert.ok(!game.ui.statsBlock().includes('以灯为饵'), '结算面板不该把没解开的成就写上去');
+  // 再来一颗，一次炸到四只：这才是"你把这群蛾引到了同一盏灯上"
+  game.placeMine(0, 0, 40, 70, 34, 0);
+  game.mines[0].arm = 0;
+  for (const x of [0, 10, 20, 30]) game.enemies.spawn('moth', x, 0, 1, 0);
+  // 多跑几帧：上一次那一炸打死三只，会带来一下"打击停顿"（kill 的手感），
+  // 那几帧整个世界都不更新——只跑两帧会撞在停顿里，雷还没轮到踩响。
+  run(game, 8, 0, 0);
+  assert.equal(game.mineMothHits, 7, `累计 7 只（实际 ${game.mineMothHits}）`);
+  assert.ok(game.save.achievements.includes('mine_moth'), '一次炸到 4 只该解锁「以灯为饵」');
+  // 圈外站着的蛾不算：挨着爆炸半径外一点点
+  const edge = await open(t, 'bait-edge');
+  edge.placeMine(0, 0, 40, 60, 34, 0);
+  edge.mines[0].arm = 0;
+  // 站在触发圈外（34 + 14），等雷被"踩响"不可能——所以这里直接引爆它
+  statue(edge, 200, 0);
+  edge.mines[0].fuse = 0.02;
+  statue(edge, 90, 0, 'moth');
+  run(edge, 4, 0, 0);
+  assert.equal(edge.mines.length, 0, '引信烧到了，炸了');
+  assert.equal(edge.mineMothHits, 0, `爆炸够不着的那只蛾不该被数进去（实际 ${edge.mineMothHits}）`);
+  // 挨着爆炸圈边上的那只（radius + 它自己的半径以内）要数进去
+  const near = await open(t, 'bait-near');
+  near.placeMine(0, 0, 40, 60, 34, 0);
+  near.mines[0].arm = 0;
+  near.mines[0].fuse = 0.02;
+  statue(near, 70, 0, 'moth');
+  run(near, 4, 0, 0);
+  assert.equal(near.mineMothHits, 1, '爆炸圈边上的蛾算被炸到（判据和 blast 一样）');
+  // 离人比离灯近的蛾不算"被灯引过去"：它是冲你来的，顺手被炸了而已
+  const pull = await open(t, 'bait-pull');
+  pull.player.x = 0;
+  pull.player.y = 0;
+  pull.placeMine(0, -120, 40, 60, 34, 0);
+  pull.mines[0].arm = 0;
+  pull.mines[0].fuse = 0.02; // 直接点着引信，不靠踩
+  statue(pull, 0, -40, 'moth'); // 离灯 80px、离人 40px
+  run(pull, 4, 0, 0);
+  assert.equal(pull.mines.length, 0, '引信烧到了，炸了');
+  assert.equal(pull.mineMothHits, 0, '这只蛾离人更近：它是冲人来的，不该算进"被灯引过去"');
 });
 
 test('伏灯：升级会真的改数（等级越高，炸得越狠、撒得越勤）', async (t) => {
