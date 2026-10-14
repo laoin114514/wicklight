@@ -333,7 +333,8 @@ npx playwright install chromium && npx playwright install-deps chromium
   - **后处理合并**：扫描线 + 冷色暗角两次全屏 multiply 合并成一张预乘遮盖层；泛光的两层加法叠加
     先在半分辨率小图上合并再整屏加一次——整屏「读改写」次数直接决定软件光栅化的开销。
   - **光照精灵化**：暗幕挖洞与暖光叠加各烘焙一张 256px 径向光斑，取代每盏灯每帧的
-    `createRadialGradient` + 圆弧路径填充。
+    `createRadialGradient` + 圆弧路径填充；光照贴图本身按设备像素（与主画布同分辨率）绘制，
+    贴回去时是 1:1，不再多缩一次（2560×1440 @2x 实测帧时间 27.2ms → 24.0ms）。
   - **分辨率同步**：后备缓冲（`canvas.width/height`）恒等于 CSS 尺寸 × 动态倍率，
     窗口尺寸变化、画质档位变化、`devicePixelRatio` 变化（换屏 / 改浏览器缩放）都会立刻重贴。
     这条不能省：倍率恰好没变而缓冲停在旧尺寸时，浏览器会把旧缓冲拉伸到窗口大小，

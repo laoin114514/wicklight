@@ -2364,6 +2364,7 @@ export class Game {
 
     this.drawWorld(ctx, w, h);
     this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
+    this.light.setScale(r.dpr);
     this.light.render(ctx, this.camera, w, h, this.time);
     this.drawPyreGlow(ctx, w, h);
     this.drawFrostHaze(ctx, w, h);

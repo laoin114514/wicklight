@@ -17,6 +17,8 @@ export class LightSystem {
   private glowSprite: HTMLCanvasElement | null = null;
   private spritesReady = false;
   darkness = 0.94;
+  /** 光照贴图按设备像素绘制（与主画布同分辨率），避免画完再被缩放一次。 */
+  private dpr = 1;
   /** 上一帧真正参与“照亮”的光源数量（供冒烟测试断言灯芯光源没被清空）。 */
   lastLightCount = 0;
 
@@ -35,6 +37,11 @@ export class LightSystem {
 
   setDarkness(v: number): void {
     this.darkness = v;
+  }
+
+  /** 跟随主画布的倍率：贴图按设备像素画，主画布就不用再缩它一遍。 */
+  setScale(dpr: number): void {
+    if (dpr > 0) this.dpr = dpr;
   }
 
   begin(): void {
@@ -137,11 +144,14 @@ export class LightSystem {
     if (!this.ctx || !this.canvas) return;
     const c = this.canvas;
     const cctx = this.ctx;
-    if (c.width !== w || c.height !== h) {
-      c.width = w;
-      c.height = h;
+    const pw = Math.max(1, Math.floor(w * this.dpr));
+    const ph = Math.max(1, Math.floor(h * this.dpr));
+    if (c.width !== pw || c.height !== ph) {
+      c.width = pw;
+      c.height = ph;
     }
-    cctx.setTransform(1, 0, 0, 1, 0, 0);
+    // 下面所有绘制仍然写在 CSS 坐标里，倍率交给变换——和主画布的坐标约定一致。
+    cctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     cctx.globalCompositeOperation = 'source-over';
     cctx.clearRect(0, 0, w, h);
     cctx.fillStyle = `rgba(3,4,11,${this.darkness})`;
