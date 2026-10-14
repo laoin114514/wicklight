@@ -510,6 +510,11 @@ body {
 
 .hud__boss { position: absolute; left: 50%; transform: translateX(-50%); bottom: 74px; width: min(60vw, 620px); opacity: 0; transition: opacity 0.3s ease; }
 .hud__boss.is-active { opacity: 1; }
+.hud__boss-rows { display: flex; flex-direction: column; gap: 6px; }
+.hud__boss-row { position: relative; }
+.hud__boss.is-multi { width: min(64vw, 660px); bottom: 66px; }
+.hud__boss.is-multi .hud__boss-name { margin-bottom: 3px; font-size: 12px; letter-spacing: 2px; }
+.hud__boss.is-multi .hud__boss-bar { height: 7px; }
 .hud__boss-name { text-align: center; color: var(--danger); font-weight: 800; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 16px rgba(255, 60, 90, 0.6); }
 .hud__boss-bar { height: 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 77, 109, 0.5); overflow: hidden; }
 .hud__boss-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff2d55, #ff8a5c); transition: width 0.2s linear; }

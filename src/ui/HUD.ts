@@ -33,8 +33,8 @@ export class HUD implements HUDHost {
   private waveSig = '~';
   private buildSig = '';
   private bossWrap!: HTMLElement;
-  private bossName!: HTMLElement;
-  private bossFill!: HTMLElement;
+  private bossRows!: HTMLElement;
+  private bossRowEls: { row: HTMLElement; name: HTMLElement; fill: HTMLElement }[] = [];
   private announceEl!: HTMLElement;
   private toastRoot: HTMLElement;
   private hudEl!: HTMLElement;
@@ -66,8 +66,7 @@ export class HUD implements HUDHost {
       <div class="hud__stage js-stage">幽林</div>
       <div class="hud__wave js-wavebar"><i></i><u></u></div>
       <div class="hud__boss js-boss">
-        <div class="hud__boss-name js-boss-name"></div>
-        <div class="hud__boss-bar"><i></i></div>
+        <div class="hud__boss-rows js-boss-rows"></div>
       </div>
       <div class="hud__combo js-combo">
         <b class="js-combo-n">0</b>
@@ -97,8 +96,7 @@ export class HUD implements HUDHost {
     this.waveFill = q('.js-wavebar i');
     this.waveBoss = q('.js-wavebar u');
     this.bossWrap = q('.js-boss');
-    this.bossName = q('.js-boss-name');
-    this.bossFill = hud.querySelector('.hud__boss-bar i') as HTMLElement;
+    this.bossRows = q('.js-boss-rows');
     this.comboEl = q('.js-combo');
     this.comboNum = q('.js-combo-n');
     this.comboBar = q('.js-combo-bar');
@@ -122,13 +120,42 @@ export class HUD implements HUDHost {
   }
 
   setBoss(name: string | null, frac: number): void {
-    if (name) {
-      this.bossWrap.classList.add('is-active');
-      this.bossName.textContent = name;
-      this.bossFill.style.width = `${Math.max(0, frac) * 100}%`;
-    } else {
+    this.setBosses(name ? [{ name, frac }] : []);
+  }
+
+  /** 首领血条：一列写下来，同台几位就有几行。 */
+  setBosses(list: { name: string; frac: number }[]): void {
+    if (!list.length) {
       this.bossWrap.classList.remove('is-active');
+      this.bossRows.textContent = '';
+      this.bossRowEls = [];
+      return;
     }
+    this.bossWrap.classList.add('is-active');
+    this.bossWrap.classList.toggle('is-multi', list.length > 1);
+    if (this.bossRowEls.length !== list.length) {
+      this.bossRows.textContent = '';
+      this.bossRowEls = list.map(() => {
+        const row = document.createElement('div');
+        row.className = 'hud__boss-row';
+        const name = document.createElement('div');
+        name.className = 'hud__boss-name';
+        const bar = document.createElement('div');
+        bar.className = 'hud__boss-bar';
+        const fill = document.createElement('i');
+        bar.appendChild(fill);
+        row.appendChild(name);
+        row.appendChild(bar);
+        this.bossRows.appendChild(row);
+        return { row, name, fill };
+      });
+    }
+    list.forEach((b, i) => {
+      const slot = this.bossRowEls[i];
+      if (!slot) return;
+      if (slot.name.textContent !== b.name) slot.name.textContent = b.name;
+      slot.fill.style.width = `${Math.max(0, b.frac) * 100}%`;
+    });
   }
 
   toast(text: string): void {
@@ -298,7 +325,7 @@ export class HUD implements HUDHost {
     this.updateBuild();
     const stage = g.endless ? '无尽 · 长夜' : (STAGES[Math.min(g.stageIndex, STAGES.length - 1)]?.theme.name ?? '');
     this.stageEl.textContent = stage;
-    this.setBoss(g.bossName, g.bossFrac);
+    this.setBosses(g.bossList ?? []);
     this.updateCurse();
     this.updateBounty();
     this.updatePyreChip();

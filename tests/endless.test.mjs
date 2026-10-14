@@ -1,9 +1,10 @@
 /**
- * 无尽之夜「深潜」：轮次看得见、首领前有预告、第 3 轮起双首领。
+ * 无尽之夜「深潜」：轮次看得见、首领前有预告、第 3 轮起双首领、第 5 轮起三首领。
  *
  * 无尽原本只是一直刷下去，首领每 5 波冒一个、没有节奏也没有预告。
  * 现在每一轮仍是 5 波，进度条改成"离下一轮首领还有几波"，
- * 首领前一波会预告，第 3 轮开始两位首领一起上——单只首领的招式早就背熟了。
+ * 首领前一波会预告，第 3 轮开始两位首领一起上，第 5 轮三位同台——
+ * 单只首领的招式早就背熟了，加人才是新的题。同台越多，各自压得越低。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +12,7 @@ import { installDomStubs } from './dom-stubs.mjs';
 
 const ENTRY = new URL('../dist/app.js', import.meta.url);
 
-test('无尽之夜：轮次、首领预告与双首领', async (t) => {
+test('无尽之夜：轮次、首领预告与双 / 三首领', async (t) => {
   const env = installDomStubs();
   const errors = [];
   const originalError = console.error;
@@ -97,6 +98,61 @@ test('无尽之夜：轮次、首领预告与双首领', async (t) => {
   assert.ok(game.shopHeader.includes('第 3 轮'), `无尽补给站要写出轮次（实际「${game.shopHeader}」）`);
   assert.ok(game.save.achievements.includes('twin_boss'), '同一波击败两位首领应解锁成就');
   assert.ok(game.player.hp > 0, '玩家应还活着');
+
+  // ── 第 5 轮：三位首领同台 ──
+  game.enemies.clear();
+  game.state = 'playing';
+  d.wave = 24;
+  d.beginWave(ctx());
+  assert.equal(d.bossCount, 3, '第 5 轮应同时上来三位首领');
+  assert.equal(d.bossPair, true, '三位同台时 bossPair 也应为真（继续走双首领的清场逻辑）');
+  const trio = [...game.enemies.bosses];
+  assert.equal(trio.length, 3, `第 5 轮应上来三位首领（实际 ${trio.length}）`);
+  assert.equal(new Set(trio.map((b) => b.defId)).size, 3, '三位首领应互不相同');
+  // 同台三位要压得比双首领更低——不然只是把时间拉长
+  const trioScale = trio[0].maxHp / baseHp(trio[0].defId);
+  assert.ok(trioScale < d.hpMult * 0.62, `三位同台时每位首领该被压得更低（${trioScale.toFixed(3)} vs 双首 ${(d.hpMult * 0.62).toFixed(3)}）`);
+  for (const b of trio) {
+    assert.ok(Math.abs(b.maxHp / baseHp(b.defId) - trioScale) < 1e-6, '三位首领该按同一倍率强化');
+    assert.ok(Number.isFinite(b.maxHp) && b.maxHp > 0, '首领血量不该是坏值');
+  }
+  // 前两位倒下时这一波还没完，只有第三位也倒下才结算
+  for (const b of [trio[0], trio[1]]) game.enemies.damage(b, 1e9, game.lightCtx(), 0, 0, 0);
+  d.update(1 / 60, ctx());
+  assert.equal(d.phase, 'boss', '还有一位站着，这一波不该结束');
+  assert.ok(!game.save.achievements.includes('trio_boss'), '还有一位站着就不该解锁三首同辉');
+  game.enemies.damage(trio[2], 1e9, game.lightCtx(), 0, 0, 0);
+  d.update(1 / 60, ctx());
+  assert.ok(game.save.achievements.includes('trio_boss'), '三位都倒下应解锁「三首同辉」');
+
+  // ── 多首领血条：同台几位就写几行，血量各自对应 ──
+  game.enemies.clear();
+  game.state = 'playing';
+  d.wave = 24;
+  d.beginWave(ctx());
+  game.hitStop = 0; // 击杀首领有顿帧，先清掉，不然世界是冻住的
+  game.update(1 / 60);
+  assert.equal(game.bossList.length, 3, `bossList 应记下三位首领（实际 ${game.bossList.length}）`);
+  assert.equal(game.bossName, game.bossList[0].name, '单条血条显示的是第一位首领的名字');
+  hud.update(1 / 60);
+  assert.equal(hud.bossRowEls.length, 3, 'HUD 应画三行首领血条');
+  assert.equal(hud.bossRowEls[0].name.textContent, game.bossList[0].name, '第一行写的是第一位首领的名字');
+  assert.equal(hud.bossRowEls[2].name.textContent, game.bossList[2].name, '第三行写的是第三位首领的名字');
+  assert.ok(parseFloat(hud.bossRowEls[1].fill.style.width) > 0, '中间那行也要有血量宽度');
+  // 打掉两位：血条该跟着少两行
+  for (const b of [game.enemies.bosses[0], game.enemies.bosses[1]]) game.enemies.damage(b, 1e9, game.lightCtx(), 0, 0, 0);
+  game.hitStop = 0; // 击杀首领有顿帧，先清掉，不然世界是冻住的
+  game.update(1 / 60);
+  hud.update(1 / 60);
+  assert.equal(hud.bossRowEls.length, 1, '只剩一位首领时只留一行血条');
+  assert.equal(hud.bossRowEls[0].name.textContent, game.bossList[0].name, '留下的那一行是还站着的那位');
+  // 全场清空：血条整块收起来
+  game.enemies.damage(game.enemies.bosses[0], 1e9, game.lightCtx(), 0, 0, 0);
+  game.hitStop = 0; // 击杀首领有顿帧，先清掉，不然世界是冻住的
+  game.update(1 / 60);
+  hud.update(1 / 60);
+  assert.equal(hud.bossRowEls.length, 0, '首领都倒下后血条应清空');
+  assert.equal(game.bossName, null, 'bossName 也该归位');
 
   // ── 无尽进度条：填到这一轮的哪一波，并把首领那一段标出来 ──
   game.endless = true;

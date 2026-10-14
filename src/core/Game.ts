@@ -138,6 +138,8 @@ export interface UIHost {
 
 export interface HUDHost {
   setBoss(name: string | null, frac: number): void;
+  /** 首领血条：无尽里第 3 / 5 轮起会有两三位同时在场，一列排下来。 */
+  setBosses(list: { name: string; frac: number }[]): void;
   toast(text: string): void;
   /** 首次遭遇的提示卡（标题 + 一行说明）。 */
   tip(title: string, text: string): void;
@@ -221,6 +223,8 @@ export class Game {
   private curseDarkness = 0;
   bossName: string | null = null;
   bossFrac = 0;
+  /** 场上每一位首领的名字与血量，按先来后到排列（HUD 一列画下来）。 */
+  bossList: { name: string; frac: number }[] = [];
   damageDealt = 0;
   damageTaken = 0;
   bestCombo = 0;
@@ -413,6 +417,7 @@ export class Game {
     this.oilPickups = 0;
     this.bossName = null;
     this.bossFrac = 0;
+    this.bossList = [];
     this.fogTimer = 0;
     this.darknessBoost = 0;
     this.curseDarkness = 0;
@@ -755,11 +760,10 @@ export class Game {
     this.player.y = clamped.y;
 
     this.enemies.update(dt, this.enemyCtx());
-    for (const e of this.enemies.bosses) {
-      this.bossName = ENEMY_MAP[e.defId].name;
-      this.bossFrac = clamp(e.hp / e.maxHp, 0, 1);
-    }
-    if (!this.enemies.bosses.length) this.bossName = null;
+    const livingBosses = this.enemies.bosses;
+    this.bossList = livingBosses.map((e) => ({ name: ENEMY_MAP[e.defId].name, frac: clamp(e.hp / e.maxHp, 0, 1) }));
+    this.bossName = this.bossList.length ? this.bossList[0].name : null;
+    this.bossFrac = this.bossList.length ? this.bossList[0].frac : 0;
 
     this.projectiles.update(dt, (p) => this.nearestEnemy(p.x, p.y, 460), { x: this.player.x, y: this.player.y });
     this.updateBeams(dt);
@@ -1456,6 +1460,8 @@ export class Game {
       if (e.defId === 'nightfall') this.achievements.unlock('nightfall_king');
       if (this.endless && this.director.bossPair && this.enemies.bosses.filter((b) => b !== e).length === 0) {
         this.achievements.unlock('twin_boss');
+        // 三位同台的一轮清场：比双首领再往上记一笔
+        if (this.director.bossCount >= 3) this.achievements.unlock('trio_boss');
       }
     }
   }

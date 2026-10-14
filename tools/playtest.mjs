@@ -878,6 +878,43 @@ async function main() {
   expect(endlessBar.w > 0 && endlessBar.scroll <= 1, '无尽进度条有尺寸且不溢出', JSON.stringify(endlessBar));
   await shot('13-endless');
 
+  // ── 第 5 轮：三位首领同台，血条该一列排下来 ──
+  const trioHud = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const stages = window.__WICKLIGHT__.catalog.stages;
+    const stage = stages[stages.length - 1];
+    g.director.setStage(stage, stages.length - 1);
+    g.director.endless = true;
+    g.director.wave = 24; // 再走一步就是第 25 波 = 第 5 轮
+    g.enemies.clear();
+    g.state = 'playing';
+    g.hitStop = 0;
+    g.director.beginWave(g.directorCtx(stage));
+    g.hitStop = 0;
+    g.update(1 / 60);
+    window.__WICKLIGHT__.hud.update(1 / 60);
+    const wrap = document.querySelector('.hud__boss');
+    const rows = [...document.querySelectorAll('.hud__boss-row')];
+    const r = wrap.getBoundingClientRect();
+    return {
+      count: rows.length,
+      names: rows.map((el) => el.querySelector('.hud__boss-name')?.textContent ?? ''),
+      widths: rows.map((el) => Math.round(parseFloat(el.querySelector('.hud__boss-bar i')?.style.width ?? '0'))),
+      multi: wrap.classList.contains('is-multi'),
+      active: wrap.classList.contains('is-active'),
+      left: Math.round(r.left),
+      right: Math.round(r.right),
+      h: Math.round(r.height),
+      vw: window.innerWidth,
+    };
+  });
+  expect(trioHud.count === 3, '三首领同台时 HUD 画出三行血条', JSON.stringify(trioHud));
+  expect(new Set(trioHud.names).size === 3 && trioHud.names.every(Boolean), '三行血条各写一位首领的名字', JSON.stringify(trioHud.names));
+  expect(trioHud.multi && trioHud.active, '多首领血条带 is-multi 且可见', JSON.stringify(trioHud));
+  expect(trioHud.widths.every((w) => w > 0), '每行血条都有血量宽度', JSON.stringify(trioHud.widths));
+  expect(trioHud.left >= 0 && trioHud.right <= trioHud.vw && trioHud.h > 0, '多首领血条在视口内且有高度', JSON.stringify(trioHud));
+  await shot('13b-endless-trio');
+
   // ── 11. 今日灯芯：全服同一个夜晚 ──
   await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
   await sleep(400);

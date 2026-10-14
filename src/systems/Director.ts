@@ -22,14 +22,18 @@ export type DirectorPhase = 'intro' | 'spawning' | 'clearing' | 'boss' | 'comple
 export const ENDLESS_BOSSES = ['thornlord', 'extinguisher', 'emberwake', 'nightfall'];
 /** 从第几轮开始，首领成对出现（第 3 轮 = 第 15 波）。 */
 export const ENDLESS_PAIR_ROUND = 3;
+/** 从第几轮开始，三位首领一同苏醒（第 5 轮 = 第 25 波）。 */
+export const ENDLESS_TRIO_ROUND = 5;
 
 export class Director {
   phase: DirectorPhase = 'intro';
   wave = 0;
   endless = false;
   stageIndex = 0;
-  /** 当前这一波是不是「双首领」。 */
+  /** 当前这一波是不是「双首领」（三位入场时同样为真）。 */
   bossPair = false;
+  /** 当前这一波同时上场的首领数量：1 / 2 / 3。 */
+  bossCount = 0;
   /** 本关夜咒带来的敌人强化。 */
   curse: { countMult: number; hpMult: number; dmgMult: number; extraWaves: number } = {
     countMult: 1,
@@ -63,6 +67,7 @@ export class Director {
     this.hazardTimer = 12;
     this.aliveCap = 0;
     this.bossPair = false;
+    this.bossCount = 0;
   }
 
   /** 设置本关夜咒的敌人强化（在 setStage 之后调用）。 */
@@ -119,23 +124,27 @@ export class Director {
       : this.wave === this.stage.waves + curse.extraWaves && !!bossId;
     if (isBossWave && bossId) {
       this.phase = 'boss';
-      // 第 3 轮起，两位首领一起上场——单只首领的招式已经背熟了，成对才是新的题
-      const pair = this.endless && this.wave / 5 >= ENDLESS_PAIR_ROUND;
-      this.bossPair = pair;
-      const hp = this.hpMult * (pair ? 0.62 : 0.9);
-      const def = ENEMY_MAP[bossId];
-      const pos = ctx.spawnPoint();
-      ctx.spawnEnemy(bossId, pos.x, pos.y, hp, this.dmgMult);
-      ctx.onBossSpawn(def.id);
-      if (pair) {
-        const secondId = ENDLESS_BOSSES[(bossIndex + 1) % ENDLESS_BOSSES.length];
-        const def2 = ENEMY_MAP[secondId];
-        const pos2 = ctx.spawnPoint();
-        ctx.spawnEnemy(secondId, pos2.x, pos2.y, hp, this.dmgMult);
-        ctx.onBossSpawn(def2.id);
-        ctx.announce(`第 ${this.round} 轮 · ${def2.name} 与 ${def.name} 一同苏醒`, true);
+      // 第 3 轮起首领成对，第 5 轮起三位同台——单只首领的招式早就背熟了，加人才是新的题
+      const round = this.wave / 5;
+      const count = this.endless ? (round >= ENDLESS_TRIO_ROUND ? 3 : round >= ENDLESS_PAIR_ROUND ? 2 : 1) : 1;
+      this.bossCount = count;
+      this.bossPair = count >= 2;
+      // 同台的首领越多，各自被压得越低——不然三份满血叠在一起只是把时间拉长
+      const share = count >= 3 ? 0.46 : count === 2 ? 0.62 : 0.9;
+      const hp = this.hpMult * share;
+      const names: string[] = [];
+      for (let k = 0; k < count; k += 1) {
+        const id = ENDLESS_BOSSES[(bossIndex + k) % ENDLESS_BOSSES.length];
+        const def = ENEMY_MAP[id];
+        const pos = ctx.spawnPoint();
+        ctx.spawnEnemy(id, pos.x, pos.y, hp, this.dmgMult);
+        ctx.onBossSpawn(def.id);
+        names.push(def.name);
+      }
+      if (count >= 2) {
+        ctx.announce(`第 ${this.round} 轮 · ${names.slice(0, -1).join('、')} 与 ${names[names.length - 1]} 一同苏醒`, true);
       } else {
-        ctx.announce(`${def.name} 苏醒`, true);
+        ctx.announce(`${names[0]} 苏醒`, true);
       }
     } else {
       this.phase = 'spawning';
