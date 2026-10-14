@@ -5,6 +5,7 @@ import { Input } from './core/Input';
 import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
+import { setupOrientation } from './ui/Orientation';
 import { WEAPONS as weapons } from './data/weapons';
 import { RELICS as relics, TRIBES as tribes } from './data/relics';
 import { PASSIVES as passives } from './data/upgrades';
@@ -84,13 +85,27 @@ function boot(): void {
     render: () => game.render(),
   });
 
+  // 竖屏闸门：手机横过来之前不跑主循环——竖屏那点视野本来也没法玩，
+  // 而且省下的这些帧正好留给转屏动画。
+  let booted = false;
+  const orientation = setupOrientation((blocked) => {
+    if (blocked) {
+      if (game.state === 'playing') game.togglePause();
+      loop.stop();
+    } else if (booted) {
+      loop.start();
+    }
+  });
+
+
   void [weapons, relics, passives, curses, enemies, affixes, bounties, stages, tribes, meta, daily];
 
   const ready = () => {
-    game.renderer.setQuality(game.settings.data.quality);
     game.renderer.adaptive = game.settings.data.adaptive;
     resize();
-    loop.start();
+    loop.maxFps = game.profile.frameCap;
+    booted = true;
+    if (!orientation.blocked()) loop.start();
     (window as unknown as { __WICKLIGHT__?: { loop: unknown } }).__WICKLIGHT__!.loop = loop;
     let pct = 0;
     const iv = window.setInterval(() => {

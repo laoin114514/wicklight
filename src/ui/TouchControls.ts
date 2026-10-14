@@ -8,6 +8,8 @@ export class TouchControls {
   private pointerId = -1;
   private cx = 0;
   private cy = 0;
+  /** 摇杆最大行程（跟着样式表里的直径走：横屏会把摇杆收小一号）。 */
+  private maxR = 52;
   private moveX = 0;
   private moveY = 0;
   private dash = false;
@@ -35,6 +37,7 @@ export class TouchControls {
       const rect = base.getBoundingClientRect();
       this.cx = rect.left + rect.width / 2;
       this.cy = rect.top + rect.height / 2;
+      this.maxR = rect.width * 0.42;
       this.pointerId = t.identifier;
       this.active = true;
       this.updateStick(t.clientX, t.clientY);
@@ -74,7 +77,7 @@ export class TouchControls {
   private updateStick(x: number, y: number): void {
     const dx = x - this.cx;
     const dy = y - this.cy;
-    const max = 52;
+    const max = this.maxR;
     const len = Math.hypot(dx, dy) || 1;
     const clamped = Math.min(len, max);
     const nx = (dx / len) * clamped;

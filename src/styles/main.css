@@ -2434,3 +2434,108 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   letter-spacing: 2px;
 }
 .panel--daily .cx-rows b { flex: 1; text-align: left; line-height: 1.55; }
+
+
+/* ── 13. 手机横屏闸门：竖着拿时盖一块"黄铜边框 + 铁牌"的提示 ───────── */
+/* 手机上只有横屏才装得下完整视野与双手操作。与其画一个能跑但没法玩的画面，
+   不如在这里把话说清楚——横过来这块牌子自己就没了。 */
+.rotate { display: none; }
+.rotate.is-on {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: calc(16px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at 50% 40%, rgba(58, 38, 12, 0.55) 0%, rgba(6, 7, 11, 0.96) 58%),
+    var(--iron-lo);
+}
+.rotate__card {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  max-width: min(86vw, 460px);
+  padding: 28px 30px 24px;
+  text-align: center;
+  border: 1px solid rgba(192, 138, 62, 0.45);
+  border-radius: var(--radius-plate);
+  border-top-width: 3px;
+  background: linear-gradient(180deg, rgba(38, 31, 22, 0.94), rgba(15, 13, 10, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 216, 138, 0.16), 0 22px 54px rgba(0, 0, 0, 0.62);
+}
+/* 提灯睡倒：竖着是"灯"，转到 90° 就是"横过来" */
+.rotate__lamp {
+  position: relative;
+  width: 52px;
+  height: 76px;
+  border: 2px solid rgba(206, 166, 104, 0.8);
+  border-radius: 7px 7px 9px 9px;
+  background: linear-gradient(180deg, rgba(62, 46, 22, 0.92), rgba(24, 17, 9, 0.96));
+  box-shadow: inset 0 0 20px rgba(255, 170, 70, 0.4), 0 0 26px rgba(255, 150, 60, 0.2);
+  animation: lamp-tip 2.9s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+}
+.rotate__lamp i {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  width: 17px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 50% 50% 44% 44%;
+  background: radial-gradient(circle at 50% 64%, #fff6da, #ffb14e 52%, rgba(255, 120, 30, 0));
+}
+@keyframes lamp-tip {
+  0%, 20% { transform: rotate(0deg); }
+  46%, 74% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+.rotate__title {
+  color: var(--brass-hi);
+  font-family: var(--font-display), serif;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+.rotate__sub {
+  color: rgba(228, 210, 178, 0.66);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.6px;
+}
+
+
+/* ── 14. 手机横屏：屏幕矮，控件收一号并让开刘海与手势条 ─────────── */
+/* 横屏只有 390px 高，竖屏那套（按钮竖排、悬赏挂右上）会把右侧整条堵死。
+   改成分工明确的两列：左边状态 + 构筑，右边记分 + 悬赏 + 灯台，下角留给双手。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .touch-stick {
+    left: calc(16px + env(safe-area-inset-left));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    width: 112px;
+    height: 112px;
+  }
+  .touch-stick__knob { width: 46px; height: 46px; }
+  /* 冲刺 / 燃爆并排放：两个 64px 竖排要塞 138px，横着只占一行 */
+  .touch-buttons {
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    gap: 10px;
+    grid-auto-flow: column;
+  }
+  .touch-btn { width: 64px; height: 64px; font-size: 12.5px; letter-spacing: 1px; }
+  body.is-touch .hud__build { top: calc(102px + env(safe-area-inset-top)); max-width: 44vw; }
+  /* 右上那一列本身就有 130px 高，悬赏和灯台挂到它下面，别顶上去 */
+  body.is-touch .hud__bounty {
+    left: auto;
+    right: calc(12px + env(safe-area-inset-right));
+    top: calc(158px + env(safe-area-inset-top));
+  }
+  body.is-touch .hud__pyre {
+    left: auto;
+    right: calc(12px + env(safe-area-inset-right));
+    top: calc(223px + env(safe-area-inset-top));
+  }
+}

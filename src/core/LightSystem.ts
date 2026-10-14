@@ -19,8 +19,15 @@ export class LightSystem {
   darkness = 0.94;
   /** 光照贴图按设备像素绘制（与主画布同分辨率），避免画完再被缩放一次。 */
   private dpr = 1;
+  /**
+   * 贴图分辨率相对画布的倍率。手机档会降到 0.5：暗幕挖洞是一张低频的柔光，
+   * 半分辨率再放大几乎看不出差别，但填充与叠加的像素只剩 1/4。
+   */
+  private resolutionScale = 1;
   /** 上一帧真正参与“照亮”的光源数量（供冒烟测试断言灯芯光源没被清空）。 */
   lastLightCount = 0;
+  /** 上一帧真正落到屏幕上的光源数量（视野外的会被裁掉）。 */
+  lastLitCount = 0;
 
   constructor() {
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
@@ -40,8 +47,14 @@ export class LightSystem {
   }
 
   /** 跟随主画布的倍率：贴图按设备像素画，主画布就不用再缩它一遍。 */
-  setScale(dpr: number): void {
+  setScale(dpr: number, resolutionScale = 1): void {
     if (dpr > 0) this.dpr = dpr;
+    if (resolutionScale > 0) this.resolutionScale = resolutionScale;
+  }
+
+  /** 贴图实际分辨率倍率（供测试断言）。 */
+  get textureScale(): number {
+    return this.dpr * this.resolutionScale;
   }
 
   begin(): void {
@@ -109,8 +122,14 @@ export class LightSystem {
 
   render(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number, time: number): void {
     this.lastLightCount = this.lights.length;
+    this.lastLitCount = 0;
     const sprites = this.ensureSprites();
     // Additive warm glow pass directly on the main canvas.
+    // 视野外的光源白白占填充率：按屏幕坐标裁掉（留一点余量，免得边缘的灯突然消失）
+    const cullPad = 8;
+    const onScreen = (x: number, y: number, r: number): boolean =>
+      x + r > -cullPad && y + r > -cullPad && x - r < w + cullPad && y - r < h + cullPad;
+    let drawn = 0;
     if (this.glowLight.length && this.glowSprite && sprites) {
       const glow = this.glowSprite;
       ctx.save();
@@ -118,7 +137,7 @@ export class LightSystem {
       for (const l of this.glowLight) {
         const s = cam.worldToScreen(l.x, l.y);
         const r = l.radius * cam.zoom;
-        if (r <= 0) continue;
+        if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
         ctx.globalAlpha = l.intensity;
         ctx.drawImage(glow, s.x - r, s.y - r, r * 2, r * 2);
       }
@@ -129,6 +148,7 @@ export class LightSystem {
       for (const l of this.glowLight) {
         const s = cam.worldToScreen(l.x, l.y);
         const r = l.radius * cam.zoom;
+        if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
         const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
         g.addColorStop(0, `rgba(255,214,140,${0.32 * l.intensity})`);
         g.addColorStop(0.4, `rgba(255,150,60,${0.16 * l.intensity})`);
@@ -144,14 +164,15 @@ export class LightSystem {
     if (!this.ctx || !this.canvas) return;
     const c = this.canvas;
     const cctx = this.ctx;
-    const pw = Math.max(1, Math.floor(w * this.dpr));
-    const ph = Math.max(1, Math.floor(h * this.dpr));
+    const tex = this.dpr * this.resolutionScale;
+    const pw = Math.max(1, Math.floor(w * tex));
+    const ph = Math.max(1, Math.floor(h * tex));
     if (c.width !== pw || c.height !== ph) {
       c.width = pw;
       c.height = ph;
     }
     // 下面所有绘制仍然写在 CSS 坐标里，倍率交给变换——和主画布的坐标约定一致。
-    cctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    cctx.setTransform(tex, 0, 0, tex, 0, 0);
     cctx.globalCompositeOperation = 'source-over';
     cctx.clearRect(0, 0, w, h);
     cctx.fillStyle = `rgba(3,4,11,${this.darkness})`;
@@ -163,7 +184,8 @@ export class LightSystem {
       const s = cam.worldToScreen(l.x, l.y);
       const flicker = l.flicker > 0 ? 1 + Math.sin(time * 9 + l.x * 0.05) * l.flicker : 1;
       const r = l.radius * cam.zoom * flicker;
-      if (r <= 0) continue;
+      if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
+      drawn += 1;
       const core = Math.min(1, l.intensity);
       if (hole) {
         cctx.globalAlpha = core;
@@ -185,6 +207,7 @@ export class LightSystem {
     cctx.globalAlpha = 1;
     cctx.globalCompositeOperation = 'source-over';
 
+    this.lastLitCount = drawn;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;

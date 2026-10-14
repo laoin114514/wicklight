@@ -1,4 +1,5 @@
 import type { Settings } from './Settings';
+import type { PerfProfile } from './Perf';
 
 interface Band {
   y: number;
@@ -35,7 +36,16 @@ export class PostFX {
   private bloomHalf: HTMLCanvasElement | null = null;
   private bloomHalfCtx: CanvasRenderingContext2D | null = null;
 
+  /** 泛光档位：降采样倍数与叠加层数由性能档位给（手机档更省）。 */
+  private bloomDivisor = 4;
+  private bloomPasses = 2;
+
   constructor(private settings: Settings) {}
+
+  setProfile(p: PerfProfile): void {
+    this.bloomDivisor = p.bloomDivisor;
+    this.bloomPasses = p.bloomPasses;
+  }
 
   private buildOverlays(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     this.vh = h;
@@ -61,17 +71,17 @@ export class PostFX {
 
   /** 低分辨率两级泛光：让火焰、闪电、提灯与爆炸真正“发光”。 */
   applyBloom(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    if (this.settings.data.quality === 'low' || !this.settings.data.bloom) return;
+    if (this.bloomPasses <= 0 || !this.settings.data.bloom) return;
     const src = this.bloomSource(ctx, w, h);
     if (!src) return;
-    // 两次整屏叠加是这个效果里最贵的一步，所以中等画质只叠一次（视觉上只差外圈一点点）
-    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.settings.data.quality === 'high' ? 2 : 1);
+    // 两次整屏叠加是这个效果里最贵的一步，所以低配只叠一次（视觉上只差外圈一点点）
+    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses);
   }
 
   /** 把主画布压到 1/4 分辨率、自乘一次，得到只剩余亮的泛光源。 */
   private bloomSource(ctx: CanvasRenderingContext2D, w: number, h: number): { bw: number; bh: number } | null {
-    const bw = Math.max(1, Math.round(w / 4));
-    const bh = Math.max(1, Math.round(h / 4));
+    const bw = Math.max(1, Math.round(w / this.bloomDivisor));
+    const bh = Math.max(1, Math.round(h / this.bloomDivisor));
     if (typeof document === 'undefined') return null;
     if (!this.bloomA || this.bloomW !== bw || this.bloomH !== bh) {
       try {
@@ -202,7 +212,7 @@ export class PostFX {
 
   ensureSize(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const m = ctx.getTransform();
-    const key = `${w}x${h}@${m.a.toFixed(2)}x${m.d.toFixed(2)}#${this.settings.data.quality}`;
+    const key = `${w}x${h}@${m.a.toFixed(2)}x${m.d.toFixed(2)}#${this.settings.data.quality}#${this.bloomDivisor}`;
     if (this.sizeKey === key) return;
     this.sizeKey = key;
     this.buildOverlays(ctx, w, h);

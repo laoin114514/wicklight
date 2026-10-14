@@ -8,6 +8,7 @@ import { Settings } from './Settings';
 import { Storage, type Storage as StorageType } from './Storage';
 import { EventBus, type GameEvents } from './Events';
 import { clamp } from './MathUtils';
+import { perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
 import { Player, type PlayerContext } from '../entities/Player';
 import { EnemySystem, type Enemy, type EnemyContext, type LightCtx } from '../entities/enemies/Enemy';
@@ -16,7 +17,7 @@ import { FloatingTextSystem } from '../entities/FloatingText';
 import { PickupSystem, type Pickup } from '../entities/Pickup';
 import { ProjectileSystem, type Projectile } from '../entities/Projectile';
 import { Director } from '../systems/Director';
-import { generateLevel, type Level } from '../systems/LevelGen';
+import { generateLevel, refinishLevel, type Level } from '../systems/LevelGen';
 import { drawDecor } from './Decor';
 import type { Pyre, Shrine } from '../systems/LevelGen';
 import { CURSES, type CurseDef } from '../data/curses';
@@ -287,10 +288,15 @@ export class Game {
   private moteTimer = 0;
   private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false };
   private startSeed = 1;
+  /** 当前性能档位（掌上设备 / 桌面 × 画质），每帧开头刷新一次，全游戏只有这一处结论。 */
+  profile: PerfProfile = perfProfile('high');
+  private profileKey = '';
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.postfx = new PostFX(this.settings);
+    // 先定档位：后面 generateLevel 才知道该铺多少布景
+    this.refreshPerf();
     this.audio = new AudioEngine(this.settings);
     this.loot = new LootSystem(this.pickups);
     this.save = this.storage.load();
@@ -300,7 +306,7 @@ export class Game {
     this.records = new RecordsSystem(this.save);
     this.bounties = new BountySystem();
     const startStage = STAGES[0];
-    this.level = generateLevel(startStage, 1);
+    this.level = generateLevel(startStage, 1, this.profile.detailScale);
     this.director = new Director(startStage, this.difficulty, this.rng);
     this.camera.resize(this.renderer.width, this.renderer.height);
   }
@@ -480,7 +486,7 @@ export class Game {
   private loadStage(stage: import('../types').StageDef, index: number, fresh: boolean): void {
     this.screenFade = 1;
     this.stageIndex = index;
-    this.level = generateLevel(stage, this.startSeed + index * 7919);
+    this.level = generateLevel(stage, this.startSeed + index * 7919, this.profile.detailScale);
     this.director.setStage(stage, index);
     if (this.endless) this.director.enableEndless();
     const center = { x: 0, y: 0 };
@@ -2336,11 +2342,30 @@ export class Game {
     );
   }
 
+  /**
+   * 把当前档位下发到各个子系统。每帧调一次，但除了第一次（或画质档真的变了）
+   * 之外都是空转：`Renderer.setProfile` 内部先比再改，Set 也不产生分配。
+   * 布景密度变了意味着地面陈设要重铺——同一颗种子重铺，墙/神龛/灯台都不动。
+   */
+  refreshPerf(): void {
+    const p = perfProfile(this.settings.data.quality);
+    this.profile = p;
+    this.renderer.setProfile(p);
+    this.postfx.setProfile(p);
+    this.particles.density = p.particleScale;
+    this.light.setScale(this.renderer.dpr, p.lightScale);
+    const key = `${p.handheld ? 'h' : 'd'}|${this.settings.data.quality}`;
+    if (key === this.profileKey) return;
+    const first = !this.profileKey;
+    this.profileKey = key;
+    if (!first && this.level) refinishLevel(this.level, this.startSeed + this.stageIndex * 7919, p.detailScale);
+  }
+
   render(): void {
     const r = this.renderer;
     // 动态分辨率：按实测帧间隔自动升降内部渲染分辨率（高分屏下这一项决定能不能跑到 60fps）
     r.adaptive = this.settings.data.adaptive;
-    r.setQuality(this.settings.data.quality);
+    this.refreshPerf();
     r.sampleFrame();
     r.begin();
     const theme = this.currentStage().theme;
@@ -2364,7 +2389,7 @@ export class Game {
 
     this.drawWorld(ctx, w, h);
     this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
-    this.light.setScale(r.dpr);
+    this.light.setScale(r.dpr, this.profile.lightScale);
     this.light.render(ctx, this.camera, w, h, this.time);
     this.drawPyreGlow(ctx, w, h);
     this.drawFrostHaze(ctx, w, h);
@@ -2742,6 +2767,16 @@ export class Game {
     ctx.fillRect(0, h * 0.55, w, h * 0.45);
   }
 
+  /** 当前镜头的世界视口（带余量），给视野裁剪用。 */
+  private worldView(): { x: number; y: number; halfW: number; halfH: number } {
+    return {
+      x: this.camera.x,
+      y: this.camera.y,
+      halfW: this.camera.width / 2,
+      halfH: this.camera.height / 2,
+    };
+  }
+
   private drawWorld(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const cam = this.camera;
     void w;
@@ -2760,11 +2795,11 @@ export class Game {
     this.drawPyres(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
-    this.enemies.draw(ctx, this.time, this.player.x, this.player.y);
+    this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
     this.player.draw(ctx, this.time);
     this.drawArcs(ctx);
     this.drawBeams(ctx);
-    this.particles.draw(ctx);
+    this.particles.draw(ctx, this.worldView());
     this.floaters.draw(ctx);
 
     ctx.restore();
@@ -2815,8 +2850,7 @@ export class Game {
     ctx.restore();
 
     // 主题布景
-    const view = { x: this.camera.x, y: this.camera.y, halfW: this.camera.width / 2, halfH: this.camera.height / 2 };
-    drawDecor(ctx, theme.id, lvl.decor, view, this.time, lvl.details);
+    drawDecor(ctx, theme.id, lvl.decor, this.worldView(), this.time, lvl.details);
 
     // Walls (with soft drop shadow for depth)
     ctx.save();

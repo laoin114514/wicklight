@@ -9,6 +9,12 @@
     />
     <meta name="theme-color" content="#07080c" />
     <meta name="description" content="灯芯 WICKLIGHT — 灯火即视野与火力的暗夜生存动作肉鸽" />
+    <!-- 装到桌面之后直接全屏横屏：竖着拿是玩不了的，manifest 里先把话说死 -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="灯芯" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>WICKLIGHT · 灯芯</title>
     <link rel="stylesheet" href="./src/styles/main.css" />
   </head>
@@ -27,6 +33,14 @@
         <div class="touch-buttons">
           <button class="touch-btn touch-btn--dash" data-action="dash" type="button">冲刺</button>
           <button class="touch-btn touch-btn--nova" data-action="nova" type="button">燃爆</button>
+        </div>
+      </div>
+
+      <div id="rotate-hint" class="rotate" aria-hidden="true">
+        <div class="rotate__card">
+          <div class="rotate__lamp" aria-hidden="true"><i></i></div>
+          <div class="rotate__title">把手机横过来</div>
+          <div class="rotate__sub">灯芯要横着举 —— 横屏才装得下完整视野与双手操作</div>
         </div>
       </div>
 

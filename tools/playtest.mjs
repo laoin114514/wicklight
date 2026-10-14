@@ -1055,7 +1055,51 @@ async function main() {
   });
   expect(mTitle && mTitle.clip <= 1, '移动端主菜单标题不会被面板切掉', JSON.stringify(mTitle));
   expect(m.panels.every((p) => p.h > 0), '移动端面板元素有高度');
-  await mobile.screenshot({ path: join(SHOTS, '14-mobile-menu.png') });
+
+  // 竖屏：一块"把手机横过来"的牌子盖住，主循环停下（不是能跑就行，是根本不该开跑）
+  const portrait = await mobile.evaluate(() => {
+    const hint = document.getElementById('rotate-hint');
+    const cs = hint ? getComputedStyle(hint) : null;
+    return {
+      on: !!hint && hint.classList.contains('is-on'),
+      shown: !!cs && cs.display !== 'none',
+      text: hint ? hint.textContent.replace(/\s+/g, '') : '',
+      running: !!window.__WICKLIGHT__.loop.running,
+    };
+  });
+  expect(portrait.on && portrait.shown, '手机竖屏必须出现横屏提示', JSON.stringify(portrait));
+  expect(portrait.text.includes('横过来'), '横屏提示要把话说清楚', portrait.text);
+  expect(portrait.running === false, '竖屏时主循环应当停下（不白烧电）', String(portrait.running));
+  await mobile.screenshot({ path: join(SHOTS, '14-mobile-portrait.png') });
+
+  // 横过来：牌子自己消失，循环自己起来
+  await mobile.setViewportSize({ width: 844, height: 390 });
+  await sleep(500);
+  const land = await mobile.evaluate(() => {
+    const hint = document.getElementById('rotate-hint');
+    const cs = hint ? getComputedStyle(hint) : null;
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { l: Math.round(b.left), r: Math.round(b.right), t: Math.round(b.top), b: Math.round(b.bottom), w: Math.round(b.width), h: Math.round(b.height) };
+    };
+    return {
+      vw: window.innerWidth,
+      vh: window.innerHeight,
+      hidden: !!cs && cs.display === 'none',
+      running: !!window.__WICKLIGHT__.loop.running,
+      stick: box('#touch-stick'),
+      buttons: box('.touch-buttons'),
+    };
+  });
+  expect(land.hidden, '横屏之后提示自动消失', JSON.stringify(land));
+  expect(land.running, '横屏之后主循环自己跑起来');
+  const inView = (b) => !!b && b.l >= -1 && b.t >= -1 && b.r <= land.vw + 1 && b.b <= land.vh + 1;
+  expect(inView(land.stick), '横屏摇杆整块落在视口内', JSON.stringify(land.stick));
+  expect(inView(land.buttons), '横屏按钮整块落在视口内', JSON.stringify(land.buttons));
+  await mobile.screenshot({ path: join(SHOTS, '15-mobile-menu.png') });
+
   await mobile.click('[data-act="play"]');
   await sleep(250);
   await mobile.click('[data-act="start"]');
@@ -1089,7 +1133,14 @@ async function main() {
     return t ? getComputedStyle(t).display : 'missing';
   });
   expect(touchVisible !== 'missing', '移动端存在触摸控件');
-  await mobile.screenshot({ path: join(SHOTS, '15-mobile-play.png') });
+  const landHud = await mobile.evaluate(() => [
+    ...window.__PROBE__.overlaps('#touch-stick', '.touch-buttons'),
+    ...window.__PROBE__.overlaps('#touch-stick', '.hud__bounty'),
+    ...window.__PROBE__.overlaps('.touch-buttons', '.hud__pyre'),
+    ...window.__PROBE__.overlaps('.hud__build', '#touch-stick'),
+  ]);
+  expect(landHud.length === 0, '横屏下摇杆 / 按钮 / HUD 互不打架', landHud.join('; '));
+  await mobile.screenshot({ path: join(SHOTS, '16-mobile-play.png') });
 
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));

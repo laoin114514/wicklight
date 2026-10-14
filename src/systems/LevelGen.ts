@@ -48,7 +48,51 @@ export interface Level {
   theme: StageDef['theme'];
 }
 
-export function generateLevel(stage: StageDef, seed: number): Level {
+/**
+ * 布景与细节的散布：单独一颗随机源，和墙 / 神龛 / 灯台那串随机数分开。
+ * 这样"同一种子在手机与桌面上是同一张地图"——只有陈设的疏密不同。
+ */
+export function scatterDecor(
+  halfW: number,
+  halfH: number,
+  seed: number,
+  detailScale = 1,
+): { decor: Decor[]; details: Decor[] } {
+  const rng = new Random(((seed ^ 0x9e3779b9) >>> 0) || 1);
+  const decor: Decor[] = [];
+  const decorCount = Math.round(96 * detailScale);
+  for (let i = 0; i < decorCount; i += 1) {
+    const d: Decor = {
+      x: rng.range(-halfW, halfW),
+      y: rng.range(-halfH, halfH),
+      r: 20 + rng.next() * 90,
+      kind: Math.floor(rng.next() * 3),
+    };
+    // 别挡住出生点
+    if (Math.hypot(d.x, d.y) < 150) continue;
+    decor.push(d);
+  }
+  const details: Decor[] = [];
+  const detailCount = Math.round(420 * detailScale);
+  for (let i = 0; i < detailCount; i += 1) {
+    details.push({
+      x: rng.range(-halfW + 40, halfW - 40),
+      y: rng.range(-halfH + 40, halfH - 40),
+      r: 4 + rng.next() * 12,
+      kind: Math.floor(rng.next() * 4),
+    });
+  }
+  return { decor, details };
+}
+
+/** 画质档位变了：重铺陈设，但地图本身（墙 / 神龛 / 灯台）原样不动。 */
+export function refinishLevel(level: Level, seed: number, detailScale: number): void {
+  const s = scatterDecor(level.halfW, level.halfH, seed, detailScale);
+  level.decor = s.decor;
+  level.details = s.details;
+}
+
+export function generateLevel(stage: StageDef, seed: number, detailScale = 1): Level {
   const rng = new Random(seed);
   const halfW = 1500;
   const halfH = 1100;
@@ -73,27 +117,7 @@ export function generateLevel(stage: StageDef, seed: number): Level {
     }
     if (!overlaps) walls.push({ x, y, w, h });
   }
-  const decor: Decor[] = [];
-  for (let i = 0; i < 96; i += 1) {
-    const d: Decor = {
-      x: rng.range(-halfW, halfW),
-      y: rng.range(-halfH, halfH),
-      r: 20 + rng.next() * 90,
-      kind: Math.floor(rng.next() * 3),
-    };
-    // 别挡住出生点
-    if (Math.hypot(d.x, d.y) < 150) continue;
-    decor.push(d);
-  }
-  const details: Decor[] = [];
-  for (let i = 0; i < 420; i += 1) {
-    details.push({
-      x: rng.range(-halfW + 40, halfW - 40),
-      y: rng.range(-halfH + 40, halfH - 40),
-      r: 4 + rng.next() * 12,
-      kind: Math.floor(rng.next() * 4),
-    });
-  }
+  const { decor, details } = scatterDecor(halfW, halfH, seed, detailScale);
   const shrines: Shrine[] = [];
   for (let i = 0; i < 2; i += 1) {
     for (let attempt = 0; attempt < 60; attempt += 1) {

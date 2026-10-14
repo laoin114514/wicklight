@@ -1,0 +1,12 @@
+{
+  "name": "WICKLIGHT · 灯芯",
+  "short_name": "灯芯",
+  "description": "灯火即视野与火力的暗夜生存动作肉鸽",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07080c",
+  "theme_color": "#07080c",
+  "icons": [{ "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -572,10 +572,26 @@ export class EnemySystem {
     ctx.addLight(e.x, e.y, 130 + e.phase * 20, 0.7);
   }
 
-  draw(ctx: CanvasRenderingContext2D, time: number, px = 0, py = 0): void {
+  draw(
+    ctx: CanvasRenderingContext2D,
+    time: number,
+    px = 0,
+    py = 0,
+    view?: { x: number; y: number; halfW: number; halfH: number },
+  ): void {
     ctx.save();
+    // 屏幕外的敌人不必画：每个敌人都要起渐变、描边、画血雾，几十只一起就是几毫秒。
+    // 留的余量足够装下首领光环与出生弹出，边缘不会突然少一只。
+    const pad = 200;
     for (const e of this.pool.all) {
       if (!e.active) continue;
+      if (
+        view &&
+        (Math.abs(e.x - view.x) > view.halfW + e.radius * 2 + pad ||
+          Math.abs(e.y - view.y) > view.halfH + e.radius * 2 + pad)
+      ) {
+        continue;
+      }
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
       drawEnemy(ctx, e, time, px, py);

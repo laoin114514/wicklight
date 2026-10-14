@@ -34,9 +34,16 @@ export class ParticleSystem {
     gravity: 0,
   }), 512);
 
+  /**
+   * 粒子密度倍率（性能档位给）。只影响"好看"的碎屑，不动任何玩法判定；
+   * 桌面档是 1，此时一行额外逻辑都不走，行为与从前逐位一致。
+   */
+  density = 1;
+
   burst(x: number, y: number, count: number, color: string, opts: { speed?: number; size?: number; life?: number; drag?: number; glow?: boolean; gravity?: number } = {}): void {
     const speed = opts.speed ?? 160;
-    for (let i = 0; i < count; i += 1) {
+    const n = this.density >= 1 ? count : Math.max(1, Math.round(count * this.density));
+    for (let i = 0; i < n; i += 1) {
       const p = this.pool.acquire();
       const a = rng.angle();
       const s = speed * (0.4 + rng.next());
@@ -56,6 +63,8 @@ export class ParticleSystem {
   }
 
   ember(x: number, y: number, color: string): void {
+    // 环境粒子按密度抽样（用 Math.random，别去动玩法那串确定性随机）
+    if (this.density < 1 && Math.random() > this.density) return;
     const p = this.pool.acquire();
     p.x = x;
     p.y = y;
@@ -73,6 +82,7 @@ export class ParticleSystem {
 
   /** 灯火中缓慢漂浮的微尘：小而长命，用来"把光画出来"。 */
   mote(x: number, y: number, color: string): void {
+    if (this.density < 1 && Math.random() > this.density) return;
     const p = this.pool.acquire();
     p.x = x;
     p.y = y;
@@ -121,11 +131,19 @@ export class ParticleSystem {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  draw(ctx: CanvasRenderingContext2D, view?: { x: number; y: number; halfW: number; halfH: number }): void {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    // 视野外的粒子不必进路径：一团碎屑在屏幕外，画它只是白烧 CPU
+    const pad = 40;
     for (const p of this.pool.all) {
       if (!p.active) continue;
+      if (
+        view &&
+        (Math.abs(p.x - view.x) > view.halfW + p.size + pad || Math.abs(p.y - view.y) > view.halfH + p.size + pad)
+      ) {
+        continue;
+      }
       const t = p.life / p.maxLife;
       if (p.ring) {
         const r = p.size * (1 - t) + 6;

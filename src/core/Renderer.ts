@@ -1,3 +1,5 @@
+import type { PerfProfile } from './Perf';
+
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
@@ -33,10 +35,14 @@ export class Renderer {
     this.apply();
   }
 
-  setQuality(q: 'low' | 'medium' | 'high'): void {
-    const ceiling = q === 'low' ? 1 : q === 'medium' ? 1.5 : 2;
-    if (ceiling === this.maxDpr) return;
-    this.maxDpr = ceiling;
+  /**
+   * 套用性能档位：倍率上限与像素预算都由档位给（手机档更省）。
+   * 只改这两项，尺寸/倍率的重算仍旧走 apply()，所以「缓冲 = CSS × 倍率」这条约定不被破坏。
+   */
+  setProfile(p: PerfProfile): void {
+    if (p.maxDpr === this.maxDpr && p.pixelBudget === this.pixelBudget) return;
+    this.maxDpr = p.maxDpr;
+    this.pixelBudget = p.pixelBudget;
     this.apply();
   }
 
