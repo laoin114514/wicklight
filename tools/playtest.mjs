@@ -1142,6 +1142,27 @@ async function main() {
   expect(landHud.length === 0, '横屏下摇杆 / 按钮 / HUD 互不打架', landHud.join('; '));
   await mobile.screenshot({ path: join(SHOTS, '16-mobile-play.png') });
 
+  // 打一半把手机竖过来：提示要出现、主循环要停、而且得自己先暂停（不能接着挨打）
+  await mobile.setViewportSize({ width: 390, height: 844 });
+  await sleep(400);
+  const midPortrait = await mobile.evaluate(() => ({
+    state: window.__WICKLIGHT__.game.state,
+    running: !!window.__WICKLIGHT__.loop.running,
+    hint: document.getElementById('rotate-hint')?.classList.contains('is-on') ?? null,
+  }));
+  expect(midPortrait.hint === true, '打一半竖过来：横屏提示要立刻出现', JSON.stringify(midPortrait));
+  expect(midPortrait.running === false, '打一半竖过来：主循环要停', JSON.stringify(midPortrait));
+  expect(midPortrait.state === 'paused', '打一半竖过来会自己暂停', midPortrait.state);
+  await mobile.setViewportSize({ width: 844, height: 390 });
+  await sleep(500);
+  const backLand = await mobile.evaluate(() => ({
+    state: window.__WICKLIGHT__.game.state,
+    running: !!window.__WICKLIGHT__.loop.running,
+    hint: document.getElementById('rotate-hint')?.classList.contains('is-on') ?? null,
+  }));
+  expect(backLand.running === true && backLand.hint === false, '转回横屏：提示消失、主循环接着跑', JSON.stringify(backLand));
+  expect(backLand.state === 'paused', '转回横屏后停在暂停面板上（由玩家决定何时继续）', backLand.state);
+
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));
   expect(pageErrors.length === 0, '无未捕获异常', pageErrors.slice(0, 4).join(' | '));

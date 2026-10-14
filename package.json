@@ -14,7 +14,8 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "playtest": "npm run build && node tools/playtest.mjs",
     "perf": "npm run build && node tools/perf.mjs",
-    "mobileperf": "npm run build && node tools/mobileperf.mjs"
+    "mobileperf": "npm run build && node tools/mobileperf.mjs",
+    "viewportcheck": "npm run build && node tools/viewportcheck.mjs"
   },
   "keywords": ["game", "canvas", "roguelite", "survivors", "webaudio", "typescript"],
   "license": "MIT",

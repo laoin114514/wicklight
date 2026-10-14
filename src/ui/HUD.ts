@@ -35,10 +35,14 @@ export class HUD implements HUDHost {
   private bossWrap!: HTMLElement;
   private bossRows!: HTMLElement;
   private bossRowEls: { row: HTMLElement; name: HTMLElement; fill: HTMLElement }[] = [];
+  private bossSig = '';
   private announceEl!: HTMLElement;
   private toastRoot: HTMLElement;
   private hudEl!: HTMLElement;
   private announceTimer = 0;
+  /** 上一次真正写进 DOM 的值：每帧无脑写 style / textContent 会让浏览器反复排队样式重算。 */
+  private lastText = new WeakMap<HTMLElement, string>();
+  private lastWidth = new WeakMap<HTMLElement, string>();
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -115,6 +119,21 @@ export class HUD implements HUDHost {
     this.announceEl = ann;
   }
 
+  /** 只在文本真的变了才写：时间一秒才变一次，没必要 60 次/秒地碰 DOM。 */
+  private text(el: HTMLElement, v: string): void {
+    if (this.lastText.get(el) === v) return;
+    this.lastText.set(el, v);
+    el.textContent = v;
+  }
+
+  /** 同理，宽度按 0.1% 取整后再比——肉眼看不出的抖动不必每帧重排一次。 */
+  private width(el: HTMLElement, frac: number): void {
+    const v = `${Math.round(Math.max(0, Math.min(1, frac)) * 1000) / 10}%`;
+    if (this.lastWidth.get(el) === v) return;
+    this.lastWidth.set(el, v);
+    el.style.width = v;
+  }
+
   setVisible(v: boolean): void {
     this.hudEl.style.display = v ? '' : 'none';
   }
@@ -125,8 +144,14 @@ export class HUD implements HUDHost {
 
   /** 首领血条：一列写下来，同台几位就有几行。 */
   setBosses(list: { name: string; frac: number }[]): void {
+    // 没有首领的时候这一路每帧都被调用，先比一次签名，别让"清空"也跟着每帧跑
+    const sig = list.map((b) => `${b.name}|${Math.round(b.frac * 1000)}`).join(',');
+    if (sig === this.bossSig) return;
+    const wasEmpty = !this.bossSig;
+    this.bossSig = sig;
     if (!list.length) {
-      this.bossWrap.classList.remove('is-active');
+      if (wasEmpty) return;
+      this.bossWrap.classList.remove('is-active', 'is-multi');
       this.bossRows.textContent = '';
       this.bossRowEls = [];
       return;
@@ -153,8 +178,8 @@ export class HUD implements HUDHost {
     list.forEach((b, i) => {
       const slot = this.bossRowEls[i];
       if (!slot) return;
-      if (slot.name.textContent !== b.name) slot.name.textContent = b.name;
-      slot.fill.style.width = `${Math.max(0, b.frac) * 100}%`;
+      this.text(slot.name, b.name);
+      this.width(slot.fill, b.frac);
     });
   }
 
@@ -308,23 +333,23 @@ export class HUD implements HUDHost {
 
   update(dt: number): void {
     const g = this.game;
-    this.hpFill.style.width = `${Math.max(0, (g.player.hp / g.player.stats.maxHp) * 100)}%`;
-    this.oilFill.style.width = `${Math.max(0, g.player.oilFrac * 100)}%`;
-    this.xpFill.style.width = `${g.xpFrac * 100}%`;
-    this.levelEl.textContent = String(g.playerLevel);
+    this.width(this.hpFill, g.player.hp / g.player.stats.maxHp);
+    this.width(this.oilFill, g.player.oilFrac);
+    this.width(this.xpFill, g.xpFrac);
+    this.text(this.levelEl, String(g.playerLevel));
     // 波次写出分母：玩家该知道"还剩几波就出首领"，而不是只能数着等
     const totalWaves = g.director.totalWaves;
     const endless = g.endless || !Number.isFinite(totalWaves);
-    this.waveEl.textContent = endless ? `∞${g.wave}` : `${g.wave}/${totalWaves}`;
+    this.text(this.waveEl, endless ? `∞${g.wave}` : `${g.wave}/${totalWaves}`);
     this.updateWaveBar(g.wave, totalWaves, endless);
     const t = Math.floor(g.runTime);
-    this.timeEl.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-    this.killEl.textContent = String(g.kills);
-    this.emberEl.textContent = String(g.save.embers);
-    this.goldEl.textContent = String(g.gold);
+    this.text(this.timeEl, `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`);
+    this.text(this.killEl, String(g.kills));
+    this.text(this.emberEl, String(g.save.embers));
+    this.text(this.goldEl, String(g.gold));
     this.updateBuild();
     const stage = g.endless ? '无尽 · 长夜' : (STAGES[Math.min(g.stageIndex, STAGES.length - 1)]?.theme.name ?? '');
-    this.stageEl.textContent = stage;
+    this.text(this.stageEl, stage);
     this.setBosses(g.bossList ?? []);
     this.updateCurse();
     this.updateBounty();
@@ -333,8 +358,8 @@ export class HUD implements HUDHost {
     const comboOn = g.combo >= 3;
     if (comboOn !== this.comboEl.classList.contains('is-on')) this.comboEl.classList.toggle('is-on', comboOn);
     if (comboOn) {
-      this.comboNum.textContent = String(g.combo);
-      this.comboBar.style.width = `${Math.max(0, Math.min(1, g.comboTimer / 2.2)) * 100}%`;
+      this.text(this.comboNum, String(g.combo));
+      this.width(this.comboBar, g.comboTimer / 2.2);
       this.comboEl.classList.toggle('is-hot', g.combo >= 15);
     }
 

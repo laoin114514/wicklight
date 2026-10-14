@@ -206,6 +206,7 @@ npm test          # 31 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 npm run mobileperf # 手机横屏的帧时间 & 每帧画布命令数（含逐项消融对比）
+npm run viewportcheck # 横屏布局体检：57 个手机/平板横屏尺寸，HUD 不许互相压住或出界
 ```
 
 三个脚本都会**先构建再跑**：测试跑的是 `dist/app.js` 这个真实产物，不先构建就会拿旧包验证新代码。
@@ -386,6 +387,9 @@ npx playwright install chromium && npx playwright install-deps chromium
       （留 200px 余量，装得下首领光环与出生弹出）；粒子同理。
     - **横屏闸门**：手机竖屏时盖一块提示牌并**停掉主循环**；装到桌面走 manifest 的
       `orientation: landscape`，已在全屏里时再补一次 `screen.orientation.lock`。
+    - **HUD 只在值变了才碰 DOM**：血条宽度按 0.1% 取整后比对、时间 / 击杀 / 金币等文本逐项记忆，
+      没有首领时那几行不去清 DOM——每帧无脑写 `style` / `textContent` 会让浏览器反复排队样式重算，
+      容器里实测这一项就要 2.4ms/帧（手机上只多不少）。
   - 以上改动都用**整帧像素差分**验证过等价性（均值差 ≤ 0.02/255，最大 ≤ 14）。
 
 ## 目录结构
