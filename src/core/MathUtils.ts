@@ -29,6 +29,24 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.sqrt(dist2(ax, ay, bx, by));
 }
 
+/**
+ * 点到**线段**的最短距离。
+ *
+ * 掠影判定不能只看"这一帧结束时离多远"：手机横屏掉到 30fps 时，一次冲刺一帧就是 25px，
+ * 而掠影带一共才 26px 宽——只看终点，子弹从带子里穿过去会被整帧跳过，
+ * 玩家明明擦过去了却什么都没发生。判定改成"这一帧走过的这一段路离它最近有多近"，
+ * 于是帧率高低不再改变规则。
+ */
+export function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  if (l2 < 1e-9) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / l2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
 export function len(x: number, y: number): number {
   return Math.hypot(x, y);
 }

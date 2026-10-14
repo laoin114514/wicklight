@@ -5,6 +5,7 @@ import type { Enemy, EnemySystem } from './enemies/Enemy';
 import type { ParticleSystem } from './Particle';
 import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
+import { GRAZE } from '../data/graze';
 
 export interface PlayerContext {
   enemies: EnemySystem;
@@ -110,6 +111,28 @@ export class Player {
   curseOilMult = 1;
   revives = 0;
   lastDamageSource = { x: 0, y: 0 };
+  /**
+   * 「掠影」攒下来的热度（0 ~ GRAZE.heatMax）：攒满就是一阵「灯焰高涨」。
+   * 它属于**玩家自己**（跟燃爆的 novaBuff 一样是"身体状态"），
+   * 所以加成直接在 damageScale / lightRadius / 移动速度上生效，
+   * 不用让 Game 每帧往身上写一遍。
+   */
+  heat = 0;
+  /** 这次冲刺还认不认"从弹幕正中穿过"那一笔（每次冲刺只认一次） */
+  dashGraze = 0;
+  /** 「灯焰高涨」剩余时间（秒，0 = 没在烧） */
+  blazeTimer = 0;
+  /** 本局点着过几次（HUD 与结算用） */
+  blazeCount = 0;
+  /** 热度停顿计时：最后一次掠影之后先挂这么久的"余温"，再开始回落 */
+  private heatDelay = 0;
+  /** 刚擦过一下的那个脉冲（0~1，画在脚下那圈符文上用） */
+  private grazePulse = 0;
+
+  /** 擦了一下：脚下那圈符文跳一下（冲刺穿弹幕跳得更狠）。 */
+  pulseGraze(dashing = false): void {
+    this.grazePulse = dashing ? 1 : 0.7;
+  }
 
   constructor() {
     this.hp = this.stats.maxHp;
@@ -133,6 +156,12 @@ export class Player {
     this.terrainOil = 1;
     this.terrainLight = 1;
     this.baseLightMult = 1;
+    this.heat = 0;
+    this.blazeTimer = 0;
+    this.blazeCount = 0;
+    this.heatDelay = 0;
+    this.grazePulse = 0;
+    this.dashGraze = 0;
     this.metaMods = { moveSpeedMult: 1 };
     this.curseOilMult = 1;
     this.invuln = 0;
@@ -309,7 +338,38 @@ export class Player {
     let s = 0.65 + this.oilFrac * 0.7;
     if (this.flags.lowOilDamage > 0 && this.oilFrac < 0.35) s *= 1 + this.flags.lowOilDamage;
     if (this.novaBuffTimer > 0) s *= 1 + this.flags.novaBuff;
+    if (this.blazeTimer > 0) s *= 1 + GRAZE.blazeDamage;
     return s;
+  }
+
+  /** 脚下那圈符文的进度：灯焰高涨时画的是"还剩多久"，平时画的是"攒了多少"。 */
+  get gaugeFrac(): number {
+    return this.blazeTimer > 0 ? clamp(this.blazeTimer / GRAZE.blazeTime, 0, 1) : clamp(this.heat / GRAZE.heatMax, 0, 1);
+  }
+
+  /** 现在在烧吗（结算、HUD 与测试都看这一个）。 */
+  get blazing(): boolean {
+    return this.blazeTimer > 0;
+  }
+
+  /**
+   * 掠影换来的一点热度。攒满就当场点着「灯焰高涨」，返回 true（调用方负责那一下的动静）。
+   * 从判定到加成只有"下帧生效"这一个交互，避免 Game 与 Player 互相写字。
+   */
+  addHeat(amount: number): boolean {
+    if (amount <= 0) return false;
+    this.heatDelay = GRAZE.decayDelay;
+    // 注意这里**不**打那个脉冲：热度是每帧一点点加上来的，
+    // "新擦了一下"的那一跳由 grazeEvent 单独给（不然符文会一直在抖）。
+    const gain = this.blazeTimer > 0 ? amount * GRAZE.blazeHeatMult : amount;
+    this.heat = Math.min(GRAZE.heatMax, this.heat + gain);
+    if (this.blazeTimer <= 0 && this.heat >= GRAZE.heatMax) {
+      this.heat = 0;
+      this.blazeTimer = GRAZE.blazeTime;
+      this.blazeCount += 1;
+      return true;
+    }
+    return false;
   }
 
   takeDamage(amount: number, x: number, y: number, drain = 0): boolean {
@@ -329,6 +389,17 @@ export class Player {
     if (this.dashCd > 0) this.dashCd -= dt;
     if (this.novaCd > 0) this.novaCd -= dt;
     if (this.novaBuffTimer > 0) this.novaBuffTimer -= dt;
+    if (this.grazePulse > 0) this.grazePulse = Math.max(0, this.grazePulse - dt * 3.2);
+    if (this.blazeTimer > 0) {
+      this.blazeTimer -= dt;
+      if (this.blazeTimer <= 0) {
+        this.blazeTimer = 0;
+        // 烧完只留一半热度（见 GRAZE.blazeCarry）：不留上限的话，在怪堆里会一发接一发
+        this.heat = Math.min(this.heat, GRAZE.heatMax * GRAZE.blazeCarry);
+      }
+    }
+    if (this.heatDelay > 0) this.heatDelay -= dt;
+    else if (this.heat > 0) this.heat = Math.max(0, this.heat - GRAZE.decay * dt);
     for (const [k, v] of this.cooldowns) this.cooldowns.set(k, Math.max(0, v - dt));
     for (const [k, v] of this.orbit.hitCooldown) {
       const nv = v - dt;
@@ -336,14 +407,30 @@ export class Player {
       else this.orbit.hitCooldown.set(k, nv);
     }
 
-    // Oil decay / burning
-    this.oil = Math.max(0, this.oil - this.oilDecayPerSec * s.oilDecayMult * this.curseOilMult * this.terrainOil * dt);
+    // Oil decay / burning：灯焰高涨时火大，油也烧得快（见 data/graze.ts）
+    this.oil = Math.max(
+      0,
+      this.oil -
+        this.oilDecayPerSec *
+          s.oilDecayMult *
+          this.curseOilMult *
+          this.terrainOil *
+          (this.blazeTimer > 0 ? GRAZE.blazeOil : 1) *
+          dt,
+    );
     if (this.oil <= 0) {
       this.hp -= 3 * dt;
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
     }
-    this.brightness = 0.35 + this.oilFrac * 0.65;
-    this.lightRadius = (96 + this.oilFrac * 224) * this.pyreMods.lightMult * this.terrainLight * this.baseLightMult;
+    this.brightness = Math.min(1.25, (0.35 + this.oilFrac * 0.65) * (this.blazeTimer > 0 ? 1.12 : 1));
+    // 灯焰高涨会把火撩大：照得更远、也更亮——但"亮 = 引怪"是同一条规则，
+    // 所以这一阵子的代价是实打实的：你会被更多东西看见。
+    this.lightRadius =
+      (96 + this.oilFrac * 224) *
+      this.pyreMods.lightMult *
+      this.terrainLight *
+      this.baseLightMult *
+      (this.blazeTimer > 0 ? GRAZE.blazeLight : 1);
 
     // Movement
     let mvx = input.moveX;
@@ -360,6 +447,9 @@ export class Player {
       this.dashDirX = d.x;
       this.dashDirY = d.y;
       this.dashTimer = 0.18;
+      // 一次冲刺只认一次"穿弹幕"（见 Game.grazeDash）：不然往一片弹幕里冲一下，
+      // 三颗子弹就是三次，攒了半天的表会被一次冲刺直接填满。
+      this.dashGraze = 1;
       this.dashCd = s.dashCooldown;
       this.dashCdMax = s.dashCooldown;
       this.invuln = Math.max(this.invuln, 0.32);
@@ -374,7 +464,7 @@ export class Player {
       this.vy = this.dashDirY * ds;
     } else {
       const accel = 2400 * dt;
-      const walk = s.moveSpeed * this.terrainSlow;
+      const walk = s.moveSpeed * this.terrainSlow * (this.blazeTimer > 0 ? GRAZE.blazeSpeed : 1);
       this.vx += (mvx * walk - this.vx) * Math.min(1, accel / Math.max(1, s.moveSpeed));
       this.vy += (mvy * walk - this.vy) * Math.min(1, accel / Math.max(1, s.moveSpeed));
     }
@@ -703,6 +793,64 @@ export class Player {
 
     ctx.save();
     ctx.translate(this.x, this.y + bob);
+
+    // ── 掠影的符文 ──
+    // 它画在**脚边地上**（一圈压扁的椭圆，跟滞行雾 / 险境预警是同一套语言：
+    // 画在地上的东西 = 规则，画在身上的东西 = 角色），所以不会被误读成"判定圈"。
+    // 平时它显示热度攒了多少，灯焰高涨时反过来显示还剩多久烧完。
+    const frac = this.gaugeFrac;
+    if (frac > 0.002 || this.grazePulse > 0.002) {
+      const blaze = this.blazeTimer > 0;
+      const cy = R * 0.5;
+      const rx = R * 1.95;
+      const ry = R * 0.95;
+      const a0 = -Math.PI / 2;
+      const a1 = a0 + TAU * Math.max(0.004, frac);
+      // 快满了就自己开始"呼吸"：还差两下的时候玩家不用盯着数刻度
+      const eager = !blaze && frac > 0.8 ? (Math.sin(time * 9) * 0.5 + 0.5) * 0.35 : 0;
+      ctx.save();
+      ctx.lineCap = 'round';
+      // 底圈 + 四个刻度：底圈是"容器"，刻度让这一圈读起来像仪表，不像护盾
+      ctx.globalAlpha = blaze ? 0.4 : 0.26;
+      ctx.strokeStyle = blaze ? '#ffd9a0' : '#8a6a4a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, cy, rx, ry, 0, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = blaze ? 0.42 : 0.3;
+      for (let i = 0; i < 4; i += 1) {
+        const a = a0 + (TAU * i) / 4;
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        ctx.beginPath();
+        ctx.moveTo(c * rx * 0.92, cy + s * ry * 0.92);
+        ctx.lineTo(c * rx * 1.14, cy + s * ry * 1.14);
+        ctx.stroke();
+      }
+      // 进度：从正上方顺时针长出来，最前面缀一颗亮珠——"涨到哪儿了"一眼可见
+      ctx.globalAlpha = Math.min(1, (blaze ? 0.85 : 0.5 + 0.4 * frac) + this.grazePulse * 0.3 + eager);
+      ctx.strokeStyle = blaze ? '#fff0c0' : frac > 0.72 ? '#ffd97a' : '#ffb14e';
+      ctx.lineWidth = blaze ? 3.2 : 2.4 + this.grazePulse * 1.4;
+      ctx.beginPath();
+      ctx.ellipse(0, cy, rx, ry, 0, a0, a1);
+      ctx.stroke();
+      if (!blaze) {
+        ctx.fillStyle = '#ffe9b8';
+        ctx.beginPath();
+        ctx.arc(Math.cos(a1) * rx, cy + Math.sin(a1) * ry, 1.7 + this.grazePulse, 0, TAU);
+        ctx.fill();
+      } else {
+        // 烧着的时候外面再套一圈火舌，随呼吸一样一张一缩（不用虚线，省一次路径分配）
+        const flick = 0.5 + Math.sin(time * 11) * 0.5;
+        ctx.globalAlpha = 0.16 + flick * 0.18;
+        ctx.strokeStyle = '#ff8a2a';
+        ctx.lineWidth = 5 + flick * 2;
+        ctx.beginPath();
+        ctx.ellipse(0, cy, rx * 1.12, ry * 1.12, 0, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     // ── 滞行雾：脚被拖住时给一个明确的"黏"提示，免得玩家以为手感出了问题 ──
     if (this.terrainSlow < 1) {

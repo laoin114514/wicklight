@@ -29,6 +29,8 @@ export interface Projectile {
   returning: boolean;
   /** 敌人子弹记下放它的敌人 id，结算时才知道玩家是被谁扑灭的。 */
   ownerId: string;
+  /** 这颗子弹是不是已经被算过一次「掠影」了（同一颗只认一次：弹幕流里站着蹭不该刷热度） */
+  grazed: boolean;
 }
 
 export class ProjectileSystem {
@@ -59,6 +61,7 @@ export class ProjectileSystem {
     boomerang: 0,
     returning: false,
     ownerId: '',
+    grazed: false,
   }), 512);
 
   spawn(cfg: Partial<Projectile> & { x: number; y: number; vx: number; vy: number; damage: number }): Projectile {
@@ -89,6 +92,7 @@ export class ProjectileSystem {
     p.boomerang = cfg.boomerang ?? 0;
     p.returning = false;
     p.ownerId = cfg.ownerId ?? '';
+    p.grazed = false;
     return p;
   }
 

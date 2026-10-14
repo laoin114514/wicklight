@@ -16,6 +16,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'frost_walker', name: '霜行者', blurb: '单局在寒潮的霜冻里累计待满 6 秒。', embers: 40, group: '战斗' },
   { id: 'pierce_line', name: '一线穿心', blurb: '一次光矛贯穿 5 个敌人。', embers: 40, group: '战斗' },
   { id: 'blade_return', name: '去而复返', blurb: '单局用回旋灯刃回程命中 25 次。', embers: 40, group: '战斗' },
+  { id: 'graze60', name: '影中行', blurb: '单局掠影 60 次（擦着敌人或弹幕走过去）。', embers: 35, group: '战斗' },
 
   { id: 'survivor', name: '守夜有成', blurb: '通关「幽林」。', embers: 30, group: '关卡与首领' },
   { id: 'conqueror', name: '焚尽长夜', blurb: '通关全部关卡。', embers: 120, group: '关卡与首领' },

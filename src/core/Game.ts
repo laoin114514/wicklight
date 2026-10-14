@@ -7,7 +7,7 @@ import { TextureBank } from './Textures';
 import { Settings } from './Settings';
 import { Storage, type Storage as StorageType } from './Storage';
 import { EventBus, type GameEvents } from './Events';
-import { clamp } from './MathUtils';
+import { clamp, segDist } from './MathUtils';
 import { CombatHaptics } from './Haptics';
 import { isTouchDevice, perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
@@ -39,6 +39,7 @@ import type { DailySave } from '../types';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
+import { GRAZE } from '../data/graze';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
@@ -319,8 +320,16 @@ export class Game {
   runPyres = 0;
   /** 单次最高伤害（结算用）。 */
   maxHit = 0;
-  /** 本局燃爆次数（结算用）。 */
+  /** 本局燃爆次数（结算用） */
   novaCount = 0;
+  /** 本局掠影多少次（结算 / 成就用） */
+  grazeCount = 0;
+  /**
+   * 掠影判定用的"这一帧走过的那一段路"的起点：在 `player.update` **之前**记一次。
+   * 判定看线段而不是终点，手机掉帧时的一次冲刺才不会从掠影带里整帧跳过去。
+   */
+  private grazeFromX = 0;
+  private grazeFromY = 0;
   /** 最后一下是谁打的：死亡结算要交代清楚（"被谁扑灭"）。 */
   lastKiller: { name: string; color: string } | null = null;
   /** 首局的开局引导队列（剩下的条目），跑完就不再出现。 */
@@ -521,6 +530,7 @@ export class Game {
     this.runPyres = 0;
     this.maxHit = 0;
     this.novaCount = 0;
+    this.grazeCount = 0;
     this.lastKiller = null;
     this.bounties.reset();
     this.codex.reset();
@@ -892,6 +902,8 @@ export class Game {
     this.updateShrines();
 
     this.updateTerrain(dt);
+    this.grazeFromX = this.player.x;
+    this.grazeFromY = this.player.y;
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
     const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
@@ -908,6 +920,7 @@ export class Game {
     this.updateBeams(dt);
     this.resolveProjectiles(dt);
     this.resolveGrounds(dt);
+    this.resolveGraze(dt);
 
     this.updatePyres(dt);
     this.updateLamps(dt);
@@ -1959,7 +1972,14 @@ export class Game {
         const dy = p.y - this.player.y;
         const rr = p.radius + this.player.radius;
         if (dx * dx + dy * dy <= rr * rr) {
-          this.damagePlayer(p.damage, p.x, p.y, 0, p.ownerId || undefined);
+          // 那 0.32 秒的无敌帧里从子弹**正中**穿过去：不挨打，但算一次「掠过」（双倍热度）。
+          // 不这么写的话，冲刺穿弹幕反而拿不到掠影——子弹正中心撞上就被这一句吃掉了，
+          // 而"从危险正中穿过去"恰恰是这一版最想奖赏的那一下。
+          if (this.player.dashTimer > 0) {
+            const fresh = !p.grazed;
+            p.grazed = true;
+            this.grazeDash(p.x, p.y, fresh);
+          } else this.damagePlayer(p.damage, p.x, p.y, 0, p.ownerId || undefined);
           this.particles.burst(p.x, p.y, 4, '#c9a3ff', { speed: 100 });
           p.active = false;
         }
@@ -2051,6 +2071,140 @@ export class Game {
       if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y, 0, g.kind);
       this.light.addGlow(g.x, g.y, g.r * 1.2, g.kind === 'poison' ? 0.3 : 0.5);
     }
+  }
+
+  /**
+   * 「掠影」：这一帧有没有从危险旁边**擦**过去。规则与调参见 `data/graze.ts`。
+   *
+   * 为什么判定用"这一帧走过的那一段路"而不是终点：手机上掉到 30fps 时，
+   * 一次冲刺一帧就是 25px，而掠影带一共 26px 宽——只看终点会整帧跳过去，
+   * 玩家明明贴着子弹掠过却什么都没发生，手感就变成了"有时候算有时候不算"。
+   */
+  private resolveGraze(dt: number): void {
+    const p = this.player;
+    const fx = this.grazeFromX;
+    const fy = this.grazeFromY;
+    const px = p.x;
+    const py = p.y;
+    // "在动"用**这一帧真的挪了多少**来量，而不是速度矢量：
+    // 按住方向键顶在墙上时速度是满的、位移是 0——那不是掠影。
+    // （只看速度的话，"卡在墙角按住方向键"会变成一个稳定的刷热度姿势：
+    //  怪凑在带子里啃墙、你一动不动地把表攒满。）
+    const speed = dt > 0 ? Math.hypot(px - fx, py - fy) / dt : 0;
+    // 掠影要求你**在动**：站着不动被围住时热度不该自己往上走，
+    // 否则"缩在怪堆里不动"会变成最省事的刷法，和这一版想鼓励的事正好相反。
+    if (speed < GRAZE.speedFloor) {
+      // 停下来的时候记账冷却照走：不然一停一动，同一只怪会被立刻重复记一次
+      this.enemies.forEach((e) => {
+        if (e.grazeCd > 0) e.grazeCd -= dt;
+      });
+      return;
+    }
+    const vig = Math.min(1.6, speed / GRAZE.speedRef);
+    const dashing = p.dashTimer > 0;
+    // 热度是**按这一帧离危险多近**一点点累起来的，不是"擦到就发一笔"：
+    // 判定发生在刚进带子的那一瞬，而那一瞬的距离永远正好等于带子宽度——
+    // 按事件发钱的话，"贴着判定边掠过"和"从带子最外沿溜过"给的一样多，
+    // 那"敢贴多近"就没被奖励到。按距离持续累加，贴得久、贴得近的自然拿得多。
+    let rate = 0;
+
+    this.enemies.forEach((e) => {
+      if (e.grazeCd > 0) e.grazeCd -= dt;
+      const rr = e.radius + p.radius;
+      const d = segDist(e.x, e.y, fx, fy, px, py);
+      if (d <= rr || d > rr + GRAZE.rangeEnemy) {
+        // 出了带子就快速回味（比攒快三倍）：绕出去再绕回来，才算新的一次"掠过"
+        e.grazeHold = Math.max(0, e.grazeHold - dt * GRAZE.holdBack);
+        return;
+      }
+      e.grazeHold += dt;
+      // 外沿只算四分之一、贴着判定边算满；同一只怪贴超过 holdMax 秒之后贡献归零
+      //（"掠影"是擦过去，不是搂着不放，不然绕着最慢的那只怪转圈就能一直刷）
+      const fresh = Math.max(0, 1 - e.grazeHold / GRAZE.holdMax);
+      rate += GRAZE.rateEnemy * (0.25 + 0.75 * (1 - (d - rr) / GRAZE.rangeEnemy)) * fresh;
+      if (e.grazeCd <= 0) {
+        e.grazeCd = GRAZE.cdEnemy;
+        this.grazeEvent(e.x, e.y, 'enemy', dashing);
+      }
+    });
+
+    for (const proj of this.projectiles.all) {
+      if (!proj.active || proj.fromPlayer) continue;
+      const rr = proj.radius + p.radius;
+      const d = segDist(proj.x, proj.y, fx, fy, px, py);
+      if (d <= rr || d > rr + GRAZE.rangeShot) continue;
+      rate += GRAZE.rateShot * (0.25 + 0.75 * (1 - (d - rr) / GRAZE.rangeShot));
+      if (!proj.grazed) {
+        proj.grazed = true;
+        this.grazeEvent(proj.x, proj.y, 'shot', dashing);
+      }
+    }
+
+    if (rate <= 0) return;
+    // 上限按"三只怪的权重"封顶：一堆怪同时挤在身上是同一件事，不该平方级地涨
+    if (p.addHeat(Math.min(rate, GRAZE.rateEnemy * GRAZE.rateCap) * dt * vig)) this.igniteBlaze(px, py);
+  }
+
+  /**
+   * 记一次掠影（"擦过去"这件事本身）：算一次数、回一口灯油、蹦两粒火星、响一声"叮"。
+   * 热度在 `resolveGraze` 里按距离持续累加，这里只管那一下的**动静**。
+   *
+   * @param dashing 是不是在无敌帧里穿过去的（双倍）
+   */
+  private grazeEvent(x: number, y: number, kind: 'enemy' | 'shot', dashing: boolean): void {
+    const p = this.player;
+    this.grazeCount += 1;
+    // 油就是光：擦着黑暗走能一直亮着，这一小口就是"火苗被撩旺了"
+    p.oil = Math.min(p.oilMax, p.oil + GRAZE.oil * (dashing ? GRAZE.dashMult : 1) * p.stats.oilGainMult);
+    const mx = (x + p.x) / 2;
+    const my = (y + p.y) / 2;
+    // 火星跟着"擦的是什么"变色：擦敌人是暖的，擦弹幕是紫的（跟敌人的子弹一个色系），
+    // 冲刺穿过去是青的。三秒钟就能学会"刚才那下是擦到了什么"。
+    const spark = dashing ? '#9fe6ff' : kind === 'shot' ? '#d9b6ff' : '#ffd97a';
+    this.particles.burst(mx, my, dashing ? 4 : 2, spark, { speed: 90, size: 2.2, life: 0.32 });
+    this.audio.play(dashing ? 'graze_dash' : 'graze');
+    p.pulseGraze(dashing);
+    if (this.grazeCount === 1) {
+      this.showTip(
+        'verb:graze',
+        '掠影 · 擦着危险走过去',
+        '贴着敌人或弹幕走（脚边那圈符文会长）就攒热度，还会回一点灯油：离得越近、走得越快，涨得越快；' +
+          '站着不动不算。攒满会点着一阵「灯焰高涨」——照得更远、伤害 +25%、走得更快、' +
+          '代价是火大油也烧得凶（+30%）。冲刺里从弹幕正中穿过，那一下是双倍。',
+      );
+    }
+    if (this.grazeCount === 60) this.achievements.unlock('graze60');
+  }
+
+  /**
+   * 从弹幕**正中**穿过去：那一下给一笔明显的热度（见 GRAZE.heatDash）。
+   *
+   * 两次保护：一次冲刺只认一次（`Player.dashGraze`），同一颗子弹也只记一次数
+   * （`Projectile.grazed`，它可能已经在带子里被"路过"记过了）。
+   */
+  private grazeDash(x: number, y: number, count: boolean): void {
+    const p = this.player;
+    // 一次冲刺只认一次：不然往一片弹幕里冲一下，三颗子弹就是三笔，攒了半天的表被一次冲刺填满
+    if (p.dashGraze <= 0) return;
+    p.dashGraze = 0;
+    // 这颗子弹可能已经在带子里被"路过"记过数了（`Projectile.grazed`），那就不再重复记
+    if (count) this.grazeEvent(x, y, 'shot', true);
+    if (p.addHeat(GRAZE.heatDash)) this.igniteBlaze(x, y);
+    this.particles.burst(x, y, 6, '#9fe6ff', { speed: 130, size: 2.6, life: 0.36 });
+  }
+
+  /** 攒满热度的那一下：一圈火星 + 一声"腾"，外加一句公告与一段触感。 */
+  private igniteBlaze(x: number, y: number): void {
+    const p = this.player;
+    this.particles.shockwave(p.x, p.y, '#ffb14e', 132, 0.55);
+    this.particles.burst(x, y, 20, '#ffd9a0', { speed: 210, size: 3.4, life: 0.7 });
+    this.light.addGlow(p.x, p.y, 210, 1);
+    this.flash = Math.max(this.flash, 0.26);
+    this.camera.addTrauma(0.24, this.settings.data.shake * this.settings.motionScale);
+    this.audio.play('blaze');
+    this.haptics.blaze();
+    this.floaters.label(p.x, p.y - 36, '灯焰高涨', '#ffd97a', 19);
+    this.hud?.toast('🔥 灯焰高涨 · 伤 +25% / 光 +30% · 但油耗也多了三成');
   }
 
   private handleHazard(kind: string): void {

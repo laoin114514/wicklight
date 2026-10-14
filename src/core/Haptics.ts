@@ -80,6 +80,14 @@ export class CombatHaptics {
     haptic([18, 50, 18], this.on());
   }
 
+  /**
+   * 「灯焰高涨」点着的那一下：短 - 停顿 - 稍长，跟受伤（12ms 一下）和升级（18-50-18）
+   * 都不同——它是一件"你主动换来的好事"，手感上得是"腾"地一窜，不是"挨了一下"。
+   */
+  blaze(): void {
+    haptic([6, 34, 22], this.on());
+  }
+
   died(): void {
     haptic(160, this.on());
   }

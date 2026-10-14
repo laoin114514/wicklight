@@ -167,6 +167,19 @@ export class AudioEngine {
       case 'evolve':
         this.tone(440, 0.5, 'triangle', 0.14, 1320);
         break;
+      case 'graze':
+        // 掠影：一声很轻的"叮"。它一秒钟能响好几下，所以压得比别的都低、节流也更狠
+        //（一轮弹幕擦过去五六下，响成一片就变成噪音了）。
+        if (this.throttle('graze', 75)) this.tone(1580, 0.06, 'sine', 0.032, 2100);
+        break;
+      case 'blaze':
+        // 灯焰高涨：火"腾"地一下窜起来——低频的爆 + 往上扫的亮音
+        this.noise(0.3, 0.14, 1400, 0.6);
+        this.tone(520, 0.42, 'triangle', 0.12, 1040);
+        break;
+      case 'graze_dash':
+        if (this.throttle('graze_dash', 90)) this.tone(2100, 0.07, 'sine', 0.036, 1500);
+        break;
       default:
         break;
     }

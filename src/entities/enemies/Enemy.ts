@@ -42,6 +42,14 @@ export interface Enemy {
   affix: string | null;
   /** 来自「引灯」/「疾风」光环的速度倍率，每帧重算 */
   buff: number;
+  /** 掠影记账：这只怪下一次能记「掠影」还要等多久（同一只怪不许每帧都算一次） */
+  grazeCd: number;
+  /**
+   * 掠影记账：这只怪**已经贴着玩家多久了**（连续待在掠影带里的秒数）。
+   * 「掠影」是擦身而过，不是搂着不放——同一只怪贴久了贡献会一路衰减到 0
+   * （见 Game.resolveGraze），不然"绕着最慢的那只怪转圈"就能一直刷。
+   */
+  grazeHold: number;
 }
 
 export interface LightCtx {
@@ -139,6 +147,8 @@ export class EnemySystem {
     dr: 0,
     affix: null,
     buff: 1,
+    grazeCd: 0,
+    grazeHold: 0,
   }), 256);
 
   spawn(defId: string, x: number, y: number, hpMult: number, damageMult: number): Enemy {
@@ -182,6 +192,8 @@ export class EnemySystem {
     e.dr = 0;
     e.affix = null;
     e.buff = 1;
+    e.grazeCd = 0;
+    e.grazeHold = 0;
     return e;
   }
 

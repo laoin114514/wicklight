@@ -307,6 +307,137 @@ async function main() {
   expect(lampState.oil < oilBeforeLamp, '分灯扣的是自己的灯油（油就是光）', `${oilBeforeLamp.toFixed(3)} → ${lampState.oil}`);
   expect(lampState.cd > 0 && lampState.ready === false, '分完灯要进冷却，冷却中不该报可用', JSON.stringify(lampState));
 
+  // ── 3a3. 掠影：贴着危险擦过去算数、不挨打，脚边那圈符文真的画出来了 ──
+  // 这一版新加的核心规则，所以用真键盘 + 真像素验一遍，而不是只跑离线测试。
+  /**
+   * 脚边那圈符文有没有真的画出来：同一个位置、同一个人不动，先采一份"没热度"的画面，
+   * 再把热度调上去采第二份，数一数**变亮了多少个像素**。
+   * 不用"数琥珀色像素"那种写法：灯火本身也是暖色，一路扫过去全是干扰。
+   */
+  const ringShot = () =>
+    page.evaluate(() => {
+      const r = window.__WICKLIGHT__.game.renderer;
+      const g = window.__WICKLIGHT__.game;
+      const s = g.camera.worldToScreen(g.player.x, g.player.y);
+      const dpr = r.dpr;
+      const x = Math.max(0, Math.round((s.x - 70) * dpr));
+      const y = Math.max(0, Math.round((s.y - 6) * dpr));
+      const w = Math.round(140 * dpr);
+      const hh = Math.round(52 * dpr);
+      return [...r.canvas.getContext('2d').getImageData(x, y, w, hh).data];
+    });
+  const ringDiff = (a, b) => {
+    let brighter = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      const l0 = a[i] + a[i + 1] + a[i + 2];
+      const l1 = b[i] + b[i + 1] + b[i + 2];
+      if (l1 - l0 > 36) brighter += 1;
+    }
+    return brighter;
+  };
+
+  const grazeSetup = () =>
+    page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      g.enemies.clear();
+      g.projectiles.clear();
+      g.player.x = 0;
+      g.player.y = 0;
+      g.player.vx = 0;
+      g.player.vy = 0;
+      g.player.heat = 0;
+      g.grazeCount = 0;
+      g.player.blazeTimer = 0;
+      g.player.stats.maxHp = 1e6;
+      g.player.hp = 1e6;
+      // 怪摆在路线旁边 44px：接触距离 27、掠影带再往外 32 → 落在带子里，又碰不到
+      const e = g.enemies.spawn('shade', 70, -44, 1, 1);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.speed = 0;
+      e.spawnTimer = 0;
+      return true;
+    });
+
+  await grazeSetup();
+  await sleep(160);
+  await page.keyboard.down('KeyD');
+  let grazed = 0;
+  for (let i = 0; i < 12 && grazed === 0; i += 1) {
+    await sleep(120);
+    grazed = await page.evaluate(() => window.__WICKLIGHT__.game.grazeCount);
+  }
+  await sleep(160);
+  await page.keyboard.up('KeyD');
+  await sleep(120);
+  const graze = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return {
+      count: g.grazeCount,
+      heat: +g.player.heat.toFixed(2),
+      hp: Math.round(g.player.hp),
+      tip: (g.save.tips ?? []).includes('verb:graze'),
+    };
+  });
+  expect(graze.count > 0, '贴着怪擦过去算了一次「掠影」', JSON.stringify(graze));
+  expect(graze.heat > 0, '掠影真的攒上了热度', JSON.stringify(graze));
+  expect(graze.hp >= 1e6, '擦过去不该挨打（这一条是"贴着走"能成立的前提）', `hp=${graze.hp}`);
+  expect(graze.tip, '第一次掠影弹了那张说明卡');
+  // 符文本身：把热度调上去，同一个人、同一个位置，脚边那一块该明显变亮
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.player.heat = 0;
+    g.player.blazeTimer = 0;
+  });
+  await sleep(420);
+  const ringBefore = await ringShot();
+  await page.evaluate(() => {
+    window.__WICKLIGHT__.game.player.heat = 18;
+  });
+  await sleep(420);
+  const ringAfter = await ringShot();
+  const lit = ringDiff(ringBefore, ringAfter);
+  expect(lit > 40, '脚边那圈符文真的画出来了（热度一涨，那片像素就亮起来）', `变亮像素 ${lit} 个`);
+
+  // 攒满 → 灯焰高涨：灯该真的变亮（半径 +30%）
+  const blaze = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.player.heat = 27.9;
+    const before = g.player.lightRadius;
+    return { before };
+  });
+  await page.keyboard.down('KeyD');
+  for (let i = 0; i < 16; i += 1) {
+    await sleep(120);
+    if (await page.evaluate(() => window.__WICKLIGHT__.game.player.blazing)) break;
+  }
+  await page.keyboard.up('KeyD');
+  const blazeAfter = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { on: g.player.blazing, light: g.player.lightRadius, count: g.player.blazeCount };
+  });
+  expect(blazeAfter.on && blazeAfter.count === 1, '攒满就点着「灯焰高涨」', JSON.stringify(blazeAfter));
+  expect(
+    blazeAfter.light > blaze.before * 1.2,
+    `灯焰高涨期间灯火明显更远（${Math.round(blaze.before)} → ${Math.round(blazeAfter.light)}）`,
+  );
+  // 截图前把卡片清掉、等镜头跟上：这张图要看的是**脚边那圈符文**，不是公告
+  await page.evaluate(() => {
+    document.getElementById('toast-root').innerHTML = '';
+    document.querySelector('.announce').className = 'announce';
+  });
+  await sleep(600);
+  await shot('03c-graze-blaze');
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.player.blazeTimer = 0;
+    g.player.heat = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    g.enemies.clear();
+  });
+  await sleep(200);
+
   // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
   // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
   // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。
