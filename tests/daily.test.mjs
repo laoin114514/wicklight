@@ -47,6 +47,7 @@ test('今日灯芯：剧本确定、强制生效、成绩记录', async (t) => {
     plan.bounties.forEach((id, stage) => {
       const def = data.bounties.find((x) => x.id === id);
       assert.ok(def, `悬赏不存在：${id}`);
+      if (def.minDepth) assert.ok(stage >= def.minDepth, `第 ${stage + 1} 关派了还没到解锁深度的悬赏：${def.id}`);
       if (def.kind === 'hunt') {
         const enemy = catalog.enemies.find((e) => e.id === def.enemy);
         assert.ok((enemy.minWave ?? 1) <= 1 + stage, `第 ${stage + 1} 关的猎杀目标还没出场：${def.id}`);

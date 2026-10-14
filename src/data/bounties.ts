@@ -5,7 +5,7 @@
  * 把连杀堆到 25、忍住 75 秒不挨打，都能换来金币与补给。
  * 奖励刻意给金币而不是余烬：金币只在局内花得掉，等于把出价换成"下一关更强"。
  */
-export type BountyKind = 'hunt' | 'combo' | 'nova' | 'untouched' | 'pyre';
+export type BountyKind = 'hunt' | 'combo' | 'nova' | 'untouched' | 'pyre' | 'graze';
 
 export interface BountyReward {
   gold: number;
@@ -26,6 +26,14 @@ export interface BountyDef {
   target: number;
   /** hunt 专用：要猎杀的敌人 id */
   enemy?: string;
+  /**
+   * 第几关起才进池（不给就是第一关就有）。
+   *
+   * 「掠影」那两张要第二关起才出现：第一关是教学关，玩家连"贴着走有好处"这件事
+   * 都还没撞见过（第一次擦到才会弹那张说明卡），开局就拿一张"擦 30 次"贴在他身上，
+   * 只会变成一张看不懂的、注定完不成的任务卡。
+   */
+  minDepth?: number;
   reward: BountyReward;
 }
 
@@ -50,6 +58,12 @@ export const BOUNTIES: BountyDef[] = [
 
   { id: 'untouched45', name: '静默 · 45 秒不受伤', blurb: '连续 45 秒不受到任何伤害。', icon: '🕊️', color: '#8affc1', kind: 'untouched', target: 45, reward: { gold: 55, heal: 0.2 } },
   { id: 'untouched75', name: '静默 · 75 秒不受伤', blurb: '连续 75 秒不受到任何伤害。', icon: '🌙', color: '#c9a3ff', kind: 'untouched', target: 75, reward: { gold: 90, heal: 0.3 } },
+
+  // 掠影这条线：把"贴着走"从一个走法变成一张要交的作业。
+  // 两张的分工很清楚——一张数"擦了多少次"（要动起来、要往刀口上贴），
+  // 一张数"点着了几次焰"（要真的攒满，站着蹭是攒不满的）。
+  { id: 'graze30', name: '掠影 · 三十次擦身', blurb: '在本关内掠影 30 次（擦着敌人或弹幕走过去）。', icon: '👣', color: '#c9a3ff', kind: 'graze', minDepth: 1, target: 30, reward: { gold: 55, oil: 0.2 } },
+  { id: 'blaze2', name: '焰路 · 两次灯焰高涨', blurb: '在本关内点着 2 次「灯焰高涨」。', icon: '🔥', color: '#ffb14e', kind: 'graze', minDepth: 1, target: 2, reward: { gold: 70, heal: 0.15 } },
 ];
 
 export const BOUNTY_MAP: Record<string, BountyDef> = Object.fromEntries(BOUNTIES.map((b) => [b.id, b]));

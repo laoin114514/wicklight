@@ -17,6 +17,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'pierce_line', name: '一线穿心', blurb: '一次光矛贯穿 5 个敌人。', embers: 40, group: '战斗' },
   { id: 'blade_return', name: '去而复返', blurb: '单局用回旋灯刃回程命中 25 次。', embers: 40, group: '战斗' },
   { id: 'graze60', name: '影中行', blurb: '单局掠影 60 次（擦着敌人或弹幕走过去）。', embers: 35, group: '战斗' },
+  { id: 'blaze6', name: '焰路常燃', blurb: '单局点着 6 次「灯焰高涨」。', embers: 45, group: '战斗' },
 
   { id: 'survivor', name: '守夜有成', blurb: '通关「幽林」。', embers: 30, group: '关卡与首领' },
   { id: 'conqueror', name: '焚尽长夜', blurb: '通关全部关卡。', embers: 120, group: '关卡与首领' },
@@ -30,6 +31,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'endless60', name: '长夜尽头', blurb: '在无尽模式抵达第 60 波。', embers: 150, group: '关卡与首领' },
   { id: 'twin_boss', name: '双首同焚', blurb: '在无尽模式同一波里击败两位首领。', embers: 120, group: '关卡与首领' },
   { id: 'trio_boss', name: '三首同辉', blurb: '在无尽模式同一波里击败三位首领。', embers: 150, group: '关卡与首领' },
+  { id: 'blaze_boss', name: '焰中斩', blurb: '在「灯焰高涨」期间击败一位首领。', embers: 50, group: '关卡与首领' },
   { id: 'clears3', name: '三度长明', blurb: '累计通关 3 次。', embers: 90, group: '关卡与首领' },
 
   { id: 'shrine_first', name: '与暗交易', blurb: '在祭坛上做出第一次抉择。', embers: 15, group: '抉择与风险' },

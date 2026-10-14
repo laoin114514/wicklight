@@ -41,9 +41,10 @@ test('新遗物：余温翻倍、灯更耐吹，以及三件新的取舍', async
     assert.ok(!/undefined|NaN/.test(entry.blurb + JSON.stringify(entry.rows ?? [])), `${id} 图鉴里不该有缺字段`);
   }
   // 每族各多一件：四族等量，第二档共鸣依然够得到
+  // （v53 的「掠影」四件又各补了一族，所以现在是各 10 件）
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 9, lamp: 9, oil: 9, shade: 9 }, '四族应各 9 件（第二档共鸣是 5 件）');
+  assert.deepEqual(counts, { flame: 10, lamp: 10, oil: 10, shade: 10 }, '四族应各 10 件（第二档共鸣是 5 件）');
 
   // ── 守夜灯：每座灯台的余温翻倍 ──
   const measure = (relic) => {

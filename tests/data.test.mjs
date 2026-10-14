@@ -20,7 +20,9 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
+  // 掠影那一串调参值是张"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
+    if (name === 'graze') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -28,6 +30,24 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
       assert.ok(item.name && item.blurb, `${name}.${item.id} 缺少名称或说明`);
     }
   }
+
+  // ── 掠影 / 灯焰高涨的调参表：全是正数，而且几条关系必须成立 ──
+  // 这张表是"改了不会报错、只会让手感变味"的那一类，所以把关系也钉住。
+  const graze = data.graze;
+  assert.ok(graze, '构建产物应导出掠影调参表');
+  for (const [k, v] of Object.entries(graze)) {
+    assert.equal(typeof v, 'number', `graze.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `graze.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(graze.rateShot <= graze.rateEnemy, '弹幕那条线的权重不该比敌人还高');
+  assert.ok(graze.rangeShot <= graze.rangeEnemy, '弹幕更小更快，带子不该比敌人宽');
+  assert.ok(graze.holdBack > 1, '出了带子之后"回味"应当比攒快');
+  assert.ok(graze.speedFloor < graze.speedRef, '"动起来"的门槛要低于拉满速度的基准');
+  assert.ok(graze.heatMax / graze.decay >= 5, '停手之后热度要能撑几秒，不该一停就归零');
+  assert.ok(graze.heatMax >= graze.heatDash, '一次冲刺穿弹幕不该顶满整条表');
+  assert.ok(graze.blazeHeatMult >= 0.4 && graze.blazeHeatMult <= 0.6, '烧着时攒热只该攒一半上下');
+  assert.ok(graze.blazeCarry > 0 && graze.blazeCarry <= 0.6, '烧完留下的热度不该超过一半');
+  assert.ok(graze.blazeExtend > 0 && graze.blazeExtendCap > 1, '焰里击杀应当能续焰，而且有上限');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

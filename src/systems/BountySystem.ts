@@ -24,8 +24,9 @@ export class BountySystem {
   completedThisRun = 0;
   private lastId: string | null = null;
 
-  /** 该悬赏在当前深度是否可行（要猎杀的敌人得真的刷得出来）。 */
+  /** 该悬赏在当前深度是否可行（要猎杀的敌人得真的刷得出来、要会的机制得先见过）。 */
   private available(def: BountyDef, depth: number): boolean {
+    if (def.minDepth && depth < def.minDepth) return false;
     if (def.kind !== 'hunt') return true;
     const enemy = def.enemy ? ENEMY_MAP[def.enemy] : null;
     if (!enemy) return false;
@@ -104,6 +105,23 @@ export class BountySystem {
   onPyre(): void {
     const s = this.state;
     if (!s || s.done || s.kind !== 'pyre') return;
+    this.advance(s.progress + 1);
+  }
+
+  /** 掠影一次（`Game.grazeEvent` 调用）：两张掠影悬赏共用这一个入口。 */
+  onGraze(): void {
+    const s = this.state;
+    if (!s || s.done || s.kind !== 'graze') return;
+    // 两张卡数的是不同的东西：一张数擦身次数，一张数点着了几次焰
+    if (s.def.id === 'blaze2') return;
+    this.advance(s.progress + 1);
+  }
+
+  /** 点着一次「灯焰高涨」（`Game.igniteBlaze` 调用）。 */
+  onBlaze(): void {
+    const s = this.state;
+    if (!s || s.done || s.kind !== 'graze') return;
+    if (s.def.id !== 'blaze2') return;
     this.advance(s.progress + 1);
   }
 

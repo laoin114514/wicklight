@@ -72,10 +72,12 @@ export function buildDailyPlan(key: string = dailyKey()): DailyPlan {
   const lantern = rng.pick(LANTERNS).id;
   const difficulty: Difficulty = rng.pick(DIFFICULTY_ORDER);
   const curses: (string | null)[] = STAGES.map((_, i) => (i === 0 ? null : rng.pick(CURSES).id));
-  // 悬赏必须当关可行：别把"还没出场的敌人"当猎杀目标派给玩家
+  // 悬赏必须当关可行：别把"还没出场的敌人"当猎杀目标、也别把"还没见过的机制"
+  // （掠影那两张要第二关起）派给玩家。
   const bounties = STAGES.map((_, i) =>
     rng.pick(
       BOUNTIES.filter((b) => {
+        if (b.minDepth && i < b.minDepth) return false;
         if (b.kind !== 'hunt') return true;
         const enemy = b.enemy ? ENEMY_MAP[b.enemy] : null;
         return !!enemy && (enemy.minWave ?? 1) <= 1 + i;

@@ -1,6 +1,6 @@
 /**
  * 悬赏回归测试：每关都要有一张可行（敌人刷得出来）的悬赏，
- * 五种计数方式（猎杀 / 连杀 / 燃爆 / 静默 / 点灯）都能推进、能完成、能发奖，并且只发一次。
+ * 六种计数方式（猎杀 / 连杀 / 燃爆 / 静默 / 点灯 / 掠影）都能推进、能完成、能发奖，并且只发一次。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +36,10 @@ test('悬赏：抽取、计数、完成与发奖', async (t) => {
     assert.ok(b.name && b.icon, `${b.id} 缺名称或图标`);
     assert.ok(b.target > 0, `${b.id} 目标必须为正数`);
     assert.ok(b.reward.gold > 0, `${b.id} 必须有金币奖励`);
-    assert.ok(['hunt', 'combo', 'nova', 'untouched', 'pyre'].includes(b.kind), `${b.id} 计数方式非法`);
+    assert.ok(['hunt', 'combo', 'nova', 'untouched', 'pyre', 'graze'].includes(b.kind), `${b.id} 计数方式非法`);
+    // 掠影那两张要第二关起才进池：第一关玩家还没见过这个机制，
+    // 派一张"擦 30 次"在他身上只会是一张看不懂、也完不成的卡（详见 data/bounties.ts）。
+    if (b.kind === 'graze') assert.ok(b.minDepth && b.minDepth >= 1, `${b.id} 应当有 minDepth 门槛`);
     if (b.kind === 'hunt') {
       assert.ok(b.enemy, `${b.id} 是猎杀悬赏却没指定敌人`);
       assert.ok(globalThis.window.__WICKLIGHT__.catalog.enemies.some((e) => e.id === b.enemy), `${b.id} 指向了不存在的敌人 ${b.enemy}`);
@@ -130,6 +133,33 @@ test('悬赏：抽取、计数、完成与发奖', async (t) => {
   assert.ok(Math.abs(game.bounties.frac - 0.25) < 1e-6, `进度比例应为 0.25（${game.bounties.frac}）`);
   assert.equal(game.bounties.onKill('crawler'), undefined);
   assert.equal(game.bounties.state.progress, 1, '不该被无关敌人推进');
+
+  // ── 掠影：擦身记数、点着焰记数（两张卡数的是不同的东西）──
+  const gz = force('graze30', 3);
+  game.bounties.onGraze();
+  game.bounties.onGraze();
+  assert.equal(game.bounties.state.progress, 2, '每次掠影应记一次数');
+  game.bounties.onBlaze();
+  assert.equal(game.bounties.state.progress, 2, '「点着焰」不该被记进「掠影次数」那张卡');
+  game.bounties.onGraze();
+  assert.equal(game.bounties.state.done, true, '擦到目标次数应完成');
+  assert.ok(gz.reward.oil > 0, '掠影悬赏应给灯油');
+
+  const bz = force('blaze2', 2);
+  game.bounties.onGraze();
+  assert.equal(game.bounties.state.progress, 0, '「擦身次数」不该被记进「点着焰」那张卡');
+  game.bounties.onBlaze();
+  game.bounties.onBlaze();
+  assert.equal(game.bounties.state.done, true, '点着两次应完成');
+  assert.ok(bz.reward.heal > 0, '点焰悬赏应给回复');
+
+  // 第一关的池子里不该有掠影悬赏（minDepth 真的在起作用）
+  game.newRun('warden', 'normal', false);
+  for (let i = 0; i < 40; i += 1) {
+    const def = game.bounties.roll(game.rng, 0);
+    assert.notEqual(def.kind, 'graze', `第一关不该抽到掠影悬赏（抽到了 ${def.name}）`);
+  }
+  assert.ok(game.bounties.roll(game.rng, 1).kind, '第二关起照常抽');
 
   // ── 换关要换悬赏 ──
   const beforeStage = game.bounties.state.def.id;

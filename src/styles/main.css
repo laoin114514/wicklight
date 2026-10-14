@@ -1241,6 +1241,11 @@ body.is-touch .hud__wave { display: none; }
 .lo-bounty span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-dim); }
 .lo-bounty.is-done { opacity: 0.65; }
 
+.lo-graze { border-left-color: #ffb14e; }
+.lo-graze b { color: var(--amber-bright); font-variant-numeric: tabular-nums; }
+/* 烧着的时候整块透出一层暖光：总览是翻一眼就关掉的界面，状态要能被撞见 */
+.lo-graze.is-blazing { background: color-mix(in srgb, #ffb14e 12%, rgba(255, 255, 255, 0.04)); box-shadow: inset 0 0 18px rgba(255, 177, 78, 0.16); }
+
 .lo-tri { padding: 7px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.03); border-left: 2px solid var(--c, #ffd24e); opacity: 0.72; transition: opacity 0.2s ease; }
 .lo-tri.is-on { opacity: 1; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
 .lo-tri__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

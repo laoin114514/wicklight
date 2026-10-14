@@ -16,6 +16,7 @@ import { ENEMIES as enemies, NORMAL_ENEMIES as normalEnemies } from './data/enem
 import { AFFIXES as affixes } from './data/affixes';
 import { BOUNTIES as bounties } from './data/bounties';
 import { META_TREE as meta } from './data/meta';
+import { GRAZE as graze } from './data/graze';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -51,7 +52,9 @@ function boot(): void {
     backGuard,
     wake,
     // 供测试/调试读取的静态数据表（无副作用）
-    data: { weapons, relics, passives, curses, bounties, tribes, meta },
+    // graze 也放进来：掠影 / 灯焰高涨那一串调参值（带子宽度、黏着上限、焰的加成……）
+    // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
+    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

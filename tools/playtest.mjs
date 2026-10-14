@@ -421,6 +421,57 @@ async function main() {
     blazeAfter.light > blaze.before * 1.2,
     `灯焰高涨期间灯火明显更远（${Math.round(blaze.before)} → ${Math.round(blazeAfter.light)}）`,
   );
+  // ── 3a4. 焰路：掠影那套东西在界面上真的接上了 ──
+  // 热度攒在脚边那圈符文上，一闪就过去了；构筑总览是唯一能"停下来读"的地方，
+  // 所以它必须写清三件事：这条线走起来没有、现在到哪儿了、身上那些围绕它的东西改了什么数。
+  await page.keyboard.press('Tab');
+  await sleep(260);
+  const sheetGraze = await page.evaluate(() => {
+    const html = document.getElementById('ui-root').innerHTML;
+    return {
+      state: window.__WICKLIGHT__.game.state,
+      graze: html.includes('掠影'),
+      heat: html.includes('热度'),
+      blaze: html.includes('灯焰高涨中'),
+      count: (html.match(/本局掠影\s*\d+\s*次/) ?? [''])[0],
+    };
+  });
+  expect(sheetGraze.state === 'loadout', 'Tab 打开构筑总览', sheetGraze.state);
+  expect(sheetGraze.graze, '构筑总览里有一栏「掠影」');
+  // 烧着的时候那一行写的是"还剩多久"，没烧着才写"热度 n/22"——两者必居其一
+  expect(sheetGraze.heat || sheetGraze.blaze, '总览里写出当前热度（烧着时写成还剩多久）', JSON.stringify(sheetGraze));
+  expect(sheetGraze.blaze, '烧着的时候总览里写明「灯焰高涨中」', JSON.stringify(sheetGraze));
+  expect(sheetGraze.count.length > 0, '总览里写出本局掠影次数', sheetGraze.count);
+  // 图鉴多了一章「机制」：擦过一次、点着过一次，两条都该记上，而且点得开、查得到数值。
+  // 趁总览还开着（世界是停住的）翻一眼图鉴，翻完再翻回来——免得这一局在后台被人打。
+  const mech = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.ui.showScreen('codex');
+    const html = document.getElementById('ui-root').innerHTML;
+    const entry = g.codex.entry('mechanic:blaze');
+    const rows = entry ? entry.rows.length : 0;
+    g.ui.showScreen('loadout');
+    return {
+      graze: g.codex.has('mechanic', 'graze'),
+      blaze: g.codex.has('mechanic', 'blaze'),
+      total: g.codex.sectionTotal('mechanic'),
+      chapter: html.includes('机制'),
+      named: html.includes('灯焰高涨'),
+      rows,
+      bad: /undefined|NaN/.test(html),
+    };
+  });
+  expect(mech.graze && mech.blaze, '第一次擦身 / 第一次点着焰都记进了图鉴「机制」章', JSON.stringify(mech));
+  expect(mech.total >= 2 && mech.chapter, '图鉴里多出一章「机制」', JSON.stringify(mech));
+  expect(mech.named && mech.rows >= 5 && !mech.bad, '这一章的条目有名字、有数值、没有缺字段', JSON.stringify(mech));
+
+  await page.keyboard.press('Tab');
+  await sleep(200);
+  expect(
+    await page.evaluate(() => window.__WICKLIGHT__.game.state === 'playing'),
+    '再按一次 Tab 回到战斗（总览只是"停下来看一眼"，不该把这一局憋住）',
+  );
+
   // 截图前把卡片清掉、等镜头跟上：这张图要看的是**脚边那圈符文**，不是公告
   await page.evaluate(() => {
     document.getElementById('toast-root').innerHTML = '';

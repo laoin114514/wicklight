@@ -31,6 +31,14 @@ export interface RelicMods {
   pyreBonus?: number;
   /** 灯焰被吹灭的速度降低（0.45 = 慢 45%） */
   pyreGuard?: number;
+  /** 「掠影」热度积攒速度加成（0.45 = 攒得快 45%） */
+  grazeHeat?: number;
+  /** 「掠影」回油加成（1 = 擦出去的那口油翻倍） */
+  grazeOil?: number;
+  /** 「灯焰高涨」持续时长加成（0.5 = 六秒变九秒） */
+  blazeTime?: number;
+  /** 「灯焰高涨」期间的减伤（0.3 = 少挨三成） */
+  blazeGuard?: number;
 }
 
 export interface RelicDef {
@@ -103,6 +111,15 @@ export const RELICS: RelicDef[] = [
   { id: 'faintheart', tribe: 'flame', name: '焚心', blurb: '伤害 +22%，暴击率 +10%，但拾取范围 -20%。', icon: '🔥', color: '#ff6b3d', rarity: 'epic', price: 100, mods: { damageMult: 0.22, critChance: 0.1, pickupMult: -0.2 } },
   { id: 'slowlamp', tribe: 'oil', name: '慢灯', blurb: '灯油燃烧 -25%；灯油越低伤害越高（最多 +20%）。', icon: '🫗', color: '#ffd24e', rarity: 'rare', price: 75, mods: { oilDecayMult: -0.25, lowOilDamage: 0.2 } },
   { id: 'shadowweave', tribe: 'shade', name: '影织', blurb: '生命上限 +18%，命中的敌人会被拖慢 1.8 秒。', icon: '🕸️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { maxHpMult: 0.18, chill: 1.8 } },
+
+  // ── 「掠影」这条线的构筑：擦着危险走本来只是一种走法，这四件把它变成一套牌 ──
+  // 一件一族的理由：四件正好各补一族（凑到 10 件），想走掠影线就得在"哪一族"上做取舍。
+  // 数值都不大（45% / +50% / 翻倍 / -30%），因为它们叠的是**同一件事**——
+  // 都围着"贴着打"转，谁单独拿出来都改变不了走位，一起拿才成为一套打法。
+  { id: 'blazecore', tribe: 'flame', name: '焰心', blurb: '「掠影」攒热度快 45%——焰来得更勤。', icon: '🎇', color: '#ff7a2f', rarity: 'rare', price: 70, mods: { grazeHeat: 0.45 } },
+  { id: 'longwind', tribe: 'lamp', name: '长风', blurb: '「灯焰高涨」持续 +50%（六秒变九秒）。', icon: '🌬️', color: '#7be0ff', rarity: 'rare', price: 70, mods: { blazeTime: 0.5 } },
+  { id: 'wickpick', tribe: 'oil', name: '撩芯', blurb: '每次「掠影」回的那口灯油翻倍。', icon: '🪔', color: '#ffd24e', rarity: 'common', price: 45, mods: { grazeOil: 1 } },
+  { id: 'shadowstitch', tribe: 'shade', name: '影缝', blurb: '「灯焰高涨」期间受到伤害 -30%。', icon: '🧵', color: '#c9a3ff', rarity: 'epic', price: 95, mods: { blazeGuard: 0.3 } },
 ];
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));

@@ -11,6 +11,7 @@ import { DIFFICULTIES, DIFFICULTY_ORDER } from '../systems/DifficultySystem';
 import { buildDailyPlan, dailyLabel } from '../systems/DailySystem';
 import { BOUNTY_MAP } from '../data/bounties';
 import { CURSE_MAP } from '../data/curses';
+import { GRAZE } from '../data/graze';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -458,6 +459,8 @@ export class UIManager implements UIHost {
       ? `<div class="lo-curse"><b>${g.curse.name}</b><span>${g.curse.blurb}</span></div>`
       : '<div class="lo-empty">本关暂无夜咒</div>';
 
+    const graze = this.grazeBlock();
+
     const b = g.bounties.state;
     const bounty = b
       ? `<div class="lo-bounty ${b.done ? 'is-done' : ''}" style="--c:${b.def.color}">
@@ -499,6 +502,8 @@ export class UIManager implements UIHost {
             ${curse}
             <h4>悬赏</h4>
             ${bounty}
+            <h4>掠影</h4>
+            ${graze}
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
@@ -506,6 +511,39 @@ export class UIManager implements UIHost {
       </div>
     `);
     this.on('[data-act="sheet-close"]', () => this.game.toggleSheet());
+  }
+
+  /**
+   * 构筑总览里的「掠影」栏。
+   *
+   * 掠影那条线是**看不见的**——热度攒在脚边那圈符文上，一闪就过去了。
+   * 打开总览的人想知道的其实就三件事：这条线我走起来了没有（擦了 / 点着了几次）、
+   * 现在攒到哪儿了、以及身上那些围绕它的东西到底改了什么数。
+   * 所以这里把"基础值 → 你现在的值"并排写出来，跟升级卡上那张数值对照是同一个道理。
+   */
+  private grazeBlock(): string {
+    const g = this.game;
+    const p = g.player;
+    const f = p.flags;
+    const buffs: string[] = [];
+    if (f.grazeHeat) buffs.push(`攒热 ×${(1 + f.grazeHeat).toFixed(2)}`);
+    if (f.blazeTime) buffs.push(`焰时长 ×${(1 + f.blazeTime).toFixed(2)}`);
+    if (f.grazeOil) buffs.push(`擦身回油 ×${(1 + f.grazeOil).toFixed(2)}`);
+    if (f.blazeGuard) buffs.push(`焰中减伤 ${Math.round(f.blazeGuard * 100)}%`);
+    const heat = p.blazing
+      ? `<b>🔥 灯焰高涨中 · 还剩 ${p.blazeTimer.toFixed(1)}s</b>`
+      : `<b>👣 热度 ${Math.round(p.heat)}/${GRAZE.heatMax}</b>`;
+    return `<div class="lo-bounty lo-graze ${p.blazing ? 'is-blazing' : ''}" style="--c:#ffb14e">
+        ${heat}
+        <span>本局掠影 ${g.grazeCount} 次 · 点着 ${p.blazeCount} 次${
+          buffs.length ? ` · ${buffs.join(' · ')}` : ''
+        }</span>
+        <span>${
+          p.blazing
+            ? `灯火 ×${GRAZE.blazeLight} · 伤害 +${Math.round(GRAZE.blazeDamage * 100)}% · 焰里每杀一只续 ${GRAZE.blazeExtend}s`
+            : `贴着敌人或弹幕擦过去就攒热度：攒满 ${GRAZE.heatMax} 点着「灯焰高涨」· 站着不动不算`
+        }</span>
+      </div>`;
   }
 
   private statsBlock(): string {

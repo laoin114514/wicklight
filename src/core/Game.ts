@@ -330,6 +330,12 @@ export class Game {
    */
   private grazeFromX = 0;
   private grazeFromY = 0;
+  /**
+   * 焰烧着的时候往上飘的火星，按固定节拍（秒）发一小撮。
+   * 这是「灯焰高涨」在**世界里**的样子：HUD 上再补一行字也好、脚边那圈符文也好，
+   * 都不如"身上一直在冒火"这一条来得直接——它在余光里就能看见，不用去读任何数字。
+   */
+  private blazeEmit = 0;
   /** 最后一下是谁打的：死亡结算要交代清楚（"被谁扑灭"）。 */
   lastKiller: { name: string; color: string } | null = null;
   /** 首局的开局引导队列（剩下的条目），跑完就不再出现。 */
@@ -531,6 +537,7 @@ export class Game {
     this.maxHit = 0;
     this.novaCount = 0;
     this.grazeCount = 0;
+    this.blazeEmit = 0;
     this.lastKiller = null;
     this.bounties.reset();
     this.codex.reset();
@@ -633,8 +640,9 @@ export class Game {
     this.hud?.toast(`${def.icon} 悬赏 · ${def.name}（${where}）`);
   }
 
-  /** 该悬赏在当前深度是否可行（要打的敌人得真刷得出来）。 */
+  /** 该悬赏在当前深度是否可行（要打的敌人得真刷得出来、要会的机制得先见过）。 */
   private bountyAvailable(def: BountyDef, depth: number): boolean {
+    if (def.minDepth && depth < def.minDepth) return false;
     if (def.kind !== 'hunt') return true;
     const enemy = def.enemy ? ENEMY_MAP[def.enemy] : null;
     return !!enemy && (enemy.minWave ?? 1) <= 1 + depth;
@@ -922,6 +930,7 @@ export class Game {
     this.resolveGrounds(dt);
     this.resolveGraze(dt);
 
+    this.updateBlazeEmbers(dt);
     this.updatePyres(dt);
     this.updateLamps(dt);
     this.pickups.update(dt, this.player.x, this.player.y, this.player.stats.pickupRange, (p) => this.collect(p));
@@ -1685,7 +1694,10 @@ export class Game {
 
   private damagePlayer(amount: number, x = this.player.x, y = this.player.y, drain = 0, source?: string): void {
     if (this.player.invuln > 0 || this.player.dashTimer > 0) return;
-    const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult;
+    // 「影缝」：焰烧着的时候更难被打灭——贴着脸打总归要挨几下，这是那几下里的折扣。
+    // 只在烧着的时候生效：它不是一件无条件的护甲，而是"贴着打"这套牌的兜底。
+    const guard = this.player.blazing ? 1 - this.player.flags.blazeGuard : 1;
+    const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult * guard;
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;
     // 记下这一下是谁打的：死亡结算里"被谁扑灭"比一串数字有用得多
@@ -1723,6 +1735,12 @@ export class Game {
     const def = ENEMY_MAP[e.defId];
     if (def) this.codex.discover('enemy', e.defId);
     this.bounties.onKill(e.defId);
+    // 焰是自己擦出来的，让它烧下去的是击杀（见 data/graze.ts 的 blazeExtend）：
+    // 焰一烧着，"停下来"就变成了有代价的事——这正是这一版想塞进那六秒里的张力。
+    if (this.player.blazing && this.player.extendBlaze(GRAZE.blazeExtend)) {
+      this.particles.ember(e.x, e.y, '#ffd9a0');
+    }
+    if (e.boss && this.player.blazing) this.achievements.unlock('blaze_boss');
     if (e.defId === 'splinter') {
       this.splinterKills += 1;
       if (this.splinterKills >= 12) this.achievements.unlock('splinter_slain');
@@ -2146,6 +2164,27 @@ export class Game {
   }
 
   /**
+   * 焰烧着的时候，从身上往上飘一点火星。
+   *
+   * 节拍固定（0.08 秒一小撮），所以它跟帧率无关、不随掉帧变成一坨；
+   * `ember()` 自己会按粒子密度抽样，手机上降档时自然就稀了。
+   * 另外它**只走视觉**：粒子池满了会自己丢弃，不会有任何玩法上的副作用。
+   */
+  private updateBlazeEmbers(dt: number): void {
+    if (!this.player.blazing) {
+      this.blazeEmit = 0;
+      return;
+    }
+    this.blazeEmit -= dt;
+    if (this.blazeEmit > 0) return;
+    this.blazeEmit = 0.08;
+    const p = this.player;
+    const a = this.rng.angle();
+    const d = this.rng.range(2, p.radius * 0.9);
+    this.particles.ember(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7, '#ffd9a0');
+  }
+
+  /**
    * 记一次掠影（"擦过去"这件事本身）：算一次数、回一口灯油、蹦两粒火星、响一声"叮"。
    * 热度在 `resolveGraze` 里按距离持续累加，这里只管那一下的**动静**。
    *
@@ -2155,7 +2194,10 @@ export class Game {
     const p = this.player;
     this.grazeCount += 1;
     // 油就是光：擦着黑暗走能一直亮着，这一小口就是"火苗被撩旺了"
-    p.oil = Math.min(p.oilMax, p.oil + GRAZE.oil * (dashing ? GRAZE.dashMult : 1) * p.stats.oilGainMult);
+    //「撩芯」把这一口翻倍——贴着脸打的那套牌，续航是靠"擦"接起来的，不是靠掉落
+    p.oil = Math.min(p.oilMax, p.oil + GRAZE.oil * (1 + p.flags.grazeOil) * (dashing ? GRAZE.dashMult : 1) * p.stats.oilGainMult);
+    this.bounties.onGraze();
+    this.codex.discover('mechanic', 'graze');
     const mx = (x + p.x) / 2;
     const my = (y + p.y) / 2;
     // 火星跟着"擦的是什么"变色：擦敌人是暖的，擦弹幕是紫的（跟敌人的子弹一个色系），
@@ -2170,7 +2212,8 @@ export class Game {
         '掠影 · 擦着危险走过去',
         '贴着敌人或弹幕走（脚边那圈符文会长）就攒热度，还会回一点灯油：离得越近、走得越快，涨得越快；' +
           '站着不动不算。攒满会点着一阵「灯焰高涨」——照得更远、伤害 +25%、走得更快、' +
-          '代价是火大油也烧得凶（+30%）。冲刺里从弹幕正中穿过，那一下是双倍。',
+          '代价是火大油也烧得凶（+30%），但焰里每杀一只怪都会给它续一点时间。' +
+          '冲刺里从弹幕正中穿过，那一下是双倍。',
       );
     }
     if (this.grazeCount === 60) this.achievements.unlock('graze60');
@@ -2204,7 +2247,11 @@ export class Game {
     this.audio.play('blaze');
     this.haptics.blaze();
     this.floaters.label(p.x, p.y - 36, '灯焰高涨', '#ffd97a', 19);
-    this.hud?.toast('🔥 灯焰高涨 · 伤 +25% / 光 +30% · 但油耗也多了三成');
+    this.hud?.toast('🔥 灯焰高涨 · 伤 +25% / 光 +30% · 焰里每杀一只续 0.3 秒 · 但油耗也多了三成');
+    this.bounties.onBlaze();
+    this.codex.discover('mechanic', 'blaze');
+    // 一局点着六次：掠影那条线要真的走进玩家的走位里，六次算跨过"偶尔擦到"那一档
+    if (p.blazeCount >= 6) this.achievements.unlock('blaze6');
   }
 
   private handleHazard(kind: string): void {

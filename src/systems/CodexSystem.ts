@@ -12,13 +12,14 @@ import { ENEMIES } from '../data/enemies';
 import { LANTERNS } from '../data/lanterns';
 import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
+import { GRAZE } from '../data/graze';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
 import { WEAPON_MAP } from '../data/weapons';
 import type { Player } from '../entities/Player';
 import type { SaveData } from '../types';
 
-export type CodexKind = 'enemy' | 'weapon' | 'relic' | 'passive' | 'curse' | 'affix' | 'lantern' | 'stage' | 'hazard';
+export type CodexKind = 'enemy' | 'weapon' | 'relic' | 'passive' | 'curse' | 'affix' | 'lantern' | 'stage' | 'hazard' | 'mechanic';
 
 export interface CodexEntry {
   kind: CodexKind;
@@ -137,6 +138,7 @@ export const CODEX_SECTIONS: CodexSection[] = [
   { kind: 'affix', title: '精英词缀', hint: '遇到精英后记录' },
   { kind: 'lantern', title: '灯火', hint: '解锁后记录' },
   { kind: 'hazard', title: '险境', hint: '遇上后记录' },
+  { kind: 'mechanic', title: '机制', hint: '用出来就记录' },
   { kind: 'stage', title: '关卡', hint: '抵达后记录' },
 ];
 
@@ -262,6 +264,51 @@ export function codexCatalog(): CodexEntry[] {
       ],
     });
   }
+  // 机制：掠影与灯焰高涨单独成一章。
+  // 这一章存在的理由和险境那一章一样——它是"每时每刻都在发生、但没有任何一个界面
+  // 讲清楚过"的东西；而且这里的每个数都直接从 data/graze.ts 取，
+  // 以后改调参，图鉴不会跟着漂。
+  out.push({
+    kind: 'mechanic',
+    id: 'graze',
+    name: '掠影',
+    blurb: '贴着敌人或弹幕擦过去——进了判定的边、又没被判定吃到。火苗被撩旺，热度往上走。',
+    color: '#c9a3ff',
+    icon: '👣',
+    rows: [
+      ['怎么攒', '按"离判定边多近"每秒累加，贴得越近涨得越快'],
+      ['要在动', `这一帧的位移得超过 ${GRAZE.speedFloor}px/s（站着不动不算、顶着墙按方向键也不算）`],
+      ['走多快算满', `移速到 ${GRAZE.speedRef}px/s 时系数拉满（上限 ×1.6）`],
+      ['带子宽度', `敌人 ${GRAZE.rangeEnemy}px · 弹幕 ${GRAZE.rangeShot}px（都从双方半径之外开始量）`],
+      ['一物一次', `同一只敌人 ${GRAZE.cdEnemy} 秒、同一颗子弹一辈子一次`],
+      ['黏着不算', `同一只怪贴超过 ${GRAZE.holdMax} 秒之后贡献一路归零（想续就得换目标、绕出去再进来）`],
+      ['每擦一次', `回 ${Math.round(GRAZE.oil * 1000) / 10}% 灯油（冲刺里翻倍）`],
+      ['冲刺穿过弹幕正中', `不挨打，还额外给 ${GRAZE.heatDash} 点热度（一次冲刺只认一次）`],
+      ['攒满', `点着一阵「灯焰高涨」（需要 ${GRAZE.heatMax} 点热度）`],
+      ['停手之后', `${GRAZE.decayDelay} 秒才开始回落，每秒掉 ${GRAZE.decay} 点`],
+    ],
+    extra: `同一瞬间最多按 ${GRAZE.rateCap} 只怪的权重封顶——被三面围住已经很危险了，再多几只也只是同一件事。`,
+  });
+  out.push({
+    kind: 'mechanic',
+    id: 'blaze',
+    name: '灯焰高涨',
+    blurb: '掠影攒满点着的那一阵：灯火更旺、伤害更高、走得更快，代价是油烧得凶。',
+    color: '#ffb14e',
+    icon: '🔥',
+    rows: [
+      ['灯火半径', `×${GRAZE.blazeLight}`],
+      ['伤害', `+${Math.round(GRAZE.blazeDamage * 100)}%`],
+      ['移动速度', `+${Math.round((GRAZE.blazeSpeed - 1) * 100)}%`],
+      ['灯油耗率', `×${GRAZE.blazeOil}（火烧得旺，油也去得快）`],
+      ['持续', `${GRAZE.blazeTime} 秒（带「长风」是 ${GRAZE.blazeTime * 1.5} 秒）`],
+      ['焰里击杀', `每杀一只续 ${GRAZE.blazeExtend} 秒，最多续到 ${GRAZE.blazeTime * GRAZE.blazeExtendCap} 秒`],
+      ['烧着时攒热', `只攒一半（×${GRAZE.blazeHeatMult}）`],
+      ['烧完', `最多留下 ${Math.round(GRAZE.blazeCarry * 100)}% 热度——想再来一次还得真的再擦`,
+      ],
+    ],
+    extra: '焰是自己擦出来的，让它一直烧下去的是击杀：停下来喘口气，焰就自己烧完了。',
+  });
   for (const s of STAGES) {
     out.push({
       kind: 'stage',

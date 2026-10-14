@@ -49,6 +49,14 @@ export interface PlayerFlags {
   pyreBonus: number;
   /** 灯焰被吹灭的速度倍率（守夜灯：灯更耐吹） */
   pyreGuard: number;
+  /** 「掠影」热度积攒加成（焰心：0.45 = 快 45%） */
+  grazeHeat: number;
+  /** 「掠影」回油加成（撩芯：1 = 那口油翻倍） */
+  grazeOil: number;
+  /** 「灯焰高涨」时长加成（长风：0.5 = 六秒变九秒） */
+  blazeTime: number;
+  /** 「灯焰高涨」期间的减伤（影缝：0.3 = 少挨三成） */
+  blazeGuard: number;
 }
 
 interface OrbitState {
@@ -69,7 +77,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -145,7 +153,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -234,7 +242,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -295,6 +303,12 @@ export class Player {
     if (m.novaBuff) flags.novaBuff = Math.max(flags.novaBuff, m.novaBuff);
     if (m.pyreBonus) flags.pyreBonus *= 1 + m.pyreBonus;
     if (m.pyreGuard) flags.pyreGuard *= Math.max(0.25, 1 - m.pyreGuard);
+    // 「掠影」这条线：四件遗物各自只动一个数，但它们乘的是同一条算式——
+    // 热度来得快 → 焰点得勤 → 焰里杀得更多 → 焰烧得更久（见 GRAZE.blazeExtend）
+    flags.grazeHeat += m.grazeHeat ?? 0;
+    flags.grazeOil += m.grazeOil ?? 0;
+    flags.blazeTime += m.blazeTime ?? 0;
+    if (m.blazeGuard) flags.blazeGuard = Math.max(flags.blazeGuard, m.blazeGuard);
   }
 
   /** 当前持有某一族遗物的数量。 */
@@ -342,9 +356,36 @@ export class Player {
     return s;
   }
 
+  /**
+   * 「灯焰高涨」这一次该烧多久：基础六秒，带「长风」是九秒。
+   * 所有地方（点着、符文刻度、续焰的上限）都走这一个数，免得三处各算一份对不上。
+   */
+  get blazeDuration(): number {
+    return GRAZE.blazeTime * (1 + this.flags.blazeTime);
+  }
+
+  /** 焰烧着的时候还能续多久（击杀续焰的上限，见 GRAZE.blazeExtendCap）。 */
+  get blazeMax(): number {
+    return this.blazeDuration * GRAZE.blazeExtendCap;
+  }
+
+  /**
+   * 焰里杀了一只怪：给这段焰续一点时间（`Game.onEnemyDeath` 调用）。
+   *
+   * 续焰是这一版把掠影接进"打"里的那一下：焰是自己擦出来的，让它烧下去的是击杀。
+   * 上限卡在 blazeMax（基础时长的 1.5 倍）——最密的那几波不该变成"焰从此不灭"。
+   * 返回 true 表示这一下真的把上限又顶高了一格（结算与测试要看这个）。
+   */
+  extendBlaze(sec: number): boolean {
+    if (this.blazeTimer <= 0) return false;
+    const before = this.blazeTimer;
+    this.blazeTimer = Math.min(this.blazeMax, this.blazeTimer + sec);
+    return this.blazeTimer > before;
+  }
+
   /** 脚下那圈符文的进度：灯焰高涨时画的是"还剩多久"，平时画的是"攒了多少"。 */
   get gaugeFrac(): number {
-    return this.blazeTimer > 0 ? clamp(this.blazeTimer / GRAZE.blazeTime, 0, 1) : clamp(this.heat / GRAZE.heatMax, 0, 1);
+    return this.blazeTimer > 0 ? clamp(this.blazeTimer / this.blazeDuration, 0, 1) : clamp(this.heat / GRAZE.heatMax, 0, 1);
   }
 
   /** 现在在烧吗（结算、HUD 与测试都看这一个）。 */
@@ -359,13 +400,15 @@ export class Player {
   addHeat(amount: number): boolean {
     if (amount <= 0) return false;
     this.heatDelay = GRAZE.decayDelay;
+    // 「焰心」：擦同样的距离，热度涨得更快（只在"攒"这一侧放大，不碰上限与回落）
+    amount *= 1 + this.flags.grazeHeat;
     // 注意这里**不**打那个脉冲：热度是每帧一点点加上来的，
     // "新擦了一下"的那一跳由 grazeEvent 单独给（不然符文会一直在抖）。
     const gain = this.blazeTimer > 0 ? amount * GRAZE.blazeHeatMult : amount;
     this.heat = Math.min(GRAZE.heatMax, this.heat + gain);
     if (this.blazeTimer <= 0 && this.heat >= GRAZE.heatMax) {
       this.heat = 0;
-      this.blazeTimer = GRAZE.blazeTime;
+      this.blazeTimer = this.blazeDuration;
       this.blazeCount += 1;
       return true;
     }
