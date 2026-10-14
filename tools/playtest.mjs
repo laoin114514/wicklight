@@ -1407,6 +1407,52 @@ async function main() {
   await mobile.click('[data-act="resume"]');
   await sleep(400);
 
+  // 侧滑返回：横屏左边缘那道手势带正好压在左手拇指的活动范围里——正往左跑着，
+  // 一个侧滑，浏览器就离开页面，这一局直接没了。所以战斗里要往历史里塞一条守卫，
+  // 让返回键先撞在它上面：撞上就暂停，走不走由玩家自己决定。
+  const backGuard = await mobile.evaluate(async () => {
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    const g = window.__WICKLIGHT__.game;
+    const armed = { state: history.state, len: history.length };
+    history.back(); // 等价于玩家按返回 / 侧滑返回
+    await nap(320);
+    const hit = {
+      state: g.state,
+      hasResume: !!document.querySelector('[data-act="resume"]'),
+      histState: history.state,
+      len: history.length,
+    };
+    const afterBack = g.state;
+    // 回菜单：多出来的那一条历史得吃掉，别让玩家为了退出要按两次返回
+    g.goMenu();
+    await nap(360);
+    const menu = { state: g.state, histState: history.state, len: history.length };
+    // 再开一局：守卫得重新装上（不然只有第一局受保护）
+    g.newRun('warden', 'normal', false);
+    await nap(360);
+    const again = { state: g.state, histState: history.state, len: history.length };
+    return { armed, hit, afterBack, menu, again };
+  });
+  expect(
+    backGuard.armed.state && backGuard.armed.state.wicklightGuard === 1,
+    '战斗中历史里塞着一条守卫（返回键先撞它）',
+    JSON.stringify(backGuard.armed),
+  );
+  expect(backGuard.hit.state === 'paused', '手机上按返回＝暂停这一局，不是直接离开页面', JSON.stringify(backGuard.hit));
+  expect(backGuard.hit.hasResume, '返回之后停在暂停面板上', JSON.stringify(backGuard.hit));
+  expect(backGuard.hit.histState === null, '守卫被弹掉了：再按一次返回就是真的离开（不是按不动）', JSON.stringify(backGuard.hit));
+  expect(backGuard.menu.state === 'menu', '离开战斗回到菜单', JSON.stringify(backGuard.menu));
+  expect(
+    backGuard.menu.histState === null && backGuard.menu.len <= backGuard.armed.len,
+    '离开战斗就撤守卫：不会攒下一串历史让玩家按好几次返回',
+    JSON.stringify(backGuard.menu),
+  );
+  expect(
+    backGuard.again.histState && backGuard.again.histState.wicklightGuard === 1,
+    '第二局照样有守卫（不是只有第一局受保护）',
+    JSON.stringify(backGuard.again),
+  );
+
   // 切到后台（接电话 / 切应用 / 锁屏）要自动暂停：回来时别站在怪堆里
   const bgPaused = await mobile.evaluate(async () => {
     const desc = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');

@@ -6,6 +6,7 @@ import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
 import { setupOrientation } from './ui/Orientation';
+import { BackGuard } from './ui/BackGuard';
 import { WakeLock } from './core/WakeLock';
 import { WEAPONS as weapons } from './data/weapons';
 import { RELICS as relics, TRIBES as tribes } from './data/relics';
@@ -29,6 +30,13 @@ function boot(): void {
   const touch = new TouchControls(game);
   const input = new Input(canvas);
   const wake = new WakeLock();
+  // 手机上按返回（或侧滑返回）时不要直接离开页面：暂停，让玩家自己决定
+  const backGuard = new BackGuard(() => {
+    if (game.state === 'playing') {
+      game.togglePause();
+      hud.toast('按了返回键 · 已暂停');
+    }
+  });
 
   game.setUI(ui, hud);
   ui.mountMenus();
@@ -40,6 +48,7 @@ function boot(): void {
     ui,
     hud,
     touch,
+    backGuard,
     wake,
     // 供测试/调试读取的静态数据表（无副作用）
     data: { weapons, relics, passives, curses, bounties, tribes, meta },
@@ -75,6 +84,7 @@ function boot(): void {
       // 触摸控件只在真正在打的时候上屏：面板就在同一层，它会盖住面板右下角的按钮
       touch.setActive(game.state === 'playing');
       if (game.state === 'playing') touch.apply(snap);
+      backGuard.sync(game.state === 'playing');
       game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova);
       if (st.pause) {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();

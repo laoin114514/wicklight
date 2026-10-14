@@ -226,6 +226,21 @@ export function installDomStubs(opts = {}) {
     close() { return Promise.resolve(); }
   }
 
+  // 假的 history：只够 BackGuard 用（pushState / back / length / state）。
+  // back() 会真的派发 popstate——没这一条，浏览器返回键那条路径在无头环境里
+  // 永远走不到，等于没测。
+  const historyStack = [null];
+  const historyStub = {
+    get length() { return historyStack.length; },
+    get state() { return historyStack[historyStack.length - 1]; },
+    pushState(state) { historyStack.push(state ?? null); },
+    replaceState(state) { historyStack[historyStack.length - 1] = state ?? null; },
+    back() {
+      if (historyStack.length > 1) historyStack.pop();
+      dispatch('popstate', { state: historyStub.state });
+    },
+  };
+
   const intervals = [];
   const timeouts = [];
   const rafQueue = [];
@@ -235,6 +250,7 @@ export function installDomStubs(opts = {}) {
     innerHeight: 720,
     devicePixelRatio: 1,
     location: { href: 'http://localhost/', reload() {} },
+    history: historyStub,
     navigator: undefined,
     addEventListener: addListener,
     removeEventListener: () => {},
@@ -288,6 +304,7 @@ export function installDomStubs(opts = {}) {
     intervals,
     timeouts,
     dispatch,
+    history: historyStub,
     FakeElement,
     FakeCanvas,
     getElement,
