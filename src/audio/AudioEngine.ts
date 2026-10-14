@@ -178,6 +178,16 @@ export class AudioEngine {
           this.tone(430 + step * 130, 0.09, 'square', 0.055, 880 + step * 170);
         }
         break;
+      case 'vortex':
+        // 旋灯扔出去：一声往下滑的呼啸（它是"往里吸"的，所以音高是往下的，和连爆正好相反）
+        this.noise(0.26, 0.09, 900, 0.7);
+        this.tone(620, 0.3, 'triangle', 0.07, 220);
+        break;
+      case 'vortex_burst':
+        // 收缩那一下：闷的一记爆，比燃爆轻（它是收尾，不是主角）
+        this.noise(0.22, 0.13, 1500, 0.8);
+        this.tone(180, 0.26, 'sine', 0.11, 70);
+        break;
       case 'graze':
         // 掠影：一声很轻的"叮"。它一秒钟能响好几下，所以压得比别的都低、节流也更狠
         //（一轮弹幕擦过去五六下，响成一片就变成噪音了）。

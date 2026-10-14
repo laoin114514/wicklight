@@ -787,6 +787,128 @@ async function main() {
   });
   await sleep(200);
 
+  // ── 3a8. 旋灯：把一群人拢到一点 ──
+  // 这是这一版给玩家的**第三个**关于位置的动词：到 v56 为止，"位置"只有两个用法——
+  // **你**站在哪儿（躲 / 擦）、**东西**放在哪儿（分灯 / 伏灯）。旋灯反过来：
+  // **你决定它们站在哪儿**。所以这一段要证明的不是"它有伤害"，而是**它们真的在往一块儿靠**：
+  // 离线测试能钉住吸力的数和帧率无关，但"拢"这件事是手感，得在真帧里逐帧看着才对得起这两个字。
+  // 走的是真开火路径（给玩家一把旋灯，让它自己锁定最近那只怪开一炮），不是直接调 placeVortex。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    // 只留旋灯这一把：别的武器会当场把人打散，量出来的"靠近"就成了两件事叠加的结果
+    window.__SAVED_WEAPONS2__ = [...p.weapons];
+    p.weapons.clear();
+    p.addWeapon('vortex');
+    p.recomputeStats();
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.mines.length = 0;
+    g.vortexes.length = 0;
+    g.vortexCount = 0;
+    g.vortexBest = 0;
+    // 这一波还在刷怪。新刷出来的一只走过来就会把"同时拽住几只"这个数搅乱——把导演挂起一会儿。
+    const d = g.director;
+    window.__DIRV__ = { phase: d.phase, intro: d.introTimer, spawn: d.spawnTimer, spawned: d.spawned, wave: d.wave, hazard: d.hazardTimer };
+    d.phase = 'intro';
+    d.introTimer = 1e9;
+    d.hazardTimer = 1e9;
+    // 四只站桩的怪挤在右前方一小片里：旋灯自动落在最近那只身上（也就是这片人的中间）
+    const foes = [];
+    for (const [x, y] of [[200, 0], [206, -34], [206, 34], [238, 6]]) {
+      const e = g.enemies.spawn('shade', x, y, 1, 0);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.speed = 0;
+      e.spawnTimer = 0;
+      foes.push(e);
+    }
+    const st = (window.__VORT__ = { foes, log: [], shot: null, center: null, frames: 0 });
+    const step = () => {
+      const gg = window.__WICKLIGHT__.game;
+      const v = gg.vortexes[0];
+      if (v && !st.center) st.center = { x: v.x, y: v.y };
+      st.log.push({
+        n: gg.vortexes.length,
+        count: gg.vortexCount,
+        best: gg.vortexBest,
+        pos: st.foes.map((e) => [Math.round(e.x), Math.round(e.y)]),
+      });
+      // 转到一半那一帧把画面存下来：那时候三条旋臂、往里跑的碎屑、中心那点灯芯都在，
+      // 而且被拽进来的怪正好挤在灯心里——"拢到一点"在图上看得见。
+      if (!st.shot && v && v.life < v.maxLife * 0.62 && v.life > v.maxLife * 0.34) {
+        st.shot = gg.renderer.canvas.toDataURL('image/png');
+      }
+      st.frames += 1;
+      if (st.frames < 120) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  await sleep(1900);
+  const vort = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const st = window.__VORT__;
+    return { log: st.log, center: st.center, shot: st.shot, left: g.vortexes.length, count: g.vortexCount, best: g.vortexBest };
+  });
+  const vLog = vort.log;
+  expect(vort.count >= 1, '真开火路径真的扔出了一盏旋灯（走的 Player 那条分支，不是直接摆）', `vortexCount=${vort.count}`);
+  expect(!!vort.center, '旋灯落在了场上（采样器抓到了它的位置）');
+  const toCenter = (p) => Math.hypot(p[0] - vort.center.x, p[1] - vort.center.y);
+  const meanOf = (r) => r.pos.reduce((a, p) => a + toCenter(p), 0) / r.pos.length;
+  const spreadAtFire = meanOf(vLog.find((r) => r.n > 0) ?? vLog[0]);
+  const closest = vLog.reduce((m, r) => Math.min(m, meanOf(r)), Infinity);
+  expect(spreadAtFire > 30, '开炮那一刻人是散的（四只都在圈里、离灯心有一段距离）', `平均 ${spreadAtFire.toFixed(0)}px`);
+  expect(
+    closest < spreadAtFire - 18,
+    '旋灯一转起来，它们真的被拽近了（是"拢"，不是"站着不动"）',
+    `平均距离 ${spreadAtFire.toFixed(0)} → ${closest.toFixed(0)}px`,
+  );
+  expect(vort.best >= 3, '一个漩涡里同时拽住好几只（结算面板那个数真的会涨）', `一次拽住 ${vort.best} 只`);
+  expect(vLog.some((r) => r.n === 0) || vort.left === 0, '转完那 1.2 秒它就收了（不是一直挂在地上）', `剩 ${vort.left} 盏`);
+  const vortCodex = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { w: g.codex.entry('weapon:vortex')?.name ?? '', m: g.codex.entry('weapon:vortex_maelstrom')?.name ?? '', k: g.codex.has('mechanic', 'vortex') };
+  });
+  expect(vortCodex.w.includes('旋灯') && vortCodex.m.includes('漩涡'), '图鉴收录了旋灯与它的进化', JSON.stringify(vortCodex));
+  expect(vortCodex.k, '扔出第一盏旋灯之后，图鉴「机制」章多出一条', JSON.stringify(vortCodex));
+  if (vort.shot) {
+    await writeFile(join(SHOTS, '03f-vortex.png'), Buffer.from(String(vort.shot).split(',')[1], 'base64'));
+    ok('漩涡转到一半的那一帧存了下来', '03f-vortex.png');
+  } else {
+    fail('漩涡转到一半的那一帧存了下来', '采样器没抓到那一帧');
+  }
+  // 收尾：把这一段借走的东西还回去（武器、地上的漩涡、敌人、导演）
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.vortexes.length = 0;
+    g.enemies.clear();
+    p.weapons.clear();
+    for (const [id, lv] of window.__SAVED_WEAPONS2__ ?? []) p.weapons.set(id, lv);
+    p.recomputeStats();
+    if (window.__DIRV__) {
+      const d = g.director;
+      d.phase = window.__DIRV__.phase;
+      d.introTimer = window.__DIRV__.intro;
+      d.spawnTimer = window.__DIRV__.spawn;
+      d.spawned = window.__DIRV__.spawned;
+      d.wave = window.__DIRV__.wave;
+      d.hazardTimer = window.__DIRV__.hazard;
+      delete window.__DIRV__;
+    }
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    delete window.__VORT__;
+    delete window.__SAVED_WEAPONS2__;
+  });
+  await sleep(200);
+
   // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
   // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
   // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。

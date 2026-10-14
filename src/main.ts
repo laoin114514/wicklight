@@ -18,6 +18,7 @@ import { BOUNTIES as bounties } from './data/bounties';
 import { META_TREE as meta } from './data/meta';
 import { GRAZE as graze } from './data/graze';
 import { MINE as mines } from './data/mines';
+import { VORTEX as vortex } from './data/vortex';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -53,9 +54,9 @@ function boot(): void {
     backGuard,
     wake,
     // 供测试/调试读取的静态数据表（无副作用）
-    // graze 也放进来：掠影 / 灯焰高涨那一串调参值（带子宽度、黏着上限、焰的加成……）
+    // graze / mines / vortex 也放进来：掠影、伏灯、旋灯那几串调参值（带子宽度、引信、吸力……）
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
-    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines },
+    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

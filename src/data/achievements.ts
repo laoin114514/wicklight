@@ -21,6 +21,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'mine_multi', name: '伏击', blurb: '一颗「伏灯」同时炸到 5 个敌人。', embers: 40, group: '战斗' },
   { id: 'minechain', name: '一串灯', blurb: '一次连爆把 4 颗以上「伏灯」串成一条线。', embers: 40, group: '战斗' },
   { id: 'mine_moth', name: '以灯为饵', blurb: '一颗「伏灯」一次炸到 4 只「灯蛾」。', embers: 40, group: '战斗' },
+  { id: 'vortex_crowd', name: '一网打尽', blurb: '一个「旋灯」里同时拽住 6 只敌人。', embers: 40, group: '战斗' },
 
   { id: 'survivor', name: '守夜有成', blurb: '通关「幽林」。', embers: 30, group: '关卡与首领' },
   { id: 'conqueror', name: '焚尽长夜', blurb: '通关全部关卡。', embers: 120, group: '关卡与首领' },

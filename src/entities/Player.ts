@@ -37,6 +37,11 @@ export interface PlayerContext {
    * 位置由玩家给（Player 只知道"我朝哪儿走"），落点判定与爆炸都在 Game 里。
    */
   mine: (x: number, y: number, damage: number, radius: number, trigger: number, fire: number) => void;
+  /**
+   * 旋灯：在某处转起一盏往里吸的灯，转完缩成一下炸。
+   * `drag` > 0 的那把连弹幕一起卷（卷到中心就吞掉）。
+   */
+  vortex: (x: number, y: number, damage: number, radius: number, burn: number, drag: number) => void;
 }
 
 export interface PlayerFlags {
@@ -790,6 +795,23 @@ export class Player {
           ctx.mine(this.x + Math.cos(a) * 22, this.y + Math.sin(a) * 22, dmg, st.radius * area, st.range, st.burn);
         }
         ctx.audio('lamp');
+        break;
+      }
+      case 'vortex': {
+        // 落点：优先砸在最近的那只怪身上（自动瞄准本来就锁着它），附近没人才落在你朝着的方向前面。
+        // 它是"往人群里扔的一盏灯"，不是"放在自己脚边的灯"——所以和伏灯相反，它落在前面。
+        const target = ctx.findTarget(this.x, this.y, st.range);
+        const base = target ? Math.atan2(target.y - this.y, target.x - this.x) : this.angle;
+        const dist = target
+          ? Math.min(st.range, Math.hypot(target.x - this.x, target.y - this.y) * 0.86)
+          : st.range * 0.7;
+        const count = this.countOf(st);
+        for (let i = 0; i < count; i += 1) {
+          // 两盏（进化）时左右各偏一点：两团旋涡挨着，中间那一块也被拢住了
+          const a = base + (count > 1 ? (i - (count - 1) / 2) * 0.85 : 0);
+          ctx.vortex(this.x + Math.cos(a) * dist, this.y + Math.sin(a) * dist, dmg, st.radius * area, st.burn, st.drag ?? 0);
+        }
+        ctx.audio('vortex');
         break;
       }
       case 'spray': {

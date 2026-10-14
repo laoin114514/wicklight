@@ -41,6 +41,7 @@ import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { GRAZE } from '../data/graze';
 import { MINE } from '../data/mines';
+import { VORTEX } from '../data/vortex';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
@@ -190,6 +191,26 @@ interface Mine {
   fuseY: number;
   /** 这是这一串里的第几节（0 = 被踩响的那一颗；音高与成就都看这个数） */
   link: number;
+}
+
+/**
+ * 地上转着的一盏「旋灯」：它只做两件事——把附近的东西往里拽，然后缩成一下炸。
+ */
+interface Vortex {
+  x: number;
+  y: number;
+  /** 还能转多久 */
+  life: number;
+  maxLife: number;
+  /** 吸到多远（也是这一圈的范围本身） */
+  radius: number;
+  /** 收缩那一下的伤害 */
+  damage: number;
+  burn: number;
+  /** 卷不卷弹幕（0/1，进化那一把才有） */
+  drag: number;
+  /** 画面上旋臂的相位：每盏转的圈不必同步 */
+  phase: number;
 }
 
 /** 地上的一盏弃灯（「分灯」放下的）。 */
@@ -386,6 +407,12 @@ export class Game {
   mineSnuffed = 0;
   /** 本局被伏灯炸到的灯蛾总数（成就「以灯为饵」看这个） */
   mineMothHits = 0;
+  /** 场上转着的「旋灯」（最多也就同时两三盏） */
+  vortexes: Vortex[] = [];
+  /** 本局转起过几个「旋灯」（结算用） */
+  vortexCount = 0;
+  /** 本局一个漩涡里同时拽住过几只（结算与成就「一网打尽」看这个） */
+  vortexBest = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -545,6 +572,9 @@ export class Game {
     this.mineChainBest = 0;
     this.mineSnuffed = 0;
     this.mineMothHits = 0;
+    this.vortexes.length = 0;
+    this.vortexCount = 0;
+    this.vortexBest = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -965,6 +995,8 @@ export class Game {
     this.player.x = clamped.x;
     this.player.y = clamped.y;
 
+    // 旋灯要在怪把速度积分成位移之前更新：吸力是加在怪自己的速度上的（见 Enemy.behave 里那一步）
+    this.updateVortexes(dt);
     this.enemies.update(dt, this.enemyCtx());
     const livingBosses = this.enemies.bosses;
     this.bossList = livingBosses.map((e) => ({ name: ENEMY_MAP[e.defId].name, frac: clamp(e.hp / e.maxHp, 0, 1) }));
@@ -1416,6 +1448,7 @@ export class Game {
         this.bounties.onNova();
       },
       mine: (x, y, damage, radius, trigger, fire) => this.placeMine(x, y, damage, radius, trigger, fire),
+      vortex: (x, y, damage, radius, burn, drag) => this.placeVortex(x, y, damage, radius, burn, drag),
     };
   }
 
@@ -1461,6 +1494,7 @@ export class Game {
       lureTarget: (x, y) => this.nearestLamp(x, y),
       // 灯蛾扑的是**光**：地上的伏灯也算（只有上弦之后的那颗才算"亮着"）
       mineLure: (x, y, maxDist) => this.nearestArmedMine(x, y, maxDist),
+      pull: (e) => this.applyVortexPull(e),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
       spikes: (x, y, r) => {
@@ -2079,13 +2113,22 @@ export class Game {
     y: number,
     radius: number,
     damage: number,
-    opts: { knockback?: number; burn?: number; slow?: number; ring?: string; spark?: string; sparkCount?: number } = {},
+    opts: {
+      knockback?: number;
+      burn?: number;
+      slow?: number;
+      ring?: string;
+      spark?: string;
+      sparkCount?: number;
+      /** 地上那道焦痕的颜色。默认是暖色的"烧焦"（火球、伏灯那种），冷色的武器可以自己换。 */
+      decal?: string;
+    } = {},
   ): number {
     const ring = opts.ring ?? '#ff7a2f';
     this.particles.shockwave(x, y, ring, radius, 0.45);
     this.particles.burst(x, y, opts.sparkCount ?? 14, opts.spark ?? '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
     this.camera.addTrauma(0.2, this.settings.data.shake * this.settings.motionScale);
-    this.addDecal(x, y, radius * 0.8, 'rgba(20,8,4,0.55)', 6);
+    this.addDecal(x, y, radius * 0.8, opts.decal ?? 'rgba(20,8,4,0.55)', 6);
     let hits = 0;
     this.enemies.forEach((e) => {
       const d = Math.hypot(e.x - x, e.y - y);
@@ -2203,6 +2246,125 @@ export class Game {
     this.mineSnuffed += 1;
     this.particles.burst(m.x, m.y - 8, 10, '#b6a6ff', { speed: 70, size: 2.2, life: 0.5 });
     this.audio.play('quench');
+  }
+
+  /**
+   * 转起一盏「旋灯」。
+   *
+   * 落点由玩家给（Player 只知道"我朝哪儿"，锁的是最近那只怪），
+   * 剩下的都在这里：吸力、卷弹幕、收缩那一下。
+   */
+  placeVortex(x: number, y: number, damage: number, radius: number, burn: number, drag: number): void {
+    this.vortexes.push({
+      x,
+      y,
+      life: VORTEX.life,
+      maxLife: VORTEX.life,
+      radius,
+      damage,
+      burn,
+      drag,
+      phase: this.rng.next() * 6.283,
+    });
+    this.vortexCount += 1;
+    this.codex.discover('mechanic', 'vortex');
+    this.particles.burst(x, y, 10, '#8fb8ff', { speed: 120, size: 3, life: 0.5 });
+    this.audio.play('ui');
+  }
+
+  /**
+   * 每一盏旋灯：读秒、照亮、数它拽住了几只、卷弹幕，最后缩成一下炸。
+   *
+   * 这里不直接掰怪的位置：挪动是留给 `applyVortexPull`（挂在怪自己积分那一步）的，
+   * 否则"吸力"就变成"瞬移"，跑得快跑得慢也就没差别了。
+   */
+  private updateVortexes(dt: number): void {
+    if (!this.vortexes.length) return;
+    for (let i = this.vortexes.length - 1; i >= 0; i -= 1) {
+      const v = this.vortexes[i];
+      v.life -= dt;
+      v.phase += dt * VORTEX.spin;
+      this.light.addLight(v.x, v.y, VORTEX.lightRadius, VORTEX.lightIntensity);
+      this.light.addGlow(v.x, v.y, v.radius * 0.55, 0.2);
+      // 同时拽住几只：首领不算（它站在那儿不是被卷进来的）
+      let held = 0;
+      this.enemies.forEach((e) => {
+        if (e.boss) return;
+        if ((e.x - v.x) ** 2 + (e.y - v.y) ** 2 <= v.radius * v.radius) held += 1;
+      });
+      if (held > 0) {
+        this.vortexBest = Math.max(this.vortexBest, held);
+        if (held >= VORTEX.crowd) this.achievements.unlock('vortex_crowd');
+      }
+      // 进化的那一把：弹幕被卷进来，卷到中心就吞掉（这是它"替你挡一片"的题眼）
+      if (v.drag > 0) this.dragEnemyShots(v, dt);
+      if (v.life > 0) continue;
+      // 收尾：缩成一下炸。**没有击退**——它的用处是把人拢在一块儿，最后把人推开就白拢了。
+      this.vortexes.splice(i, 1);
+      this.blast(v.x, v.y, v.radius * VORTEX.burst, v.damage, {
+        knockback: 0,
+        burn: v.burn,
+        ring: '#8fb8ff',
+        spark: '#dcefff',
+        sparkCount: 20,
+        // 冷色的武器不该在地上留一道烧焦：这里只留一圈被"抽过风"的冷痕
+        decal: 'rgba(16,22,44,0.5)',
+      });
+      this.audio.play('vortex_burst');
+      this.camera.addTrauma(0.16, this.settings.data.shake * this.settings.motionScale);
+    }
+  }
+
+  /**
+   * 旋灯卷弹幕：**不改速度大小、只拐方向**，所以看起来是"被卷着打转"而不是"突然停住"；
+   * 卷到中心（吸入半径 × `swallow`）就吞掉——那颗子弹再也打不到你。
+   */
+  private dragEnemyShots(v: Vortex, dt: number): void {
+    const core = v.radius * VORTEX.swallow;
+    for (const p of this.projectiles.all) {
+      if (!p.active || p.fromPlayer) continue;
+      const dx = v.x - p.x;
+      const dy = v.y - p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d <= core) {
+        p.active = false;
+        this.particles.burst(p.x, p.y, 3, '#dcefff', { speed: 60, size: 2.2, life: 0.3 });
+        continue;
+      }
+      if (d > v.radius) continue;
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      const bend = (1 - d / v.radius) * 4.2 * dt;
+      p.vx += (dx / d) * sp * bend;
+      p.vy += (dy / d) * sp * bend;
+      const sp2 = Math.hypot(p.vx, p.vy) || 1;
+      p.vx = (p.vx / sp2) * sp;
+      p.vy = (p.vy / sp2) * sp;
+    }
+  }
+
+  /**
+   * 挂在怪自己积分那一步上的吸力：加在它自己的速度上，所以快慢怪挣得脱的程度不一样。
+   *
+   * 这里是**速度**增量而不是"加速度 × dt"：怪的 `vx/vy` 每帧都被它自己的 AI 重新写一遍
+   * （见 EnemySystem.update 的 `e.vx = …`），所以这次加法只影响**这一帧**的位移。
+   * 于是"乘 dt"反而会变成"帧率越低、每步加得越多、总位移越大"（30 帧下是 60 帧的两倍，
+   * 手机上掉帧就成了另一件武器）。直接给速度，位移自然就是 `v * dt`，掉帧手感不变。
+   *
+   * 也因此 `VORTEX.pull` 是"往里拽的速度"（px/s），它和怪自己的速度在同一个量纲上打架：
+   * 石守 34、影蛭 68、灯蛾 96、疾影 132——所以靠外一点的疾影挣得开，石守只能被拖着走。
+   */
+  private applyVortexPull(e: Enemy): void {
+    if (!this.vortexes.length) return;
+    for (const v of this.vortexes) {
+      const dx = v.x - e.x;
+      const dy = v.y - e.y;
+      const d = Math.hypot(dx, dy);
+      if (d > v.radius || d < 0.5) continue;
+      const resist = e.boss ? VORTEX.bossPull : e.def.elite ? VORTEX.elitePull : 1;
+      const force = VORTEX.pull * (1 - d / v.radius) * resist;
+      e.vx += (dx / d) * force;
+      e.vy += (dy / d) * force;
+    }
   }
 
   /** 最近的、**已经上弦**的伏灯（灯蛾扑的就是它）。 */
@@ -3510,6 +3672,7 @@ export class Game {
     this.drawPyres(ctx);
     this.drawLamps(ctx);
     this.drawMines(ctx);
+    this.drawVortexes(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
@@ -3804,6 +3967,91 @@ export class Game {
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 地上的旋灯。三件事要看得出来：
+   * **它有多大**（外圈那道淡淡的吸力边界）、**它在往里转**（三条旋臂 + 沿臂往里跑的碎屑），
+   * 以及**它快要缩了**（越接近结束，整盏灯越小越亮——那一下炸就是它的收场）。
+   *
+   * 旋臂画成螺线（而不是同心圆）是刻意的：同心圆看起来像"围起来了"，螺线才像"在吸"。
+   */
+  private drawVortexes(ctx: CanvasRenderingContext2D): void {
+    if (!this.vortexes.length) return;
+    ctx.save();
+    for (const v of this.vortexes) {
+      const t = 1 - clamp(v.life / v.maxLife, 0, 1);
+      const fade = clamp(v.life / 0.22, 0, 1); // 最后 0.22 秒开始收（免得"啪"地凭空消失）
+      // 缩小的终点**就是**那一下爆炸的半径（`burst`）：画的圈和挨炸的圈是同一个数，
+      // 所以"它要炸在哪儿"在收尾那几帧是看得出来的——不用另画一个预警圈，
+      // 玩家看见旋臂缩到多小，那就是这一炸会碰到多远。
+      const r = v.radius * (1 - t * (1 - VORTEX.burst));
+      ctx.globalCompositeOperation = 'lighter';
+      // 底：一圈往里暗下去的光（越靠中心越亮，方向感就在这里）
+      const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, r);
+      g.addColorStop(0, `rgba(198,232,255,${0.22 * fade})`);
+      g.addColorStop(0.45, `rgba(120,158,255,${0.13 * fade})`);
+      g.addColorStop(1, 'rgba(70,90,200,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // 外圈那道吸力边界：吸力本身是看不见的，得给它一条线。
+      // 它还是那道"它管到哪儿为止"的线——站在线外的怪一步都不会挪。
+      // 画成断续的一圈（而不是一整道实线）：实线读起来像"一颗气泡/一个罩子"，
+      // 断口才像"一道场"，而且它自己慢慢转，看上去是活的。
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = `rgba(150,196,255,${0.42 * fade})`;
+      const seg = 26;
+      for (let s = 0; s < seg; s += 2) {
+        const a0 = v.phase * 0.4 + (s / seg) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, r, a0, a0 + (Math.PI * 2) / seg);
+        ctx.stroke();
+      }
+      // 三条旋臂（螺线：越靠中心越密，这就是"在吸"的形状）
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      for (let a = 0; a < 3; a += 1) {
+        const base = v.phase + (a / 3) * Math.PI * 2;
+        ctx.strokeStyle = `rgba(214,240,255,${0.62 * fade})`;
+        ctx.beginPath();
+        for (let s = 0; s <= 12; s += 1) {
+          const k = s / 12; // 0 = 外圈 → 1 = 中心
+          const rr = r * (1 - k) ** 1.25;
+          const ang = base + k * 2.3;
+          const px = v.x + Math.cos(ang) * rr;
+          const py = v.y + Math.sin(ang) * rr;
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      // 沿旋臂往里跑的碎屑：一眼就看得见"有东西在被卷进去"
+      for (let i = 0; i < 9; i += 1) {
+        const k = (this.time * 0.85 + i / 9) % 1;
+        const rr = r * (1 - k) ** 1.15;
+        const ang = v.phase + i * 1.9 + t * VORTEX.spin * 2 + k * 2.4;
+        const px = v.x + Math.cos(ang) * rr;
+        const py = v.y + Math.sin(ang) * rr;
+        ctx.fillStyle = `rgba(236,248,255,${0.75 * (1 - k) * fade})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.6 - k * 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 中心那点灯芯：它也是一盏灯，只是这盏往里照（所以芯是暖的、外圈是冷的）
+      const core = 14 * (0.7 + t * 0.6);
+      const cg = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, core);
+      cg.addColorStop(0, `rgba(255,246,226,${0.7 * fade})`);
+      cg.addColorStop(0.35, `rgba(224,240,255,${0.45 * fade})`);
+      cg.addColorStop(1, 'rgba(110,160,255,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, core, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
     }
     ctx.restore();
   }

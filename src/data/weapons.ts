@@ -6,8 +6,14 @@ function scale(base: WeaponStats, growth: Partial<Record<keyof WeaponStats, numb
     const s: WeaponStats = { ...base };
     for (const k of Object.keys(growth) as (keyof WeaponStats)[]) {
       const g = growth[k] as number;
-      if (k === 'cooldown') s.cooldown = base.cooldown * Math.pow(g, i);
-      else s[k] = base[k] + g * i;
+      if (k === 'cooldown') {
+        s.cooldown = base.cooldown * Math.pow(g, i);
+        continue;
+      }
+      // 可选的那些（「旋灯」的 drag 是个 0/1 开关）不参与长大，谁都不用管它
+      const from = base[k];
+      if (typeof from !== 'number') continue;
+      s[k] = from + g * i;
     }
     out.push(s);
   }
@@ -138,6 +144,21 @@ export const WEAPONS: WeaponDef[] = [
     evolve: { passive: 'might', into: 'mine_chain' },
   },
 
+  // 「旋灯」：这一局里第一件给别人打下手的武器。伤害不是它的活——
+  // 它把一群人拢到同一点，让燃爆 / 光矛 / 雷弧 / 伏灯去打那一点。
+  {
+    id: 'vortex',
+    name: '旋灯',
+    kind: 'vortex',
+    color: '#8fb8ff',
+    blurb: '扔出去一盏会转的灯：把一圈人往里拽、拢到一点，转完缩成一下炸。',
+    levels: scale(
+      { ...base, damage: 24, cooldown: 3.1, count: 1, speed: 0, range: 250, radius: 116, pierce: 0, spread: 0, knockback: 0, slow: 0, drag: 0 },
+      { damage: 11, cooldown: 0.88, radius: 9, range: 12 },
+    ),
+    evolve: { passive: 'magnet', into: 'vortex_maelstrom' },
+  },
+
   // ── Evolved forms (unlocked via UpgradeSystem) ──
   {
     id: 'ring_corona',
@@ -219,6 +240,18 @@ export const WEAPONS: WeaponDef[] = [
     blurb: '三枚月轮同时旋出，回程还会把敌人拖住。',
     evolved: true,
     levels: scale({ ...base, damage: 44, cooldown: 0.85, count: 3, speed: 620, range: 460, radius: 17, pierce: 99, slow: 1.6, knockback: 140 }, { damage: 17, range: 26, slow: 0.4, cooldown: 0.93 }),
+  },
+  {
+    id: 'vortex_maelstrom',
+    name: '漩涡灯',
+    kind: 'vortex',
+    color: '#a8d8ff',
+    blurb: '一次两盏，而且连弹幕一起卷：卷到中心的那些，还没打到你就不见了。',
+    evolved: true,
+    levels: scale(
+      { ...base, damage: 78, cooldown: 1.6, count: 2, speed: 0, range: 320, radius: 152, pierce: 0, spread: 0, knockback: 0, slow: 0, drag: 1, burn: 1 },
+      { damage: 22, cooldown: 0.93, radius: 10, range: 14 },
+    ),
   },
   {
     id: 'mine_chain',

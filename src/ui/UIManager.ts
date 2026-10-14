@@ -568,6 +568,8 @@ export class UIManager implements UIHost {
         ${g.mineCount > 0 ? `<div><span>伏灯</span><b>${g.mineCount} 颗</b></div>` : ''}
         ${g.mineChainBest > 1 ? `<div><span>最长一串</span><b>${g.mineChainBest} 颗</b></div>` : ''}
         ${g.mineMothHits > 0 ? `<div><span>灯上的蛾</span><b>${g.mineMothHits} 只</b></div>` : ''}
+        ${g.vortexCount > 0 ? `<div><span>旋灯</span><b>${g.vortexCount} 盏</b></div>` : ''}
+        ${g.vortexBest > 1 ? `<div><span>一次拽住</span><b>${g.vortexBest} 只</b></div>` : ''}
         ${g.mineSnuffed > 0 ? `<div><span>被吹灭</span><b>${g.mineSnuffed} 颗</b></div>` : ''}
         ${g.grazeCount > 0 ? `<div><span>掠影</span><b>${g.grazeCount} 次</b></div>` : ''}
         ${g.player.blazeCount > 0 ? `<div><span>灯焰高涨</span><b>${g.player.blazeCount} 次</b></div>` : ''}
@@ -1235,11 +1237,14 @@ function formatStat(row: (typeof PASSIVE_STAT_ROWS)[number], v: number): string 
   return `${Math.round(v)}`;
 }
 
+/** 卡面上印得出数值的那些项。`drag` 那种"是/否"的开关不在里面（它不属于"改了多少"）。 */
+type WeaponRowKey = Exclude<keyof WeaponStats, 'drag'>;
+
 /** 武器卡的那几行：`before` 为空 = 这是把新武器，写它的身板而不是变化量。 */
 function weaponRows(
   before: WeaponStats | null,
   after: WeaponStats,
-  order?: (keyof WeaponStats)[],
+  order?: WeaponRowKey[],
 ): { k: string; from?: string; to: string }[] {
   const int = (v: number) => `${Math.round(v)}`;
   const sec = (v: number) => `${v.toFixed(2)}s`;
@@ -1252,7 +1257,7 @@ function weaponRows(
     if (after.pierce > 0) rows.push({ k: '穿透', to: pierce(after.pierce) });
     return rows;
   }
-  const fields: { key: keyof WeaponStats; label: string; fmt: (v: number) => string }[] = [
+  const fields: { key: WeaponRowKey; label: string; fmt: (v: number) => string }[] = [
     { key: 'damage', label: '伤害', fmt: int },
     { key: 'count', label: '数量', fmt: int },
     { key: 'cooldown', label: '间隔', fmt: sec },

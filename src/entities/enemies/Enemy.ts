@@ -102,7 +102,16 @@ export interface EnemyContext {
    * 别的行为不接这条线：不然地上摆一片雷就成了"把全场引开"的万能开关。
    */
   mineLure?: (x: number, y: number, maxDist: number) => { x: number; y: number } | null;
-  /** 站在灯台边时把灯焰抽掉一点（吹灯客） */
+  /**
+   * 「旋灯」的吸力：在怪把速度积分成位移**之前**调一下，让它自己往里挪。
+   * 钩子挂在这一步而不是"每帧直接掰位置"，是为了让吸力真的和怪自己的速度打架——
+   * 疾影挣得出去、石守被拖着走，都发生在这一行上。
+   *
+   * 注意它拿到的是"往 vx/vy 上加一个速度"，不接 dt：这一帧的位移是 `vx * dt`，
+   * 帧率换算在那儿做，这里再乘一次 dt 就成了"掉帧时拽得更狠"。
+   */
+  pull?: (e: Enemy) => void;
+  /** 站在灯台边把灯焰抽掉一点（吹灯客） */
   quench: (x: number, y: number, dt: number) => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
   regen: number;
@@ -539,6 +548,8 @@ export class EnemySystem {
       default:
         break;
     }
+
+    ctx.pull?.(e);
 
     e.x += e.vx * dt;
     e.y += e.vy * dt;

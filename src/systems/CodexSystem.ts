@@ -14,6 +14,7 @@ import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { GRAZE } from '../data/graze';
 import { MINE } from '../data/mines';
+import { VORTEX } from '../data/vortex';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
 import { WEAPON_MAP } from '../data/weapons';
@@ -335,6 +336,27 @@ export function codexCatalog(): CodexEntry[] {
       ['进化', `满级 + 灼心 → 「${mineChainDef.name}」：一次两颗 + 留一片火`],
     ],
     extra: `一次炸到 ${MINE.multiHit} 只以上会解「伏击」，一串连到 ${MINE.chainBest} 颗以上会解「一串灯」，一颗雷一次炸到 ${MINE.mothBait} 只灯蛾会解「以灯为饵」。它强不强全看你怎么走——把追兵引到雷上，还是自己绕圈把它们甩在两百像素外。`,
+  });
+  // 旋灯：这一条讲的是"它怎么把人拢住"，不是"它打多少"——
+  // 它是这一局里唯一一件"给别人打下手"的武器，讲清这件事比列伤害重要。
+  const vortexDef = WEAPON_MAP.vortex;
+  const maelstromDef = WEAPON_MAP.vortex_maelstrom;
+  out.push({
+    kind: 'mechanic',
+    id: 'vortex',
+    name: '旋灯',
+    blurb: '扔出去一盏会转的灯：它把周围的东西往里拽，转完缩成一下炸。你决定它们站在哪儿。',
+    color: '#8fb8ff',
+    icon: '🌀',
+    rows: [
+      ['落在哪', `自动落在最近那只怪身上（附近没人时落在你朝着的方向 ${Math.round(vortexDef.levels[0].range * 0.7)}px 处）`],
+      ['吸多久', `${VORTEX.life} 秒，然后缩成一下炸`],
+      ['拽得多狠', `中心 ${VORTEX.pull}px/s、到边缘归零；疾影挣得出去，石守被拖着走`],
+      ['拽不动谁', `首领 ${Math.round(VORTEX.bossPull * 100)}% 、精英 ${Math.round(VORTEX.elitePull * 100)}%（它不是用来按住首领的）`],
+      ['没有击退', '收尾那一下不把人推开——它要的就是让它们待在一块儿'],
+      ['进化', `满级 + 拾光 → 「${maelstromDef.name}」：一次两盏，而且连弹幕一起卷，卷到中心就吞掉`],
+    ],
+    extra: `一个旋涡里同时拽住 ${VORTEX.crowd} 只会解「一网打尽」。它的伤害不高，用处在于让别的武器打得疼：燃爆打的是半径、雷弧要跳、光矛要一条线、伏灯要一堆人踩在同一片地上。`,
   });
   for (const s of STAGES) {
     out.push({

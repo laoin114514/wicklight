@@ -20,9 +20,9 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
-  // 掠影、伏灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
+  // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -67,6 +67,21 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(mine.chainBest >= 3, '「一串灯」的门槛不该一颗雷加一颗邻居就够');
   assert.ok(mine.lure > 100, '灯蛾该从一段距离外就闻到这盏灯，不然"拿它当饵"立不住');
   assert.ok(mine.mothBait >= 3, '「以灯为饵」的门槛不该一颗雷炸到一只蛾就够');
+
+  // ── 旋灯的调参表：同样是"改了不报错，只会让手感变味"的那一类 ──
+  const vortex = data.vortex;
+  assert.ok(vortex, '构建产物应导出旋灯调参表');
+  for (const [k, v] of Object.entries(vortex)) {
+    assert.equal(typeof v, 'number', `vortex.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `vortex.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(vortex.pull > 100, '吸力该比大多数怪走得快，不然"拢起来"这句话立不住');
+  assert.ok(vortex.bossPull < vortex.elitePull && vortex.elitePull < 1, '首领该比精英更拽不动，普通怪完全拽得动');
+  assert.ok(vortex.burst < 1, '收缩那一下的半径该比吸入半径小：站在边上的该有机会躲过');
+  assert.ok(vortex.swallow < vortex.burst, '弹幕被吞掉的圈得比收缩爆炸还小，不然"卷进来"看不出过程');
+  assert.ok(vortex.crowd >= 4, '「一网打尽」的门槛不该同时拽两三只就够');
+  assert.ok(vortex.life > 0.5 && vortex.life < 3, '拽的时长该够把一圈人收拢，又不至于把人按在原地');
+  assert.ok(vortex.lightRadius > 0 && vortex.lightIntensity > 0, '漩涡中心那盏灯要真的照亮周围');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

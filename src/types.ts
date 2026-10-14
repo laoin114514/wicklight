@@ -5,7 +5,18 @@ export interface Vec2 {
 
 export type Difficulty = 'relaxed' | 'normal' | 'nightmare';
 
-export type WeaponKind = 'orbit' | 'wisp' | 'fireball' | 'whip' | 'shard' | 'spray' | 'arc' | 'beam' | 'boomerang' | 'mine';
+export type WeaponKind =
+  | 'orbit'
+  | 'wisp'
+  | 'fireball'
+  | 'whip'
+  | 'shard'
+  | 'spray'
+  | 'arc'
+  | 'beam'
+  | 'boomerang'
+  | 'mine'
+  | 'vortex';
 
 export interface WeaponStats {
   damage: number;
@@ -19,6 +30,12 @@ export interface WeaponStats {
   knockback: number;
   burn: number;
   slow: number;
+  /**
+   * 只有「旋灯」看这一项：卷不卷弹幕（0 = 不卷，1 = 卷）。
+   * 和 `burn` 对伏灯是"炸完留几层火"、`range` 对伏灯是"触发距离"一样，
+   * 这里也允许"同一个字段在不同武器里意思不同"——省得为一个布尔开一堆新字段。
+   */
+  drag?: number;
 }
 
 export interface WeaponDef {
