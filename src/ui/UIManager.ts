@@ -101,7 +101,7 @@ export class UIManager implements UIHost {
     const endlessUnlocked = save.best >= 1;
     const cleared = Math.min(save.best, 3);
     this.show(`
-      <div class="panel panel--menu">
+      <div class="panel panel--menu panel--banner">
         <div class="title">WICK<span>LIGHT</span></div>
         <div class="subtitle">灯芯 · 让光活下去</div>
         <div class="menu-buttons">
@@ -235,7 +235,7 @@ export class UIManager implements UIHost {
   private levelup(): void {
     const cards = this.offers.map((o) => this.offerCard(o)).join('');
     this.show(`
-      <div class="panel panel--levelup">
+      <div class="panel panel--levelup panel--plank">
         <div class="panel__title">灯火更亮 · Lv ${this.game.playerLevel}</div>
         <div class="card-grid">${cards}</div>
         <div class="row-actions">
@@ -257,7 +257,7 @@ export class UIManager implements UIHost {
 
   private paused(): void {
     this.show(`
-      <div class="panel panel--small">
+      <div class="panel panel--small panel--board">
         <div class="panel__title">暂停</div>
         <div class="menu-buttons">
           <button class="btn btn--primary" data-act="resume">继续</button>
@@ -382,7 +382,7 @@ export class UIManager implements UIHost {
       : '<div class="lo-empty">本关没有悬赏</div>';
 
     this.show(`
-      <div class="panel panel--loadout">
+      <div class="panel panel--loadout panel--board">
         <div class="panel__title">构筑总览</div>
         <div class="lo-head">
           <b>${LANTERN_MAP[g.lanternId]?.name ?? '灯火'}</b>
@@ -515,7 +515,7 @@ export class UIManager implements UIHost {
       )
       .join('');
     this.show(`
-      <div class="panel panel--shop">
+      <div class="panel panel--shop panel--vellum">
         <div class="panel__title">${g.shopHeader}</div>
         <div class="shop-wallet">金币 <b>🪙 ${g.gold}</b></div>
         <div class="shop-grid">${items}</div>
@@ -579,7 +579,7 @@ export class UIManager implements UIHost {
       )
       .join('');
     this.show(`
-      <div class="panel panel--curse">
+      <div class="panel panel--curse panel--rite">
         <div class="panel__title">夜咒</div>
         <div class="subtitle">下一关是「${stage.theme.name}」——向夜借多少，由你开口。</div>
         <div class="curse-grid">${cards}</div>
@@ -604,7 +604,7 @@ export class UIManager implements UIHost {
       )
       .join('');
     this.show(`
-      <div class="panel panel--shrine">
+      <div class="panel panel--shrine panel--stone">
         <div class="panel__title">静默的祭坛</div>
         <div class="subtitle">灯火之外的馈赠，总要付出点什么。</div>
         <div class="shrine-grid">${cards}</div>
@@ -621,7 +621,7 @@ export class UIManager implements UIHost {
 
   private dead(): void {
     this.show(`
-      <div class="panel panel--small">
+      <div class="panel panel--small panel--vellum">
         <div class="panel__title">灯火熄灭</div>
         ${this.killerLine()}
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
@@ -642,7 +642,7 @@ export class UIManager implements UIHost {
 
   private victory(): void {
     this.show(`
-      <div class="panel panel--small">
+      <div class="panel panel--small panel--vellum">
         <div class="panel__title">焚尽长夜</div>
         <div class="subtitle">你举着灯，走完了长夜之城的最后一段黑暗。</div>
         ${this.tourLine()}
@@ -684,7 +684,7 @@ export class UIManager implements UIHost {
   private meta(): void {
     const nodes = META_TREE.map((n) => this.nodeCard(n)).join('');
     this.show(`
-      <div class="panel panel--meta">
+      <div class="panel panel--meta panel--board">
         <div class="panel__title">余烬解锁 · <b>${this.game.save.embers}</b> 余烬</div>
         <div class="node-grid">${nodes}</div>
         <div class="row-actions">
@@ -730,7 +730,7 @@ export class UIManager implements UIHost {
       .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`)
       .join('');
     this.show(`
-      <div class="panel panel--detail" style="--c:${entry.color ?? '#8fa7ff'}">
+      <div class="panel panel--detail panel--vellum" style="--c:${entry.color ?? '#8fa7ff'}">
         <div class="cx-head">
           <div class="cx-head__icon">${entry.icon ?? '●'}</div>
           <div>
@@ -781,7 +781,7 @@ export class UIManager implements UIHost {
       </section>`;
     }).join('');
     this.show(`
-      <div class="panel panel--codex">
+      <div class="panel panel--codex panel--vellum">
         <div class="panel__title">图鉴 · ${seen}/${total}</div>
         <div class="cx-bar"><i style="width:${pct}%"></i></div>
         ${sections}
@@ -876,7 +876,7 @@ export class UIManager implements UIHost {
       ? `<div class="daily-best">今日最佳 <b>${d.bestScore}</b> 分 · 第 ${d.bestStage} 关 · 击杀 ${d.bestKills}${d.cleared ? ' · 已通关' : ''} · 尝试 ${d.attempts} 次</div>`
       : `<div class="daily-best daily-best--none">今天还没有人举起灯 · 尝试 <b>${d.attempts}</b> 次</div>`;
     this.show(`
-      <div class="panel panel--daily">
+      <div class="panel panel--daily panel--vellum">
         <div class="panel__title">今日灯芯 · ${plan.key}</div>
         <div class="subtitle">同一个夜晚，同一套条件——比的只是谁打得更远。</div>
         <div class="cx-rows">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
@@ -944,7 +944,7 @@ export class UIManager implements UIHost {
       : '<div class="rec-empty">还没有战报 · 去点亮第一盏灯吧</div>';
 
     this.show(`
-      <div class="panel panel--records">
+      <div class="panel panel--records panel--vellum">
         <div class="panel__title">生涯档案</div>
         <div class="subtitle">灯火熄灭过很多次，但每一簇都被记下来了。</div>
         <div class="rec-hero">${hero}</div>
@@ -979,7 +979,7 @@ export class UIManager implements UIHost {
     const earned = ACHIEVEMENTS.reduce((n, a) => n + (this.game.save.achievements.includes(a.id) ? a.embers ?? 0 : 0), 0);
     const totalReward = ACHIEVEMENTS.reduce((n, a) => n + (a.embers ?? 0), 0);
     this.show(`
-      <div class="panel panel--list">
+      <div class="panel panel--list panel--vellum">
         <div class="panel__title">成就 · ${this.game.save.achievements.length}/${ACHIEVEMENTS.length}</div>
         <div class="subtitle">已领取成就奖励 ${earned} / ${totalReward} 余烬</div>
         <div class="ach-list">${list}</div>
@@ -992,7 +992,7 @@ export class UIManager implements UIHost {
   private settings(): void {
     const s = this.game.settings.data;
     this.show(`
-      <div class="panel panel--small">
+      <div class="panel panel--small panel--board">
         <div class="panel__title">设置</div>
         <div class="setting"><label>总音量</label><input type="range" min="0" max="1" step="0.05" value="${s.master}" data-key="master"><b>${Math.round(s.master * 100)}%</b></div>
         <div class="setting"><label>音乐</label><input type="range" min="0" max="1" step="0.05" value="${s.music}" data-key="music"><b>${Math.round(s.music * 100)}%</b></div>
