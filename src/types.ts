@@ -195,7 +195,7 @@ export interface RunRecord {
   endless: boolean;
   /** 无尽模式抵达的波次 */
   wave: number;
-  /** 是否走完了三关 */
+  /** 是否走完了全部关卡 */
   cleared: boolean;
   kills: number;
   level: number;

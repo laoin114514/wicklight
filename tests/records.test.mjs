@@ -111,8 +111,9 @@ test('生涯档案：结算、纪录与成就奖励', async (t) => {
   assert.equal(game.save.history[0].kills, 3, '最新的战报排在最前');
 
   // ── 通关结算：给余烬、记通关、最快通关时间 ──
+  const lastStage = globalThis.window.__WICKLIGHT__.catalog.stages.length - 1;
   game.newRun('lamplighter', 'normal', false);
-  game.stageIndex = 2;
+  game.stageIndex = lastStage;
   game.runTime = 90;
   game.kills = 10;
   game.onStageComplete();
@@ -127,7 +128,7 @@ test('生涯档案：结算、纪录与成就奖励', async (t) => {
 
   // 更慢的通关不该刷新最快时间
   game.newRun('lamplighter', 'normal', false);
-  game.stageIndex = 2;
+  game.stageIndex = lastStage;
   game.runTime = 400;
   game.onStageComplete();
   assert.equal(game.records.data.bestTime, 90, '更快的那次才该保留');

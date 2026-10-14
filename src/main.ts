@@ -12,6 +12,7 @@ import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies } from './data/enemies';
 import { AFFIXES as affixes } from './data/affixes';
 import { BOUNTIES as bounties } from './data/bounties';
+import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
 function boot(): void {
@@ -39,7 +40,7 @@ function boot(): void {
     data: { weapons, relics, passives, curses, bounties },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
-    catalog: { enemies, affixes },
+    catalog: { enemies, affixes, stages },
   };
 
   const resize = () => {
@@ -82,7 +83,7 @@ function boot(): void {
     render: () => game.render(),
   });
 
-  void [weapons, relics, passives, curses, enemies, affixes, bounties, daily];
+  void [weapons, relics, passives, curses, enemies, affixes, bounties, stages, daily];
 
   const ready = () => {
     game.renderer.setQuality(game.settings.data.quality);

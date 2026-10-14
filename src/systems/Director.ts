@@ -93,7 +93,7 @@ export class Director {
     this.spawned = 0;
     this.spawnTimer = 0.4;
 
-    const ENDLESS_BOSSES = ['thornlord', 'extinguisher', 'emberwake'];
+    const ENDLESS_BOSSES = ['thornlord', 'extinguisher', 'emberwake', 'nightfall'];
     const bossId = this.endless
       ? ENDLESS_BOSSES[Math.floor(this.wave / 5 - 1) % ENDLESS_BOSSES.length]
       : this.stage.boss;

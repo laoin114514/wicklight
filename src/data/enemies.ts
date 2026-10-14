@@ -21,6 +21,7 @@ export const ENEMIES: EnemyDef[] = [
 
   { id: 'thornlord', name: '荆棘领主', hp: 1500, speed: 34, radius: 50, damage: 20, xp: 380, oil: 200, behavior: 'chase', color: '#6f9c3f', boss: true, phases: 3, note: '首领 · 扇形齐射 + 荆棘地刺 + 召唤灯蛾；地刺成形前有预警圈。' },
   { id: 'extinguisher', name: '熄灯者', hp: 2600, speed: 40, radius: 56, damage: 24, xp: 400, oil: 220, behavior: 'chase', color: '#3a2f5a', boss: true, phases: 3, note: '首领 · 会熄灭你的灯并四散弹幕，视野被夺走的那几秒最危险。' },
+  { id: 'nightfall', name: '终夜', hp: 5400, speed: 44, radius: 66, damage: 28, xp: 780, oil: 380, behavior: 'chase', color: '#5b4bb5', boss: true, phases: 3, note: '首领 · 它会用黑暗本身压你：抽走灯火、召唤回响、在你脚边结出滞行雾。' },
   { id: 'emberwake', name: '焚天', hp: 4200, speed: 46, radius: 64, damage: 30, xp: 620, oil: 320, behavior: 'ranged', color: '#a52a1f', boss: true, phases: 3, note: '首领 · 环形火幕与熔岩封路，战场会越打越小。' },
 ];
 

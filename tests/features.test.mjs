@@ -100,7 +100,7 @@ test('核心玩法系统（灯光 / 词缀 / 连杀 / 转场）', async (t) => {
   game.enemies.update(1 / 60, game.enemyCtx());
   assert.equal(boss.phase, 3, '荆棘领主应进入第三相位');
   game.hazards.length = 0;
-  boss.attackCd = 0;
+  boss.bossCd = 0;
   game.enemies.update(1 / 60, game.enemyCtx());
   assert.ok(game.hazards.some((h) => h.kind === 'thorn'), '荆棘领主应召唤荆棘地刺');
 

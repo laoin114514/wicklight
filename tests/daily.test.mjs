@@ -39,8 +39,9 @@ test('今日灯芯：剧本确定、强制生效、成绩记录', async (t) => {
 
   // ── 剧本本身要合法、可行 ──
   for (const plan of [a, c, buildDailyPlan('2027-12-31')]) {
-    assert.equal(plan.curses.length, 3, '三关都要有安排');
-    assert.equal(plan.bounties.length, 3);
+    // 关卡数量以后还可能变，所以这里跟着数据表走，而不是写死 3
+    assert.equal(plan.curses.length, catalog.stages.length, '每一关都要有安排');
+    assert.equal(plan.bounties.length, catalog.stages.length);
     assert.equal(plan.curses[0], null, '第一关不施加夜咒');
     for (const id of plan.curses.slice(1)) assert.ok(id && globalThis.window.__WICKLIGHT__.data.curses.some((x) => x.id === id), `夜咒不存在：${id}`);
     plan.bounties.forEach((id, stage) => {
@@ -113,7 +114,7 @@ test('今日灯芯：剧本确定、强制生效、成绩记录', async (t) => {
 
   game.startDailyRun('2026-03-09');
   game.kills = 120;
-  game.stageIndex = 2;
+  game.stageIndex = catalog.stages.length - 1; // 站在最后一关上，结算才算通关
   game.onStageComplete();
   d = game.save.daily;
   assert.equal(d.attempts, 3);

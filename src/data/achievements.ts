@@ -17,11 +17,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'blade_return', name: '去而复返', blurb: '单局用回旋灯刃回程命中 25 次。', embers: 40, group: '战斗' },
 
   { id: 'survivor', name: '守夜有成', blurb: '通关「幽林」。', embers: 30, group: '关卡与首领' },
-  { id: 'conqueror', name: '焚尽长夜', blurb: '通关全部三关。', embers: 120, group: '关卡与首领' },
+  { id: 'conqueror', name: '焚尽长夜', blurb: '通关全部关卡。', embers: 120, group: '关卡与首领' },
   { id: 'nightmare', name: '噩梦生还', blurb: '在噩梦难度通关任意关卡。', embers: 100, group: '关卡与首领' },
   { id: 'thorn_king', name: '斩断荆棘', blurb: '击败「荆棘领主」。', embers: 40, group: '关卡与首领' },
   { id: 'boss_rush', name: '熄灯不成', blurb: '击败「熄灯者」。', embers: 50, group: '关卡与首领' },
   { id: 'ashen_king', name: '熄灭焚天', blurb: '击败「焚天」。', embers: 60, group: '关卡与首领' },
+  { id: 'nightfall_king', name: '长夜终有尽', blurb: '击败「终夜」。', embers: 70, group: '关卡与首领' },
   { id: 'endless20', name: '不灭之灯', blurb: '在无尽模式抵达第 20 波。', embers: 60, group: '关卡与首领' },
   { id: 'endless40', name: '长夜不熄', blurb: '在无尽模式抵达第 40 波。', embers: 120, group: '关卡与首领' },
   { id: 'clears3', name: '三度长明', blurb: '累计通关 3 次。', embers: 90, group: '关卡与首领' },

@@ -239,6 +239,13 @@ function bodyPath(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: num
       ctx.closePath();
       break;
     }
+    case 'nightfall': {
+      // 蚀缺的月：一整轮黑月被咬掉一块，和「回响」的小月牙同源但压得更重
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r, 0, TAU);
+      ctx.arc(e.x + r * 0.34, e.y - r * 0.18, r * 0.88, 0, TAU, true);
+      break;
+    }
     case 'extinguisher':
       poly(ctx, e.x, e.y, r, 8, Math.PI / 8, 1);
       break;
@@ -257,6 +264,30 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
   const r = e.radius;
   const w = e.wobble;
   switch (id) {
+    case 'nightfall': {
+      // 环月的星屑：缓慢绕着本体转，让它看起来"正在笼罩这片地方"
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = '#e8dcff';
+      for (let i = 0; i < 5; i += 1) {
+        const a = time * 0.45 + (i / 5) * TAU;
+        const rr = r * (1.35 + Math.sin(time * 1.4 + i) * 0.12);
+        ctx.globalAlpha = 0.5 + Math.sin(time * 2 + i) * 0.25;
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr, 2.6 + Math.sin(time * 3 + i) * 0.9, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.32;
+      const ng = ctx.createRadialGradient(e.x, e.y, r * 0.4, e.x, e.y, r * 1.9);
+      ng.addColorStop(0, 'rgba(150,130,230,0.55)');
+      ng.addColorStop(1, 'rgba(90,75,181,0)');
+      ctx.fillStyle = ng;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.9, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      break;
+    }
     case 'moth': {
       const flap = 0.55 + Math.abs(Math.sin(time * 11 + w)) * 0.5;
       ctx.fillStyle = rgba('#fff3d0', 0.5);
@@ -695,8 +726,8 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     }
   }
 
-  if (e.boss && e.attackCd > 0 && e.attackCd < 0.6) {
-    const t = 1 - e.attackCd / 0.6;
+  if (e.boss && e.bossCd > 0 && e.bossCd < 0.6) {
+    const t = 1 - e.bossCd / 0.6;
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.5 + 0.4 * t;
     ctx.strokeStyle = '#ff5a6d';

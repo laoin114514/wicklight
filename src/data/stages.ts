@@ -25,6 +25,23 @@ export const STAGES: StageDef[] = [
     elites: ['wickmother', 'darkless', 'siphon'],
     hazards: ['eruption', 'meteor', 'oilvoid'],
   },
+  {
+    id: 'nightcity',
+    theme: {
+      id: 'nightcity',
+      name: '长夜之城',
+      subtitle: '终夜盘踞的地方',
+      floor: '#140f1e',
+      wall: '#2a2140',
+      accent: '#c9a3ff',
+      fog: '#0a0714',
+      hue: 275,
+    },
+    waves: 10,
+    boss: 'nightfall',
+    elites: ['wickmother', 'darkless', 'siphon'],
+    hazards: ['echoes', 'wispstorm', 'meteor', 'oilvoid'],
+  },
 ];
 
 export const STAGE_MAP: Record<string, StageDef> = Object.fromEntries(STAGES.map((s) => [s.id, s]));

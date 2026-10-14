@@ -588,10 +588,17 @@ export class Game {
     this.emberTimer -= dt;
     if (this.emberTimer <= 0) {
       const themeId = this.currentStage().theme.id;
-      this.emberTimer = themeId === 'gloamwood' ? 0.16 : 0.1;
+      this.emberTimer = themeId === 'gloamwood' ? 0.16 : themeId === 'nightcity' ? 0.14 : 0.1;
       const a = this.rng.angle();
       const d = this.rng.range(30, 320);
-      const tint = themeId === 'gloamwood' ? '#8affc1' : themeId === 'ashenkeep' ? '#8fa7ff' : '#ffb14e';
+      const tint =
+        themeId === 'gloamwood'
+          ? '#8affc1'
+          : themeId === 'ashenkeep'
+            ? '#8fa7ff'
+            : themeId === 'nightcity'
+              ? '#c9a3ff'
+              : '#ffb14e';
       this.particles.ember(this.player.x + Math.cos(a) * d, this.player.y + Math.sin(a) * d, tint);
     }
     // 灯火里漂浮的微尘：把"光"画成有体积的东西
@@ -602,7 +609,14 @@ export class Game {
       const lr = this.player.lightRadius * 0.94;
       const a = this.rng.angle();
       const d = Math.sqrt(this.rng.next()) * lr;
-      const tint = themeId === 'emberhold' ? '#ffd9a0' : themeId === 'gloamwood' ? '#d8ffe8' : '#e2ecff';
+      const tint =
+        themeId === 'emberhold'
+          ? '#ffd9a0'
+          : themeId === 'gloamwood'
+            ? '#d8ffe8'
+            : themeId === 'nightcity'
+              ? '#e6dcff'
+              : '#e2ecff';
       this.particles.mote(this.player.x + Math.cos(a) * d, this.player.y + Math.sin(a) * d, tint);
     }
 
@@ -1224,6 +1238,7 @@ export class Game {
       if (e.defId === 'thornlord') this.achievements.unlock('thorn_king');
       if (e.defId === 'extinguisher') this.achievements.unlock('boss_rush');
       if (e.defId === 'emberwake') this.achievements.unlock('ashen_king');
+      if (e.defId === 'nightfall') this.achievements.unlock('nightfall_king');
     }
   }
 
@@ -1472,6 +1487,19 @@ export class Game {
           this.projectiles.spawn({ x: p.x + Math.cos(a) * 340, y: p.y + Math.sin(a) * 340, vx: -Math.cos(a) * 260, vy: -Math.sin(a) * 260, damage: 8, radius: 7, color: '#8f7bff', fromPlayer: false, maxLife: 2.4 });
         }
         this.hud?.toast('✨ 相位风暴');
+        break;
+      }
+      case 'echoes': {
+        // 一次放几只「回响」出来：它们追的是你刚才走过的地方，所以"原地绕圈"会被合围
+        const count = 2 + (this.rng.next() < 0.4 ? 1 : 0);
+        for (let i = 0; i < count; i += 1) {
+          const a = this.rng.angle();
+          const d = 340 + this.rng.next() * 220;
+          const mx = clamp(p.x + Math.cos(a) * d, -this.level.halfW + 40, this.level.halfW - 40);
+          const my = clamp(p.y + Math.sin(a) * d, -this.level.halfH + 40, this.level.halfH - 40);
+          this.enemies.spawn('echo', mx, my, this.director.bossHpMult * 0.8, this.director.bossDmgMult * 0.9);
+        }
+        this.hud?.toast('🌒 回声涌来');
         break;
       }
       case 'oilvoid': {

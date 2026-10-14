@@ -300,6 +300,12 @@ function drawDetails(
         else if (d.kind === 2) hairlineCrack(ctx, d);
         else emberDot(ctx, d, time);
         break;
+      case 'nightcity':
+        if (d.kind === 0) pebble(ctx, d, 'rgba(60,52,88,0.72)');
+        else if (d.kind === 1) chip(ctx, d, 'rgba(74,64,108,0.6)');
+        else if (d.kind === 2) hairlineCrack(ctx, d);
+        else emberDot(ctx, d, time);
+        break;
       default:
         pebble(ctx, d, 'rgba(52,56,70,0.7)');
         break;
@@ -333,6 +339,11 @@ export function drawDecor(
       case 'emberhold':
         if (d.kind === 0) shard(ctx, d, time);
         else if (d.kind === 1) crack(ctx, d, time);
+        else bones(ctx, d);
+        break;
+      case 'nightcity':
+        if (d.kind === 0) pillar(ctx, d);
+        else if (d.kind === 1) brazier(ctx, d, time);
         else bones(ctx, d);
         break;
       default:

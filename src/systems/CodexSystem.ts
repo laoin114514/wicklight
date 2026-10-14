@@ -59,6 +59,7 @@ const HAZARD_LABEL: Record<string, string> = {
   wispstorm: '相位风暴',
   eruption: '熔岩喷发',
   oilvoid: '灯油枯竭',
+  echoes: '回声涌来',
 };
 
 const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;

@@ -175,8 +175,14 @@ test('无头环境下可启动、刷怪、升级、通关、Boss、元进度、�
   assert.equal(game.state, 'playing', '离开商店应回到战斗');
   assert.equal(game.stageIndex, 2, '应推进到第三关');
   assert.ok(game.curse, '第三关同样应有夜咒');
-  game.onStageComplete();
-  assert.equal(game.state, 'victory', '打完最后一关应进入胜利结算');
+  // 一路打到底：关卡总数以后还会变，所以这里循环推进而不是写死关数
+  let marchToVictory = 0;
+  while (game.state !== 'victory' && marchToVictory < 12) {
+    marchToVictory += 1;
+    if (game.state === 'shop') game.leaveShop();
+    else game.onStageComplete();
+  }
+  assert.equal(game.state, 'victory', `打完最后一关应进入胜利结算（实际 ${game.state}）`);
   assert.ok(game.save.achievements.includes('conqueror'), '通关应解锁「征服」成就');
 
   // 升级系统在池耗尽时仍应给出兜底选项

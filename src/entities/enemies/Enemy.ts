@@ -28,6 +28,8 @@ export interface Enemy {
   slowTimer: number;
   hitFlash: number;
   attackCd: number;
+  /** 首领专属招式的独立计时器（不和行为共用，免得贴脸时放不出招牌技） */
+  bossCd: number;
   stateTimer: number;
   spawnTimer: number;
   wobble: number;
@@ -103,6 +105,7 @@ export class EnemySystem {
     slowTimer: 0,
     hitFlash: 0,
     attackCd: 0,
+    bossCd: 0,
     stateTimer: 0,
     spawnTimer: 0,
     wobble: 0,
@@ -142,6 +145,7 @@ export class EnemySystem {
     e.slowTimer = 0;
     e.hitFlash = 0;
     e.attackCd = 1;
+    e.bossCd = 1.4;
     e.stateTimer = 0;
     e.spawnTimer = 0.4;
     e.wobble = Math.random() * Math.PI * 2;
@@ -460,10 +464,10 @@ export class EnemySystem {
       ctx.addLight(e.x, e.y, 220, 0.9);
     }
 
-    e.attackCd -= dt;
+    e.bossCd -= dt;
     if (e.defId === 'extinguisher') {
-      if (e.attackCd <= 0) {
-        e.attackCd = 3.4 - e.phase * 0.5;
+      if (e.bossCd <= 0) {
+        e.bossCd = 3.4 - e.phase * 0.5;
         ctx.shoot(e.x, e.y, e.angle, 260, e.damage, '#8f7bff', true);
         const spokes = 8 + e.phase * 3;
         for (let i = 0; i < spokes; i += 1) {
@@ -473,8 +477,8 @@ export class EnemySystem {
         ctx.shake(0.45);
       }
     } else if (e.defId === 'thornlord') {
-      if (e.attackCd <= 0) {
-        e.attackCd = 3.1 - e.phase * 0.45;
+      if (e.bossCd <= 0) {
+        e.bossCd = 3.1 - e.phase * 0.45;
         const spokes = 9 + e.phase * 3;
         for (let i = 0; i < spokes; i += 1) {
           ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 0.8, 210, e.damage * 0.55, '#9fd45a', true);
@@ -487,9 +491,33 @@ export class EnemySystem {
         if (e.phase >= 3) ctx.spawnAdd('moth', e.x + 60, e.y + 40);
         ctx.shake(0.5);
       }
+    } else if (e.defId === 'nightfall') {
+      if (e.bossCd <= 0) {
+        e.bossCd = 3.0 - e.phase * 0.45;
+        // 环形弹幕
+        const spokes = 13 + e.phase * 4;
+        for (let i = 0; i < spokes; i += 1) {
+          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.2, 220, e.damage * 0.6, '#b7a5ff', true);
+        }
+        // 抽走灯火 —— 视野被夺走的那几秒，才是"终夜"真正的主场
+        ctx.snuffLight(0.16);
+        if (e.phase >= 2) {
+          // 召唤回响：它们会沿着你刚才走过的路追过来
+          for (let i = 0; i < e.phase - 1; i += 1) {
+            const a = Math.random() * Math.PI * 2;
+            ctx.spawnAdd('echo', e.x + Math.cos(a) * 120, e.y + Math.sin(a) * 120);
+          }
+        }
+        if (e.phase >= 3) {
+          // 在你脚下结出滞行雾：想靠跑位拖时间会越来越难
+          ctx.fog(ctx.px, ctx.py, 150);
+          ctx.fog(ctx.px + (Math.random() - 0.5) * 260, ctx.py + (Math.random() - 0.5) * 260, 120);
+        }
+        ctx.shake(0.5);
+      }
     } else if (e.defId === 'emberwake') {
-      if (e.attackCd <= 0) {
-        e.attackCd = 2.6 - e.phase * 0.4;
+      if (e.bossCd <= 0) {
+        e.bossCd = 2.6 - e.phase * 0.4;
         const spokes = 12 + e.phase * 4;
         for (let i = 0; i < spokes; i += 1) {
           ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.6, 230, e.damage * 0.7, '#ff7a2f', true);

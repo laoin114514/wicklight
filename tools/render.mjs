@@ -36,6 +36,7 @@ console.error = (...a) => errors.push(a.map(String).join(' '));
 await import(`${ENTRY.href}?t=${Date.now()}`);
 const handle = globalThis.window.__WICKLIGHT__;
 const game = handle.game;
+const STAGES = handle.catalog.stages;
 const hud = handle.hud;
 handle.loop.stop();
 for (let i = 0; i < 8; i += 1) env.frame();
@@ -93,7 +94,7 @@ const SCENES = {
     game.enemies.clear();
     const b = game.enemies.spawn('thornlord', 190, 0, 1, 1);
     b.hp = b.maxHp * 0.62;
-    b.attackCd = 0.5;
+    b.bossCd = 0.5;
     fight(70, { spawnEvery: 400 });
   },
   boss2() {
@@ -112,13 +113,32 @@ const SCENES = {
     game.enemies.clear();
     const b = game.enemies.spawn('emberwake', 240, 0, 1, 1);
     b.hp = b.maxHp * 0.4;
-    b.attackCd = 0.35;
+    b.bossCd = 0.35;
     fight(130, { spawnEvery: 400 });
   },
   stage3() {
     game.newRun('warden', 'normal', false);
-    game.loadStage(game.director.stageDef, 2, false);
+    game.loadStage(STAGES[2], 2, false);
     fight(520);
+  },
+  boss4() {
+    game.newRun('warden', 'normal', false);
+    game.loadStage(STAGES[3], 3, false);
+    game.enemies.clear();
+    const b = game.enemies.spawn('nightfall', 230, -20, 1, 1);
+    b.hp = b.maxHp * 0.28; // 压到第三相位：环形弹幕 + 召唤回响 + 脚下结雾
+    b.bossCd = 0.35;
+    fight(120, { spawnEvery: 400 });
+  },
+  stage4() {
+    game.newRun('warden', 'normal', false);
+    game.loadStage(STAGES[3], 3, false);
+    // 长夜之城难度最高，人肉看画面时把血油顶住，免得半路躺下变成死亡红幕
+    for (let i = 0; i < 5; i += 1) {
+      fight(90);
+      game.player.hp = game.player.stats.maxHp;
+      game.player.oil = game.player.oilMax;
+    }
   },
   elite() {
     game.newRun('warden', 'normal', false);
