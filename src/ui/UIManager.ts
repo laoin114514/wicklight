@@ -5,7 +5,8 @@ import { PASSIVE_MAP } from '../data/upgrades';
 import { CODEX_SECTIONS } from '../systems/CodexSystem';
 import { RELIC_MAP } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
-import { STAGES } from '../data/stages';
+import { STAGES, STAGE_MAP } from '../data/stages';
+import type { RunRecord } from '../types';
 import { DIFFICULTIES, DIFFICULTY_ORDER } from '../systems/DifficultySystem';
 import type { Game, GameState, UIHost } from '../core/Game';
 import type { Difficulty, MetaNodeDef, UpgradeOffer } from '../types';
@@ -63,6 +64,7 @@ export class UIManager implements UIHost {
       case 'dead': this.dead(); break;
       case 'meta': this.meta(); break;
       case 'codex': this.codex(); break;
+      case 'records': this.records(); break;
       case 'achievements': this.achievements(); break;
       case 'settings': this.settings(); break;
       default: this.screen.innerHTML = ''; this.screen.className = 'screen is-hidden'; break;
@@ -100,7 +102,8 @@ export class UIManager implements UIHost {
           <button class="btn ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">无尽之夜${endlessUnlocked ? '' : ' · 通关幽林解锁'}</button>
           <button class="btn" data-act="meta">余烬解锁 <b>${save.embers}</b></button>
           <button class="btn" data-act="codex">图鉴 <b>${this.game.codex.seenCount()}/${this.game.codex.total()}</b></button>
-          <button class="btn" data-act="achievements">成就</button>
+          <button class="btn" data-act="records">生涯档案</button>
+          <button class="btn" data-act="achievements">成就 <b>${save.achievements.length}/${ACHIEVEMENTS.length}</b></button>
           <button class="btn" data-act="settings">设置</button>
         </div>
         <div class="menu-foot">
@@ -108,7 +111,7 @@ export class UIManager implements UIHost {
           <span>余烬 ${save.embers}</span>
           <span>总击杀 ${save.killsTotal}</span>
           <span>无尽最佳 ${save.bestEndlessWave} 波</span>
-          <span>图鉴 ${this.game.codex.seenCount()}/${this.game.codex.total()}</span>
+          <span>生涯 ${save.runs} 局</span>
         </div>
       </div>
     `);
@@ -120,6 +123,7 @@ export class UIManager implements UIHost {
     });
     this.on('[data-act="meta"]', () => { this.returnState = 'menu'; this.game.openMenu('meta'); });
     this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.game.openMenu('codex'); });
+    this.on('[data-act="records"]', () => { this.returnState = 'menu'; this.game.openMenu('records'); });
     this.on('[data-act="achievements"]', () => { this.returnState = 'menu'; this.game.openMenu('achievements'); });
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
   }
@@ -407,6 +411,8 @@ export class UIManager implements UIHost {
       <div class="panel panel--small">
         <div class="panel__title">灯火熄灭</div>
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
+        ${this.achievementEmbersLine()}
+        ${this.recordBadges()}
         ${this.statsBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="again">再点一盏</button>
@@ -424,6 +430,8 @@ export class UIManager implements UIHost {
         <div class="panel__title">焚尽长夜</div>
         <div class="subtitle">你举着灯，走完了三段黑暗。</div>
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
+        ${this.achievementEmbersLine()}
+        ${this.recordBadges()}
         ${this.statsBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="endless">挑战无尽之夜</button>
@@ -518,17 +526,138 @@ export class UIManager implements UIHost {
     this.on('[data-act="back"]', () => this.backToOrigin());
   }
 
+  /** 结算界面上的"新纪录"徽章。 */
+  private recordBadges(): string {
+    const hi = this.game.recordHighlights;
+    if (!hi.length) return '';
+    const shown = hi.slice(0, 4);
+    const badges = shown.map((h) => `<span class="hl">🏅 新纪录 · ${h.label} <b>${h.value}</b></span>`);
+    if (hi.length > shown.length) badges.push(`<span class="hl hl--more">还有 ${hi.length - shown.length} 项新纪录</span>`);
+    return `<div class="hl-row">${badges.join('')}</div>`;
+  }
+
+  /** 本局成就奖励（和局内余烬分开显示，免得玩家以为是同一笔）。 */
+  private achievementEmbersLine(): string {
+    const n = this.game.achievementEmbers;
+    if (n <= 0) return '';
+    return `<div class="ember-gain ember-gain--ach">成就奖励 <b>+${n}</b> 余烬</div>`;
+  }
+
+  private static clock(sec: number): string {
+    const m = Math.floor(sec / 60);
+    return `${m}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+  }
+
+  private static ago(at: number): string {
+    const d = Math.max(0, (Date.now() - at) / 1000);
+    if (d < 60) return '刚刚';
+    if (d < 3600) return `${Math.floor(d / 60)} 分钟前`;
+    if (d < 86400) return `${Math.floor(d / 3600)} 小时前`;
+    return `${Math.floor(d / 86400)} 天前`;
+  }
+
+  private static hours(total: number): string {
+    if (total < 3600) return `${Math.floor(total / 60)} 分`;
+    return `${(total / 3600).toFixed(1)} 小时`;
+  }
+
+  private runRow(r: RunRecord): string {
+    const lantern = LANTERN_MAP[r.lantern];
+    const stageName = STAGE_MAP[r.stageId]?.theme.name ?? '未知之地';
+    const diff = DIFFICULTIES[r.difficulty]?.label ?? r.difficulty;
+    const where = r.endless ? `无尽 · 第 ${r.wave} 波` : `${stageName} · 第 ${r.stage} 关`;
+    return `<div class="rec-run ${r.cleared ? 'is-clear' : ''}">
+      <div class="rec-run__mark">${r.cleared ? '🏆' : '🕯️'}</div>
+      <div class="rec-run__body">
+        <div class="rec-run__top">
+          <b style="color:${lantern?.color ?? 'var(--amber)'}">${lantern?.name ?? r.lantern}</b>
+          <span class="rec-run__diff">${diff}</span>
+          <span class="rec-run__where">${where}</span>
+        </div>
+        <div class="rec-run__sub">
+          击杀 ${r.kills} · Lv ${r.level} · ${UIManager.clock(r.time)} · 连杀 ${r.bestCombo}${r.bossKills ? ` · 首领 ${r.bossKills}` : ''}
+        </div>
+      </div>
+      <div class="rec-run__side"><b>+${r.embers}</b><span>${UIManager.ago(r.at)}</span></div>
+    </div>`;
+  }
+
+  private records(): void {
+    const save = this.game.save;
+    const rec = this.game.records.data;
+    const runs = save.history;
+
+    const hero = [
+      ['总局数', `${save.runs}`],
+      ['累计击杀', `${save.killsTotal}`],
+      ['累计守夜', UIManager.hours(rec.totalTime)],
+      ['通关次数', `${rec.clearedRuns}`],
+      ['无尽最佳', `${save.bestEndlessWave} 波`],
+      ['当前余烬', `${save.embers}`],
+    ]
+      .map(([k, v]) => `<div class="rec-stat"><b>${v}</b><span>${k}</span></div>`)
+      .join('');
+
+    const bestTime = rec.bestTime > 0 ? UIManager.clock(rec.bestTime) : '—';
+    const personal = [
+      ['最高连杀', `${rec.bestCombo}`],
+      ['单局击杀', `${rec.bestKills}`],
+      ['单局等级', rec.bestLevel > 0 ? `Lv ${rec.bestLevel}` : '—'],
+      ['单局伤害', `${rec.bestDamage}`],
+      ['单局余烬', rec.bestEmbers > 0 ? `+${rec.bestEmbers}` : '—'],
+      ['最快通关', bestTime],
+    ]
+      .map(([k, v]) => `<div class="rec"><span>${k}</span><b>${v}</b></div>`)
+      .join('');
+
+    const lanterns = this.game.records
+      .lanternRows()
+      .map((row) => {
+        const locked = !save.unlockedLanterns.includes(row.id);
+        const r = row.rec;
+        const progress = r.bestWave > 0 ? `无尽 ${r.bestWave} 波` : r.bestStage > 0 ? `第 ${r.bestStage} 关` : '尚未出航';
+        const time = r.bestTime > 0 ? ` · 最快 ${UIManager.clock(r.bestTime)}` : '';
+        return `<div class="rec-lantern ${locked ? 'is-locked' : ''}" style="--accent:${row.color}">
+          <div class="rec-lantern__name">${row.name}${locked ? '<i>未解锁</i>' : ''}</div>
+          <div class="rec-lantern__line"><b>${r.runs}</b> 局 · ${progress}${time}</div>
+          <div class="rec-lantern__line rec-lantern__line--dim">单局最高击杀 ${r.bestKills} · 通关 ${r.cleared} 次</div>
+        </div>`;
+      })
+      .join('');
+
+    const history = runs.length
+      ? runs.map((r) => this.runRow(r)).join('')
+      : '<div class="rec-empty">还没有战报 · 去点亮第一盏灯吧</div>';
+
+    this.show(`
+      <div class="panel panel--records">
+        <div class="panel__title">生涯档案</div>
+        <div class="subtitle">灯火熄灭过很多次，但每一簇都被记下来了。</div>
+        <div class="rec-hero">${hero}</div>
+        <section class="rec-sec"><h4>个人纪录</h4><div class="rec-grid">${personal}</div></section>
+        <section class="rec-sec"><h4>灯火战绩</h4><div class="rec-lanterns">${lanterns}</div></section>
+        <section class="rec-sec"><h4>最近对局 <b>${runs.length}</b></h4><div class="rec-runs">${history}</div></section>
+        <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
+      </div>
+    `);
+    this.on('[data-act="back"]', () => this.backToOrigin());
+  }
+
   private achievements(): void {
     const list = ACHIEVEMENTS.map((a) => {
       const ok = this.game.save.achievements.includes(a.id);
       return `<div class="ach ${ok ? 'is-ok' : ''}">
         <div class="ach__mark">${ok ? '🏆' : '🔒'}</div>
         <div class="ach__body"><div class="ach__name">${a.name}</div><div class="ach__blurb">${a.blurb}</div></div>
+        ${a.embers ? `<div class="ach__reward ${ok ? 'is-ok' : ''}">+${a.embers} 余烬</div>` : ''}
       </div>`;
     }).join('');
+    const earned = ACHIEVEMENTS.reduce((n, a) => n + (this.game.save.achievements.includes(a.id) ? a.embers ?? 0 : 0), 0);
+    const totalReward = ACHIEVEMENTS.reduce((n, a) => n + (a.embers ?? 0), 0);
     this.show(`
       <div class="panel panel--list">
         <div class="panel__title">成就 · ${this.game.save.achievements.length}/${ACHIEVEMENTS.length}</div>
+        <div class="subtitle">已领取成就奖励 ${earned} / ${totalReward} 余烬</div>
         <div class="ach-list">${list}</div>
         <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
       </div>

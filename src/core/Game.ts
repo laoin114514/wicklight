@@ -26,6 +26,7 @@ import { LootSystem } from '../systems/LootSystem';
 import { MetaSystem } from '../systems/MetaSystem';
 import { AchievementSystem } from '../systems/AchievementSystem';
 import { CodexSystem, type CodexEntry } from '../systems/CodexSystem';
+import { RecordsSystem, type RecordHighlight } from '../systems/RecordsSystem';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -50,6 +51,7 @@ export type GameState =
   | 'dead'
   | 'meta'
   | 'codex'
+  | 'records'
   | 'achievements'
   | 'settings';
 
@@ -135,6 +137,13 @@ export class Game {
   meta: MetaSystem;
   achievements: AchievementSystem;
   codex: CodexSystem;
+  records: RecordsSystem;
+  /** 这一局的结局，结算界面据此换文案。 */
+  runOutcome: 'clear' | 'defeat' | null = null;
+  /** 这一局刷新掉的纪录，结算界面拿去做"新纪录"徽章。 */
+  recordHighlights: RecordHighlight[] = [];
+  /** 本局由成就奖励额外发放的余烬（与局内收益分开显示）。 */
+  achievementEmbers = 0;
   /** 图鉴扫描的节流计时（秒） */
   private codexTimer = 0;
   private codexBatching = false;
@@ -211,12 +220,9 @@ export class Game {
     this.loot = new LootSystem(this.pickups);
     this.save = this.storage.load();
     this.meta = new MetaSystem(this.save);
-    this.achievements = new AchievementSystem(this.save, (id) => {
-      this.storage.save(this.save);
-      // 提示里用中文成就名，别把内部 id 甩到玩家脸上
-      this.hud?.toast(`🏆 成就解锁 · ${ACHIEVEMENT_MAP[id]?.name ?? id}`);
-    });
+    this.achievements = new AchievementSystem(this.save, (id) => this.onAchievement(id));
     this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
+    this.records = new RecordsSystem(this.save);
     const startStage = STAGES[0];
     this.level = generateLevel(startStage, 1);
     this.director = new Director(startStage, this.difficulty, this.rng);
@@ -324,6 +330,9 @@ export class Game {
     this.darknessBoost = 0;
     this.curseDarkness = 0;
     this.currentOffers = [];
+    this.runOutcome = null;
+    this.recordHighlights = [];
+    this.achievementEmbers = 0;
     this.codex.reset();
     this.codexTimer = 0;
     this.syncCodex();
@@ -425,8 +434,8 @@ export class Game {
 
   private finishCampaign(): void {
     this.save.best = Math.max(this.save.best, STAGES.length);
-    this.storage.save(this.save);
     this.achievements.unlock('conqueror');
+    this.finalizeRun('clear');
     this.state = 'victory';
     this.audio.setMood('calm');
     this.ui?.showScreen('victory');
@@ -1390,21 +1399,44 @@ export class Game {
     }
     this.state = 'dead';
     this.audio.setMood('calm');
-    this.finalizeRun();
+    this.finalizeRun('defeat');
     this.ui?.showScreen('dead');
   }
 
-  private finalizeRun(): void {
+  /**
+   * 结算一局（死亡或通关都走这里）：算收益、写生涯、发成就。
+   * 通关有额外余烬——之前只有死亡才会结算，通关反而不给余烬，这里一并修掉。
+   */
+  private finalizeRun(outcome: 'clear' | 'defeat'): void {
     const mods = DIFFICULTIES[this.difficulty];
-    const base = Math.round(this.runTime * 0.6 + this.kills * 1.4 + this.wave * 12 + this.bossKills * 120 + this.playerLevel * 8);
+    const cleared = outcome === 'clear';
+    let base = Math.round(this.runTime * 0.6 + this.kills * 1.4 + this.wave * 12 + this.bossKills * 120 + this.playerLevel * 8);
+    if (cleared) base = Math.round(base * 1.25) + 120;
     const embers = Math.max(1, Math.round(base * mods.emberMult * (1 + this.meta.bonuses().emberMult)));
     this.embersEarned = embers;
     this.save.embers += embers;
     this.save.runs += 1;
     if (this.endless) this.save.bestEndlessWave = Math.max(this.save.bestEndlessWave, this.wave);
     this.save.best = Math.max(this.save.best, this.stageIndex + 1);
+    this.runOutcome = outcome;
+    this.recordHighlights = this.records.record(this.runStats(), cleared);
+    if (this.save.runs >= 25) this.achievements.unlock('runs25');
+    if (this.save.records.clearedRuns >= 3) this.achievements.unlock('clears3');
     this.storage.save(this.save);
     this.events.emit('gameOver', { stats: this.runStats() });
+  }
+
+  /** 成就解锁：发余烬奖励 + 提示。奖励计进本局统计，结算界面单列一行。 */
+  private onAchievement(id: string): void {
+    const def = ACHIEVEMENT_MAP[id];
+    const bonus = def?.embers ?? 0;
+    if (bonus > 0) {
+      this.save.embers += bonus;
+      this.achievementEmbers += bonus;
+    }
+    this.storage.save(this.save);
+    // 提示里用中文成就名，别把内部 id 甩到玩家脸上
+    this.hud?.toast(`🏆 成就解锁 · ${def?.name ?? id}${bonus > 0 ? ` +${bonus} 余烬` : ''}`);
   }
 
   runStats(): RunStats {
@@ -1464,11 +1496,9 @@ export class Game {
   resetSave(): void {
     this.save = this.storage.reset();
     this.meta = new MetaSystem(this.save);
-    this.achievements = new AchievementSystem(
-      this.save,
-      (id) => this.hud?.toast(`🏆 成就解锁 · ${ACHIEVEMENT_MAP[id]?.name ?? id}`),
-    );
+    this.achievements = new AchievementSystem(this.save, (id) => this.onAchievement(id));
     this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
+    this.records = new RecordsSystem(this.save);
     this.ui?.setMeta(this.meta);
   }
 
@@ -1487,6 +1517,8 @@ export class Game {
       this.state === 'menu' ||
       this.state === 'select' ||
       this.state === 'meta' ||
+      this.state === 'codex' ||
+      this.state === 'records' ||
       this.state === 'achievements' ||
       this.state === 'settings'
     );

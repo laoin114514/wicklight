@@ -127,6 +127,8 @@ export interface AchievementDef {
   id: string;
   name: string;
   blurb: string;
+  /** 解锁时额外奖励的余烬。 */
+  embers?: number;
 }
 
 export interface MetaNodeDef {
@@ -161,6 +163,58 @@ export interface RunStats {
   endless: boolean;
 }
 
+/** 单局战报（生涯档案里"最近对局"用的那一条）。 */
+export interface RunRecord {
+  /** 记录时间戳（毫秒） */
+  at: number;
+  lantern: string;
+  difficulty: Difficulty;
+  stageId: string;
+  /** 抵达的关卡序号（1 起） */
+  stage: number;
+  endless: boolean;
+  /** 无尽模式抵达的波次 */
+  wave: number;
+  /** 是否走完了三关 */
+  cleared: boolean;
+  kills: number;
+  level: number;
+  time: number;
+  bestCombo: number;
+  damageDealt: number;
+  bossKills: number;
+  embers: number;
+}
+
+/** 单盏灯火的累计战绩。 */
+export interface LanternRecord {
+  runs: number;
+  /** 最佳关卡（3 = 通关） */
+  bestStage: number;
+  bestKills: number;
+  bestWave: number;
+  /** 通关次数 */
+  cleared: number;
+  /** 最快通关用时（秒），0 = 尚未通关 */
+  bestTime: number;
+}
+
+/** 生涯纪录：只记"最好的一次"。 */
+export interface RecordsData {
+  bestCombo: number;
+  bestKills: number;
+  bestLevel: number;
+  bestDamage: number;
+  bestEmbers: number;
+  /** 最快通关用时（秒），0 = 尚未通关 */
+  bestTime: number;
+  /** 累计存活时长（秒） */
+  totalTime: number;
+  clearedRuns: number;
+  endlessRuns: number;
+  lanterns: Record<string, LanternRecord>;
+}
+
 export interface SaveData {
   version: number;
   embers: number;
@@ -173,6 +227,10 @@ export interface SaveData {
   killsTotal: number;
   /** 图鉴已发现的条目，形如 "enemy:shade"。 */
   codex: string[];
+  /** 生涯最佳纪录 */
+  records: RecordsData;
+  /** 最近若干局的战报，最新的在前 */
+  history: RunRecord[];
   settings: SettingsData;
 }
 

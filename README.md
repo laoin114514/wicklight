@@ -79,7 +79,10 @@ npm run preview
 - **图鉴（编年史）**：100 个条目——15 种敌人（含精英与首领的应对说明）、16 件武器与进化、
   32 件遗物、14 个被动、7 种夜咒、9 种精英词缀、4 位灯火、3 张关卡。
   一切"被玩家看见过"的东西都会被记录，没见过的显示为问号；填满图鉴另有两项收集成就。
-- **20 项成就 / 统计 / 本地存档**：全部写入 `localStorage`，无后端。
+- **生涯档案**：结算时把每一局沉淀下来——个人纪录（最高连杀 / 单局击杀 / 单局伤害 / 最快通关……
+  与结算界面的「🏅 新纪录」徽章联动）、四盏灯火各自的战绩对比，以及最近 12 局的战报列表。
+- **22 项成就 / 统计 / 本地存档**：成就解锁时额外发放余烬（共 1105 点），直接喂给局外解锁树；
+  全部写入 `localStorage`，无后端。
 
 ## 画面与手感
 
@@ -112,7 +115,7 @@ node tools/render.mjs --scene boss1 --crop 560,240,260,180 --zoom 4
 ## 测试
 
 ```bash
-npm test          # 8 套离线测试（Node + 自研软件光栅化 Canvas）
+npm test          # 10 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 ```
@@ -122,8 +125,8 @@ npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长
 `tools/playtest.mjs` 会用 Playwright 启动**真实 Chromium**，通过内置的零依赖静态服务器打开构建产物，
 用真实键盘/鼠标走一遍完整流程，并把每一屏截图写到 `/tmp/wl/shots/`：
 
-- 菜单 → 选灯火 / 难度 → 开局 → 真实按键移动 / 冲刺 / 燃爆 → 暂停 → 升级面板 → 商店 → 祭坛 →
-  死亡结算 → 余烬解锁树 → 设置 → 成就 → 无尽之夜；
+- 菜单 → 图鉴 → 生涯档案 → 选灯火 / 难度 → 开局 → 真实按键移动 / 冲刺 / 燃爆 → 暂停 → 升级面板 →
+  商店 → 祭坛 → 死亡结算 → 余烬解锁树 → 设置 → 成就 → 生涯档案（战报已记录）→ 无尽之夜；
 - 同时对每一屏做**布局体检**（元素是否零尺寸、是否超出视口、页面是否出现滚动条、
   公告是否折行压住 HUD、触屏摇杆是否遮挡构筑信息）与**画布像素体检**（画面是否真的画出了东西）；
 - 并断言全程没有 `console.error`、未捕获异常与资源加载失败；移动端另跑一遍 390×844 竖屏。
@@ -140,11 +143,14 @@ npx playwright install chromium && npx playwright install-deps chromium
 - `features`：灯光随灯油变化、精英词缀、连杀奖励、转场淡入、Boss 相位与荆棘地刺、雷弧连锁、
   碎魂分裂、祭坛抉择、夜咒加成，以及新加入的**刺脊蓄力突进**、**引灯速度光环**、**咒盾元素免疫**、
   **夜枭低油增伤**、**守灯人燃爆增益**与**四种燃爆流派**的行为验证。
-- `screens`：把 11 个界面逐个渲染出来，扫描 HTML 里是否出现 `undefined` / `NaN` / 空内容。
+- `screens`：把 12 个界面逐个渲染出来，扫描 HTML 里是否出现 `undefined` / `NaN` / 空内容。
 - `ui`：静态检查每个按钮钩子都有处理器、每个 class 都有样式。
 - `data`：武器等级曲线单调、进化链闭合、遗物/夜咒字段完整，叠加全部遗物后属性仍然有限可用。
 - `codex`：图鉴条目无重复且条条有名称与说明、分类不为空；击杀敌人后立刻记录、
   玩家持有的武器/被动/遗物会被扫描进来、发现是幂等的、进度确实写进存档。
+- `records`：死亡与通关都会结算（通关同样给余烬）；纪录只升不降、更差的一局不会覆盖；
+  战报按时间倒序累积、灯火战绩分别统计；成就余烬真的进账且不重复发放；
+  界面渲染干净，老存档缺 `records` / `history` 字段也能平滑迁移。
 
 ### 性能体检
 
@@ -198,7 +204,7 @@ wicklight/
 │   ├── data/    weapons · upgrades · enemies · stages · lanterns · meta · achievements
 │   ├── entities/ Player · Bullet(Projectile) · Pickup · Particle · enemies/Enemy(+behaviors)
 │   ├── systems/ Director · LevelGen · CollisionSystem · UpgradeSystem · LootSystem
-│   │            MetaSystem · AchievementSystem · DifficultySystem
+│   │            MetaSystem · AchievementSystem · CodexSystem · RecordsSystem · DifficultySystem
 │   ├── ui/      HUD · UIManager · TouchControls
 │   ├── styles/  main.css
 │   ├── main.ts · types.ts

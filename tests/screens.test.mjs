@@ -73,6 +73,7 @@ test('所有界面都渲染出干净无缺字段的标记', async (t) => {
   game.state = 'dead';
   capture('dead', 'dead');
   capture('codex', 'codex');
+  capture('records', 'records');
   capture('meta', 'meta');
   capture('achievements', 'achievements');
   capture('settings', 'settings');
@@ -91,6 +92,7 @@ test('所有界面都渲染出干净无缺字段的标记', async (t) => {
     victory: '挑战无尽之夜',
     dead: '返回主菜单',
     codex: '图鉴 ·',
+    records: '生涯档案',
     meta: '余烬解锁',
     achievements: '成就 ·',
     settings: '总音量',

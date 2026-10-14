@@ -1,3 +1,4 @@
+import { defaultRecords } from '../systems/RecordsSystem';
 import type { SaveData, SettingsData } from '../types';
 
 const KEY = 'wicklight.save.v1';
@@ -27,6 +28,8 @@ export function defaultSave(): SaveData {
     runs: 0,
     killsTotal: 0,
     codex: [],
+    records: defaultRecords(),
+    history: [],
     settings: { ...defaultSettings },
   };
 }
@@ -63,6 +66,8 @@ export class Storage {
           meta: parsed.meta ?? base.meta,
           achievements: parsed.achievements ?? base.achievements,
           codex: Array.isArray(parsed.codex) ? parsed.codex : base.codex,
+          records: parsed.records && typeof parsed.records === 'object' ? { ...base.records, ...parsed.records } : base.records,
+          history: Array.isArray(parsed.history) ? parsed.history : base.history,
         };
         return this.memory;
       }

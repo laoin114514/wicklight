@@ -215,6 +215,22 @@ async function main() {
   await page.click('[data-act="back"]');
   await sleep(250);
 
+  // ── 1c. 生涯档案 ──
+  await page.click('[data-act="records"]');
+  await sleep(300);
+  const recLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(recLayout.issues.length === 0, '生涯档案布局正常', recLayout.issues.join('; '));
+  const recText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  expect(recText.includes('生涯档案'), '生涯档案标题正确');
+  const recParts = ['个人纪录', '灯火战绩', '最近对局', '累计击杀', '最高连杀'].filter((k) => !recText.includes(k));
+  expect(recParts.length === 0, '生涯档案分区齐全', recParts.join(','));
+  expect(!/undefined|NaN/.test(recText), '生涯档案没有缺字段', recText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
+  const recLanterns = await page.evaluate(() => document.querySelectorAll('.rec-lantern').length);
+  expect(recLanterns >= 4, '生涯档案列出了全部灯火', `${recLanterns} 盏`);
+  await shot('01c-records');
+  await page.click('[data-act="back"]');
+  await sleep(250);
+
   // ── 2. 选灯火 ──
   await page.click('[data-act="play"]');
   await sleep(220);
@@ -440,6 +456,27 @@ async function main() {
     return h.game.save.codex.length;
   });
   expect(codexSaved === codexAfter, '图鉴进度写进了存档', `save=${codexSaved} vs ${codexAfter}`);
+
+  // 生涯档案：这一局应该被记进去，并且刷新了纪录（全新存档的第一局必然是纪录）
+  const recAfter = await page.evaluate(() => {
+    const s = window.__WICKLIGHT__.game.save;
+    return { runs: s.runs, hist: s.history.length, best: s.records.bestKills, combo: s.records.bestCombo, clear: s.history[0]?.cleared, stage: s.history[0]?.stage };
+  });
+  expect(recAfter.runs >= 1, '生涯档案记录了总局数', JSON.stringify(recAfter));
+  expect(recAfter.hist >= 1, '最近对局里出现了这一局', JSON.stringify(recAfter));
+  expect(recAfter.best > 0 && recAfter.combo > 0, '这一局刷新了击杀/连杀纪录', JSON.stringify(recAfter));
+  expect(recAfter.clear === false, '死亡局在战报里标记为未通关');
+
+  await page.click('[data-act="records"]');
+  await sleep(300);
+  const recAfterText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  expect(recAfterText.includes('守夜人'), '战报里列出了本局的灯火');
+  expect(/第 \d 关/.test(recAfterText), '战报里列出了抵达的关卡', recAfterText.slice(0, 120));
+  const recRuns = await page.evaluate(() => document.querySelectorAll('.rec-run').length);
+  expect(recRuns >= 1, '最近对局里有条目', `${recRuns} 条`);
+  await shot('12b-records');
+  await page.click('[data-act="back"]');
+  await sleep(300);
 
   // ── 10. 无尽模式 + 移动端视口 ──
   await page.evaluate(() => {
