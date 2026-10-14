@@ -1070,6 +1070,11 @@ async function main() {
   expect(portrait.on && portrait.shown, '手机竖屏必须出现横屏提示', JSON.stringify(portrait));
   expect(portrait.text.includes('横过来'), '横屏提示要把话说清楚', portrait.text);
   expect(portrait.running === false, '竖屏时主循环应当停下（不白烧电）', String(portrait.running));
+  const fsBtn = await mobile.evaluate(() => {
+    const b = document.getElementById('rotate-fullscreen');
+    return b ? { shown: getComputedStyle(b).display !== 'none', label: b.textContent.trim() } : null;
+  });
+  expect(fsBtn?.shown === true && fsBtn.label.length > 0, '竖屏牌子上要给一个"全屏并横屏"的出口', JSON.stringify(fsBtn));
   await mobile.screenshot({ path: join(SHOTS, '14-mobile-portrait.png') });
 
   // 横过来：牌子自己消失，循环自己起来
@@ -1099,6 +1104,7 @@ async function main() {
   expect(inView(land.stick), '横屏摇杆整块落在视口内', JSON.stringify(land.stick));
   expect(inView(land.buttons), '横屏按钮整块落在视口内', JSON.stringify(land.buttons));
   await mobile.screenshot({ path: join(SHOTS, '15-mobile-menu.png') });
+  expect(await mobile.evaluate(() => window.__WICKLIGHT__.wake.wanted) === false, '菜单里不要常亮（没必要一直占着）');
 
   await mobile.click('[data-act="play"]');
   await sleep(250);
@@ -1149,10 +1155,13 @@ async function main() {
     state: window.__WICKLIGHT__.game.state,
     running: !!window.__WICKLIGHT__.loop.running,
     hint: document.getElementById('rotate-hint')?.classList.contains('is-on') ?? null,
+    wake: window.__WICKLIGHT__.wake.wanted,
   }));
   expect(midPortrait.hint === true, '打一半竖过来：横屏提示要立刻出现', JSON.stringify(midPortrait));
   expect(midPortrait.running === false, '打一半竖过来：主循环要停', JSON.stringify(midPortrait));
   expect(midPortrait.state === 'paused', '打一半竖过来会自己暂停', midPortrait.state);
+  expect(midPortrait.wake === false, '停跑之后要把屏幕常亮放掉（别白占着）', JSON.stringify(midPortrait));
+
   await mobile.setViewportSize({ width: 844, height: 390 });
   await sleep(500);
   const backLand = await mobile.evaluate(() => ({
@@ -1162,6 +1171,16 @@ async function main() {
   }));
   expect(backLand.running === true && backLand.hint === false, '转回横屏：提示消失、主循环接着跑', JSON.stringify(backLand));
   expect(backLand.state === 'paused', '转回横屏后停在暂停面板上（由玩家决定何时继续）', backLand.state);
+
+  // 接着打：这一局要申请屏幕常亮（战斗里手会离开屏幕，手机一息屏就等于被打断）
+  await mobile.click('[data-act="resume"]');
+  await sleep(600);
+  const resumed = await mobile.evaluate(() => ({
+    state: window.__WICKLIGHT__.game.state,
+    wake: window.__WICKLIGHT__.wake.wanted,
+  }));
+  expect(resumed.state === 'playing', '点了继续就接着打', JSON.stringify(resumed));
+  expect(resumed.wake === true, '打起来要申请屏幕常亮', JSON.stringify(resumed));
 
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));

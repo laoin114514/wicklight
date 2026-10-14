@@ -129,6 +129,16 @@ export class PostFX {
   private bloomComposite(ctx: CanvasRenderingContext2D, w: number, h: number, bw: number, bh: number, passes: number): void {
     const b = this.bloomB;
     if (!b) return;
+    if (passes <= 1) {
+      // 只叠一层时不需要先合到半分辨率那张画布上——那是"两层要先合并"才值得建的中间站。
+      // 直接把它放大叠回主画布，省一次整块写入 + 一次整块读取（手机上这两下都在帧预算里）。
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.78;
+      ctx.drawImage(b, -w * 0.015, -h * 0.015, w * 1.03, h * 1.03);
+      ctx.restore();
+      return;
+    }
     const hw = Math.max(1, Math.round(w / 2));
     const hh = Math.max(1, Math.round(h / 2));
     if (typeof document !== 'undefined' && (!this.bloomHalf || this.bloomHalf.width !== hw || this.bloomHalf.height !== hh)) {

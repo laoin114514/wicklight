@@ -6,6 +6,7 @@ import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
 import { setupOrientation } from './ui/Orientation';
+import { WakeLock } from './core/WakeLock';
 import { WEAPONS as weapons } from './data/weapons';
 import { RELICS as relics, TRIBES as tribes } from './data/relics';
 import { PASSIVES as passives } from './data/upgrades';
@@ -27,6 +28,7 @@ function boot(): void {
   const hud = new HUD(game);
   const touch = new TouchControls(game);
   const input = new Input(canvas);
+  const wake = new WakeLock();
 
   game.setUI(ui, hud);
   ui.mountMenus();
@@ -38,6 +40,7 @@ function boot(): void {
     ui,
     hud,
     touch,
+    wake,
     // 供测试/调试读取的静态数据表（无副作用）
     data: { weapons, relics, passives, curses, bounties, tribes, meta },
     daily,
@@ -77,6 +80,8 @@ function boot(): void {
       if (st.sheet) game.toggleSheet();
       game.update(dt);
       if (game.state === 'playing') hud.update(dt);
+      // 打的时候别让手机自己息屏：战斗里手会离开屏幕，一暗屏就等于被打断
+      wake.set(game.state === 'playing');
       hud.setVisible(
         game.state === 'playing' || game.state === 'levelup' || game.state === 'paused' || game.state === 'loadout',
       );
@@ -91,6 +96,7 @@ function boot(): void {
   const orientation = setupOrientation((blocked) => {
     if (blocked) {
       if (game.state === 'playing') game.togglePause();
+      wake.set(false);
       loop.stop();
     } else if (booted) {
       loop.start();

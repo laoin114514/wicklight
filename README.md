@@ -37,8 +37,11 @@ npm run preview
 | 构筑总览（武器 / 遗物 / 被动 / 夜咒 / 关键属性） | `Tab` |
 
 移动端：**必须横屏**——竖着拿会盖一块「把手机横过来」的牌子（同时停掉主循环，不白烧电），
-横过来自动消失；左半屏虚拟摇杆 + 冲刺/燃爆按钮（自动开火），构筑总览从暂停面板进入。
+横过来自动消失，牌子上那颗「全屏并横屏」按钮在安卓上会直接进全屏并把屏幕转过来；
+左半屏虚拟摇杆 + 冲刺/燃爆按钮（自动开火），构筑总览从暂停面板进入。
 装到桌面（PWA）后走 manifest 的 `display: fullscreen` + `orientation: landscape`，直接全屏横屏。
+打起来会申请 **Wake Lock**（屏幕常亮），手离开屏幕看血条时手机不会自己息屏；
+暂停 / 竖屏 / 切后台都会立刻放掉。
 
 ## 玩法系统
 
@@ -206,7 +209,7 @@ npm test          # 31 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 npm run mobileperf # 手机横屏的帧时间 & 每帧画布命令数（含逐项消融对比）
-npm run viewportcheck # 横屏布局体检：57 个手机/平板横屏尺寸，HUD 不许互相压住或出界
+npm run viewportcheck # 横屏布局体检：手机/平板横屏尺寸逐个开局，HUD 不许互相压住或出界
 ```
 
 三个脚本都会**先构建再跑**：测试跑的是 `dist/app.js` 这个真实产物，不先构建就会拿旧包验证新代码。
@@ -387,6 +390,7 @@ npx playwright install chromium && npx playwright install-deps chromium
       （留 200px 余量，装得下首领光环与出生弹出）；粒子同理。
     - **横屏闸门**：手机竖屏时盖一块提示牌并**停掉主循环**；装到桌面走 manifest 的
       `orientation: landscape`，已在全屏里时再补一次 `screen.orientation.lock`。
+    - **屏幕常亮（`core/WakeLock`）**：只在掌上设备、且只在真正在玩的时候持有，页面切回前台自动补申请。
     - **HUD 只在值变了才碰 DOM**：血条宽度按 0.1% 取整后比对、时间 / 击杀 / 金币等文本逐项记忆，
       没有首领时那几行不去清 DOM——每帧无脑写 `style` / `textContent` 会让浏览器反复排队样式重算，
       容器里实测这一项就要 2.4ms/帧（手机上只多不少）。
