@@ -273,6 +273,8 @@ export interface SaveData {
   /** 今日灯芯的成绩（每天重置） */
   daily: DailySave;
   settings: SettingsData;
+  /** 首局的开局引导是否已经放完（老存档没有这个字段，等于没放过）。 */
+  hintsSeen?: boolean;
 }
 
 export interface SettingsData {

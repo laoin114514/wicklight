@@ -481,6 +481,9 @@ async function main() {
   // ── 8. 死亡结算 ──
   await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
+    // 走真实伤害路径记下死因（结算要写出"被谁扑灭"），再让灯火熄灭
+    g.player.invuln = 0;
+    g.damagePlayer(5, g.player.x, g.player.y, 0, 'bulwark');
     g.player.revives = 0;
     g.player.hp = -1;
   });
@@ -491,6 +494,14 @@ async function main() {
   expect(/余烬|击杀|波次/.test(deadText), '死亡结算展示了统计信息');
   const deadLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
   expect(deadLayout.issues.length === 0, '死亡面板布局正常', deadLayout.issues.join('; '));
+  const deadInfo = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const text = document.querySelector('.panel')?.innerText ?? '';
+    return { killer: g.lastKiller ? g.lastKiller.name : null, text };
+  });
+  expect(!!deadInfo.killer && deadInfo.text.includes(deadInfo.killer), '死亡结算写出了"被谁扑灭"', JSON.stringify(deadInfo.killer));
+  expect(/点亮灯台/.test(deadInfo.text) && /最强一击/.test(deadInfo.text), '死亡结算展示了本局高光', deadInfo.text.slice(0, 120));
+  expect(!/undefined|NaN/.test(deadInfo.text), '死亡结算没有缺字段', deadInfo.text.slice(0, 120));
   await shot('09-dead');
 
   // ── 9. 局外成长 / 设置 / 成就 ──

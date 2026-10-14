@@ -873,6 +873,11 @@ body.is-touch .hud__hint { display: none; }
 }
 .hl b { color: #fff; }
 .ember-gain--ach { color: var(--text-dim); font-size: 13px; }
+/* 结算：先说清楚是被谁扑灭的 / 这一路点了几座灯台 */
+.killer { text-align: center; margin: 10px 0 2px; font-size: 13.5px; color: var(--text-dim); }
+.killer b { color: var(--c, #ff6b81); font-size: 15px; }
+.tour { text-align: center; margin: 4px 0 2px; font-size: 12.5px; color: var(--text-dim); }
+.tour b { color: var(--amber-bright); font-size: 14px; }
 .ember-gain--ach b { font-size: 16px; color: #8affc1; }
 .ach__reward {
   font-size: 11.5px;

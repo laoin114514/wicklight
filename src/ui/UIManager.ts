@@ -407,7 +407,9 @@ export class UIManager implements UIHost {
   }
 
   private statsBlock(): string {
-    const s = this.game.runStats();
+    const g = this.game;
+    const s = g.runStats();
+    const pyre = g.runPyres > 0 ? `<div><span>点亮灯台</span><b>${g.pyresLitTotal}/${g.runPyres}</b></div>` : '';
     return `
       <div class="stats">
         <div><span>击杀</span><b>${s.kills}</b></div>
@@ -418,7 +420,18 @@ export class UIManager implements UIHost {
         <div><span>造成伤害</span><b>${s.damageDealt}</b></div>
         <div><span>承受伤害</span><b>${s.damageTaken}</b></div>
         <div><span>击败首领</span><b>${s.bossKills}</b></div>
+        ${pyre}
+        <div><span>完成悬赏</span><b>${g.bounties.completedThisRun}</b></div>
+        <div><span>最强一击</span><b>${Math.round(g.maxHit)}</b></div>
+        <div><span>燃爆</span><b>${g.novaCount} 次</b></div>
       </div>`;
+  }
+
+  /** 死亡时说清楚是被谁扑灭的——比"你死了"有用得多。 */
+  private killerLine(): string {
+    const k = this.game.lastKiller;
+    if (!k) return '';
+    return `<div class="killer">灯火熄灭于 <b style="--c:${k.color}">${k.name}</b></div>`;
   }
 
   private shop(): void {
@@ -484,6 +497,7 @@ export class UIManager implements UIHost {
     this.show(`
       <div class="panel panel--small">
         <div class="panel__title">灯火熄灭</div>
+        ${this.killerLine()}
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
         ${this.dailyLine()}
         ${this.achievementEmbersLine()}
@@ -503,7 +517,8 @@ export class UIManager implements UIHost {
     this.show(`
       <div class="panel panel--small">
         <div class="panel__title">焚尽长夜</div>
-        <div class="subtitle">你举着灯，走完了三段黑暗。</div>
+        <div class="subtitle">你举着灯，走完了长夜之城的最后一段黑暗。</div>
+        ${this.tourLine()}
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
         ${this.dailyLine()}
         ${this.achievementEmbersLine()}
@@ -517,6 +532,13 @@ export class UIManager implements UIHost {
     `);
     this.on('[data-act="endless"]', () => { this.endless = true; this.openSelect(); });
     this.on('[data-act="menu"]', () => this.game.goMenu());
+  }
+
+  /** 通关时把这一路点过的灯台数一并交代：它本来就不是必做项。 */
+  private tourLine(): string {
+    const g = this.game;
+    if (!g.runPyres) return '';
+    return `<div class="tour">沿途点亮了 <b>${g.pyresLitTotal}</b> 座灯台（共 ${g.runPyres} 座）</div>`;
   }
 
   private nodeCard(n: MetaNodeDef): string {

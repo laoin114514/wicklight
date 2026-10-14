@@ -27,6 +27,8 @@ export interface Projectile {
   /** > 0 表示回旋刃：飞出一段距离后掉头回到玩家手里（回程可以再命中一次） */
   boomerang: number;
   returning: boolean;
+  /** 敌人子弹记下放它的敌人 id，结算时才知道玩家是被谁扑灭的。 */
+  ownerId: string;
 }
 
 export class ProjectileSystem {
@@ -56,6 +58,7 @@ export class ProjectileSystem {
     weaponId: '',
     boomerang: 0,
     returning: false,
+    ownerId: '',
   }), 512);
 
   spawn(cfg: Partial<Projectile> & { x: number; y: number; vx: number; vy: number; damage: number }): Projectile {
@@ -85,6 +88,7 @@ export class ProjectileSystem {
     p.weaponId = cfg.weaponId ?? '';
     p.boomerang = cfg.boomerang ?? 0;
     p.returning = false;
+    p.ownerId = cfg.ownerId ?? '';
     return p;
   }
 

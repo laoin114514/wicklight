@@ -98,6 +98,15 @@ interface BeamFx {
   seed: number;
 }
 
+/** 环境伤害的玩家向说法（敌人用 ENEMY_MAP 查）。 */
+const SOURCE_LABEL: Record<string, { name: string; color: string }> = {
+  meteor: { name: '陨石雨', color: '#ff8a4e' },
+  collapse: { name: '塌方', color: '#b48a5a' },
+  thorn: { name: '荆棘地刺', color: '#9fd45a' },
+  fire: { name: '火海', color: '#ff7a2f' },
+  poison: { name: '毒地', color: '#7ddc6a' },
+};
+
 interface Ground {
   x: number;
   y: number;
@@ -231,6 +240,18 @@ export class Game {
   private shrineOpen: Shrine | null = null;
   /** 本关已点燃的灯台数（HUD 与成就都用它）。 */
   pyresLit = 0;
+  /** 本局累计点燃的灯台数（结算用）。 */
+  pyresLitTotal = 0;
+  /** 本局路上总共遇到过多少座灯台（结算里的分母）。 */
+  runPyres = 0;
+  /** 单次最高伤害（结算用）。 */
+  maxHit = 0;
+  /** 本局燃爆次数（结算用）。 */
+  novaCount = 0;
+  /** 最后一下是谁打的：死亡结算要交代清楚（"被谁扑灭"）。 */
+  lastKiller: { name: string; color: string } | null = null;
+  /** 首局的开局引导队列（剩下的条目），跑完就不再出现。 */
+  private hintQueue: { at: number; text: string }[] = [];
   /** 本关灯台总数（HUD 显示 n/m）。 */
   pyreTotal = 0;
   private pyreChannel: Pyre | null = null;
@@ -328,6 +349,14 @@ export class Game {
     this.audio.setMood('battle');
     this.ui?.showScreen('playing');
     this.hud?.announce(endless ? '无尽之夜 · 开始' : `${stage.theme.name} · ${difficultyLabel(difficulty)}`, true);
+    // 首局的开局引导：一次性的三条提示，之后 HUD 底部那行常驻说明就够了
+    this.hintQueue = this.save.hintsSeen
+      ? []
+      : [
+          { at: 3, text: '自动开火 · 空格冲刺（有无敌帧）· Q 燃爆清场' },
+          { at: 11, text: '🏮 停在没有点亮的灯台旁，可以把它点亮' },
+          { at: 22, text: '祭坛、商店与首领都在等你：别在黑暗里站太久' },
+        ];
   }
 
   private resetRunState(): void {
@@ -381,6 +410,11 @@ export class Game {
     this.achievementEmbers = 0;
     this.dailyScore = 0;
     this.dailyBest = false;
+    this.pyresLitTotal = 0;
+    this.runPyres = 0;
+    this.maxHit = 0;
+    this.novaCount = 0;
+    this.lastKiller = null;
     this.bounties.reset();
     this.codex.reset();
     this.codexTimer = 0;
@@ -430,6 +464,7 @@ export class Game {
     this.beams.length = 0;
     this.pyresLit = 0;
     this.pyreTotal = this.level.pyres.length;
+    this.runPyres += this.pyreTotal;
     this.pyreChannel = null;
     if (fresh) {
       this.player.oil = this.player.oilMax;
@@ -593,6 +628,14 @@ export class Game {
       this.fogTimer -= dt;
       this.darknessBoost = Math.max(this.curseDarkness, this.darknessBoost - dt * 0.15);
     }
+    if (this.hintQueue.length && this.runTime >= this.hintQueue[0].at) {
+      const hint = this.hintQueue.shift();
+      if (hint) this.hud?.toast(hint.text);
+      if (!this.hintQueue.length && !this.save.hintsSeen) {
+        this.save.hintsSeen = true;
+        this.storage.save(this.save);
+      }
+    }
     this.emberTimer -= dt;
     if (this.emberTimer <= 0) {
       const themeId = this.currentStage().theme.id;
@@ -711,6 +754,7 @@ export class Game {
     py.lit = true;
     py.progress = 1;
     this.pyresLit += 1;
+    this.pyresLitTotal += 1;
     const p = this.player;
     p.pyreMods.damageMult *= 1.05;
     p.pyreMods.lightMult *= 1.06;
@@ -910,7 +954,10 @@ export class Game {
       findTarget: (x, y, maxDist, requireLight) => this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist)),
       chainZap: (x, y, damage, jumps, range, color, opts) => this.chainZap(x, y, damage, jumps, range, color, opts),
       beam: (x, y, angle, length, width, damage, color, opts) => this.fireBeam(x, y, angle, length, width, damage, color, opts),
-      onNova: () => this.bounties.onNova(),
+      onNova: () => {
+        this.novaCount += 1;
+        this.bounties.onNova();
+      },
     };
   }
 
@@ -923,10 +970,22 @@ export class Game {
       burnDps: 6 * this.player.stats.burnMult,
       slowFactor: 1,
       visionUpgrade: this.player.stats.luck,
-      damagePlayer: (amount, x, y, drain) => this.damagePlayer(amount, x, y, drain),
-      shoot: (x, y, angle, speed, damage, color, enemy) => {
+      damagePlayer: (amount, x, y, drain, source) => this.damagePlayer(amount, x, y, drain, source),
+      shoot: (x, y, angle, speed, damage, color, enemy, owner) => {
         if (enemy) {
-          this.projectiles.spawn({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, radius: 7, color, fromPlayer: false, maxLife: 3, trail: true });
+          this.projectiles.spawn({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            damage,
+            radius: 7,
+            color,
+            fromPlayer: false,
+            maxLife: 3,
+            trail: true,
+            ownerId: owner ?? '',
+          });
         }
       },
       addLight: (x, y, r, i) => this.light.addLight(x, y, r, i),
@@ -1195,6 +1254,7 @@ export class Game {
     const reduced = damage * (1 - e.dr) * (warded ? 0.75 : 1);
     const killed = this.enemies.damage(e, reduced, this.lightCtx(), kx, ky, knockback);
     this.damageDealt += reduced;
+    if (reduced > this.maxHit) this.maxHit = reduced;
     this.floaters.damage(e.x, e.y - e.radius - 6, reduced, crit);
     if (opts.burn) this.enemies.applyBurn(e, opts.burn);
     if (opts.slow && opts.slow > 0 && e.active) e.slowTimer = Math.max(e.slowTimer, opts.slow);
@@ -1219,11 +1279,14 @@ export class Game {
     }
   }
 
-  private damagePlayer(amount: number, x = this.player.x, y = this.player.y, drain = 0): void {
+  private damagePlayer(amount: number, x = this.player.x, y = this.player.y, drain = 0, source?: string): void {
     if (this.player.invuln > 0 || this.player.dashTimer > 0) return;
     const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult;
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;
+    // 记下这一下是谁打的：死亡结算里"被谁扑灭"比一串数字有用得多
+    const killer = SOURCE_LABEL[source ?? ''] ?? (source ? ENEMY_MAP[source] : undefined);
+    if (killer) this.lastKiller = { name: killer.name, color: killer.color ?? '#ff6b81' };
     this.damageTaken += scaled;
     this.bounties.onPlayerHit();
     this.hitStop = Math.max(this.hitStop, 0.05);
@@ -1467,7 +1530,7 @@ export class Game {
         const dy = p.y - this.player.y;
         const rr = p.radius + this.player.radius;
         if (dx * dx + dy * dy <= rr * rr) {
-          this.damagePlayer(p.damage, p.x, p.y);
+          this.damagePlayer(p.damage, p.x, p.y, 0, p.ownerId || undefined);
           this.particles.burst(p.x, p.y, 4, '#c9a3ff', { speed: 100 });
           p.active = false;
         }
@@ -1527,7 +1590,7 @@ export class Game {
       if (g.kind === 'mud') continue;
       const dx = this.player.x - g.x;
       const dy = this.player.y - g.y;
-      if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y);
+      if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y, 0, g.kind);
       this.light.addGlow(g.x, g.y, g.r * 1.2, g.kind === 'poison' ? 0.3 : 0.5);
     }
   }
@@ -1603,7 +1666,9 @@ export class Game {
         this.camera.addTrauma(0.35, this.settings.data.shake * this.settings.motionScale);
         const dx = this.player.x - h.x;
         const dy = this.player.y - h.y;
-        if (dx * dx + dy * dy <= h.r * h.r) this.damagePlayer(h.kind === 'meteor' ? 22 : h.kind === 'thorn' ? 18 : 16, h.x, h.y);
+        if (dx * dx + dy * dy <= h.r * h.r) {
+          this.damagePlayer(h.kind === 'meteor' ? 22 : h.kind === 'thorn' ? 18 : 16, h.x, h.y, 0, h.kind);
+        }
       }
     }
   }

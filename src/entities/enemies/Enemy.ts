@@ -58,8 +58,17 @@ export interface EnemyContext {
   burnDps: number;
   slowFactor: number;
   visionUpgrade: number;
-  damagePlayer: (amount: number, x: number, y: number, drain?: number) => void;
-  shoot: (x: number, y: number, angle: number, speed: number, damage: number, color: string, enemy: boolean) => void;
+  damagePlayer: (amount: number, x: number, y: number, drain?: number, source?: string) => void;
+  shoot: (
+    x: number,
+    y: number,
+    angle: number,
+    speed: number,
+    damage: number,
+    color: string,
+    enemy: boolean,
+    owner?: string,
+  ) => void;
   addLight: (x: number, y: number, r: number, intensity: number) => void;
   burst: (x: number, y: number, count: number, color: string, opts?: { speed?: number; size?: number; life?: number }) => void;
   onDeath: (e: Enemy) => void;
@@ -272,7 +281,7 @@ export class EnemySystem {
         const dx = ctx.px - e.x;
         const dy = ctx.py - e.y;
         if (dx * dx + dy * dy < (e.radius + 16) ** 2) {
-          ctx.damagePlayer(e.damage, e.x, e.y);
+          ctx.damagePlayer(e.damage, e.x, e.y, 0, e.defId);
           e.dashing = 0;
         }
         continue;
@@ -325,7 +334,7 @@ export class EnemySystem {
         e.attackCd -= dt;
         if (e.attackCd <= 0 && d < 520) {
           e.attackCd = 2.1;
-          ctx.shoot(e.x, e.y, e.angle, 250, e.damage, '#c9a3ff', true);
+          ctx.shoot(e.x, e.y, e.angle, 250, e.damage, '#c9a3ff', true, e.defId);
         }
         break;
       }
@@ -426,7 +435,7 @@ export class EnemySystem {
             ctx.burst(e.x, e.y, 26, '#ff9d2e', { speed: 280, size: 4, life: 0.6 });
             ctx.addLight(e.x, e.y, 240, 1);
             ctx.shake(0.45);
-            if (Math.hypot(e.x - ctx.px, e.y - ctx.py) <= blast) ctx.damagePlayer(e.damage, e.x, e.y);
+            if (Math.hypot(e.x - ctx.px, e.y - ctx.py) <= blast) ctx.damagePlayer(e.damage, e.x, e.y, 0, e.defId);
             e.active = false;
             return;
           }
@@ -449,7 +458,7 @@ export class EnemySystem {
 
     if (e.def.behavior !== 'bomber' && d < e.radius + 16) {
       const drain = e.def.behavior === 'drain' ? 22 : e.affix === 'thorn' ? 9 : 0;
-      ctx.damagePlayer(e.damage, e.x, e.y, drain);
+      ctx.damagePlayer(e.damage, e.x, e.y, drain, e.defId);
     }
   }
 
@@ -468,10 +477,10 @@ export class EnemySystem {
     if (e.defId === 'extinguisher') {
       if (e.bossCd <= 0) {
         e.bossCd = 3.4 - e.phase * 0.5;
-        ctx.shoot(e.x, e.y, e.angle, 260, e.damage, '#8f7bff', true);
+        ctx.shoot(e.x, e.y, e.angle, 260, e.damage, '#8f7bff', true, e.defId);
         const spokes = 8 + e.phase * 3;
         for (let i = 0; i < spokes; i += 1) {
-          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble, 200, e.damage * 0.6, '#b7a5ff', true);
+          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble, 200, e.damage * 0.6, '#b7a5ff', true, e.defId);
         }
         ctx.snuffLight(0.18);
         ctx.shake(0.45);
@@ -481,7 +490,7 @@ export class EnemySystem {
         e.bossCd = 3.1 - e.phase * 0.45;
         const spokes = 9 + e.phase * 3;
         for (let i = 0; i < spokes; i += 1) {
-          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 0.8, 210, e.damage * 0.55, '#9fd45a', true);
+          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 0.8, 210, e.damage * 0.55, '#9fd45a', true, e.defId);
         }
         for (let i = 0; i < e.phase + 1; i += 1) {
           const a = Math.random() * Math.PI * 2;
@@ -497,7 +506,7 @@ export class EnemySystem {
         // 环形弹幕
         const spokes = 13 + e.phase * 4;
         for (let i = 0; i < spokes; i += 1) {
-          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.2, 220, e.damage * 0.6, '#b7a5ff', true);
+          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.2, 220, e.damage * 0.6, '#b7a5ff', true, e.defId);
         }
         // 抽走灯火 —— 视野被夺走的那几秒，才是"终夜"真正的主场
         ctx.snuffLight(0.16);
@@ -520,7 +529,7 @@ export class EnemySystem {
         e.bossCd = 2.6 - e.phase * 0.4;
         const spokes = 12 + e.phase * 4;
         for (let i = 0; i < spokes; i += 1) {
-          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.6, 230, e.damage * 0.7, '#ff7a2f', true);
+          ctx.shoot(e.x, e.y, (i / spokes) * Math.PI * 2 + e.wobble * 1.6, 230, e.damage * 0.7, '#ff7a2f', true, e.defId);
         }
         if (Math.random() < 0.5) {
           for (let i = 0; i < e.phase + 1; i += 1) {
