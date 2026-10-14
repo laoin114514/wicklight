@@ -27,6 +27,10 @@ export interface RelicMods {
   lowOilDamage?: number;
   /** 燃爆后短时间内获得的伤害倍率（同时意味着会返还部分灯油） */
   novaBuff?: number;
+  /** 灯台余温倍率（0.5 = 每座灯台的余温翻倍） */
+  pyreBonus?: number;
+  /** 灯焰被吹灭的速度降低（0.45 = 慢 45%） */
+  pyreGuard?: number;
 }
 
 export interface RelicDef {
@@ -93,6 +97,12 @@ export const RELICS: RelicDef[] = [
   { id: 'nightowl', tribe: 'oil', name: '夜枭', blurb: '灯油低于 35% 时伤害 +45%。越接近熄灭越危险。', icon: '🦉', color: '#8fa7ff', rarity: 'epic', price: 100, mods: { lowOilDamage: 0.45 } },
   { id: 'lanternkeeper', tribe: 'lamp', name: '守灯人', blurb: '燃爆后 3 秒内伤害 +25%，并返还部分灯油。', icon: '🏮', color: '#ffe27a', rarity: 'epic', price: 100, mods: { novaBuff: 0.25 } },
   { id: 'glassheart', tribe: 'flame', name: '玻璃心', blurb: '伤害 +55%，但生命上限 -25%。', icon: '💠', color: '#ff4d6d', rarity: 'epic', price: 110, mods: { damageMult: 0.55, maxHpMult: -0.25 } },
+
+  // ── 与「灯台」这条线打通的遗物：点灯不只是当下的取舍，值不值得守也取决于你带了什么 ──
+  { id: 'nightwatch', tribe: 'lamp', name: '守夜灯', blurb: '每座灯台的余温翻倍，灯焰被吹灭的速度 -45%。', icon: '🏮', color: '#ffe27a', rarity: 'epic', price: 95, mods: { pyreBonus: 1, pyreGuard: 0.45 } },
+  { id: 'faintheart', tribe: 'flame', name: '焚心', blurb: '伤害 +22%，暴击率 +10%，但拾取范围 -20%。', icon: '🔥', color: '#ff6b3d', rarity: 'epic', price: 100, mods: { damageMult: 0.22, critChance: 0.1, pickupMult: -0.2 } },
+  { id: 'slowlamp', tribe: 'oil', name: '慢灯', blurb: '灯油燃烧 -25%；灯油越低伤害越高（最多 +20%）。', icon: '🫗', color: '#ffd24e', rarity: 'rare', price: 75, mods: { oilDecayMult: -0.25, lowOilDamage: 0.2 } },
+  { id: 'shadowweave', tribe: 'shade', name: '影织', blurb: '生命上限 +18%，命中的敌人会被拖慢 1.8 秒。', icon: '🕸️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { maxHpMult: 0.18, chill: 1.8 } },
 ];
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));

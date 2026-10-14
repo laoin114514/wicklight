@@ -834,8 +834,9 @@ export class Game {
     this.pyresLit += 1;
     this.pyresLitTotal += 1;
     const p = this.player;
-    p.pyreMods.damageMult *= 1.05;
-    p.pyreMods.lightMult *= 1.06;
+    // 「守夜灯」把每座灯台的余温翻倍：点一座顶两座
+    p.pyreMods.damageMult *= 1 + 0.05 * p.flags.pyreBonus;
+    p.pyreMods.lightMult *= 1 + 0.06 * p.flags.pyreBonus;
     p.recomputeStats();
     p.oil = Math.min(p.oilMax, p.oil + p.oilMax * 0.14);
     this.gold += Math.round(10 * p.flags.goldMult * this.curseGoldMult);
@@ -892,7 +893,8 @@ export class Game {
       }
     }
     if (!best || bestD > 96) return;
-    best.flame -= dt * 0.42;
+    // 「守夜灯」让灯焰更难被吹灭
+    best.flame -= dt * 0.42 * this.player.flags.pyreGuard;
     if (best.flame <= 0) {
       best.flame = 0;
       this.extinguishPyre(best);
@@ -905,8 +907,8 @@ export class Game {
     py.progress = 0;
     this.pyresLit = Math.max(0, this.pyresLit - 1);
     const p = this.player;
-    p.pyreMods.damageMult /= 1.05;
-    p.pyreMods.lightMult /= 1.06;
+    p.pyreMods.damageMult /= 1 + 0.05 * p.flags.pyreBonus;
+    p.pyreMods.lightMult /= 1 + 0.06 * p.flags.pyreBonus;
     p.recomputeStats();
     this.particles.burst(py.x, py.y - 24, 24, '#5f6a8f', { speed: 150, size: 3, life: 0.8 });
     this.camera.addTrauma(0.25);

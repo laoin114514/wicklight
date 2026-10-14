@@ -44,6 +44,10 @@ export interface PlayerFlags {
   lowOilDamage: number;
   /** 守灯人：燃爆后的短时伤害加成（同时返还灯油） */
   novaBuff: number;
+  /** 灯台的余温倍率（守夜灯：点一座顶两座） */
+  pyreBonus: number;
+  /** 灯焰被吹灭的速度倍率（守夜灯：灯更耐吹） */
+  pyreGuard: number;
 }
 
 interface OrbitState {
@@ -64,7 +68,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -114,7 +118,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -183,7 +187,7 @@ export class Player {
     for (const [id, lvl] of this.passives) {
       PASSIVE_MAP[id]?.apply(this.stats, lvl);
     }
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m);
@@ -227,6 +231,8 @@ export class Player {
     this.flags.novaHeal += m.novaHeal ?? 0;
     if (m.lowOilDamage) this.flags.lowOilDamage = Math.max(this.flags.lowOilDamage, m.lowOilDamage);
     if (m.novaBuff) this.flags.novaBuff = Math.max(this.flags.novaBuff, m.novaBuff);
+    if (m.pyreBonus) this.flags.pyreBonus *= 1 + m.pyreBonus;
+    if (m.pyreGuard) this.flags.pyreGuard *= Math.max(0.25, 1 - m.pyreGuard);
   }
 
   /** 当前持有某一族遗物的数量。 */
