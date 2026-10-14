@@ -626,7 +626,6 @@ body {
   bottom: 34px;
   width: 132px;
   height: 132px;
-  pointer-events: auto;
 }
 .touch-stick,
 .touch-btn {
@@ -650,7 +649,7 @@ body {
   background: radial-gradient(circle at 50% 40%, #fff, var(--amber) 60%, transparent 100%);
   box-shadow: 0 0 24px rgba(255, 170, 70, 0.5);
 }
-.touch-buttons { position: absolute; right: 30px; bottom: 40px; display: grid; gap: 14px; pointer-events: auto; }
+.touch-buttons { position: absolute; right: 30px; bottom: 40px; display: grid; gap: 14px; }
 .touch-btn {
   position: relative;
   width: 76px;
@@ -2789,4 +2788,23 @@ body.is-touch .key { display: none; }
   .card__icon { height: 19px; font-size: 17px; }
   .card__blurb { font-size: 11px; -webkit-line-clamp: 2; }
   .card-grid { gap: 8px; }
+}
+
+/* ── 17. 触摸控件只在"真在打"的时候上屏 ───────────────────────────────
+   菜单 / 暂停 / 升级 / 商店 / 结算这些面板和它同一层，而它在 DOM 里更靠后、默认盖在上面。
+   844×390 的主菜单实测：右下角那两枚圆按钮正好压住"成就 / 设置"两行菜单键，
+   点击会被这枚看不见的按钮吃掉（它自己不响应点击，但事件也不会再落到下面的菜单上）；
+   灯火选择那屏更糟——左下摇杆 + 右下按钮同时压在两张灯火卡上。
+   `is-on` 由 `TouchControls.setActive` 在状态切进 / 切出 playing 时挂上，
+   顺带会把"还按着的手指"松开（暂停时手还搭在摇杆上，恢复后不能让角色自己往前跑）。 */
+.touch-stick,
+.touch-buttons {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+#touch-root.is-on .touch-stick,
+#touch-root.is-on .touch-buttons {
+  opacity: 1;
+  pointer-events: auto;
 }

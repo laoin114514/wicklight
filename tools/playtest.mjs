@@ -330,9 +330,14 @@ async function main() {
     }
   };
 
-  // 打满一整轮：等敌人走进灯火，再用燃爆收场
+  // 打满一整轮：等敌人走进灯火，再用燃爆收场。
+  // ⚠ 按**游戏内时间**收工，不按墙上时间：容器里帧被拖慢时，主循环夹住了 dt，
+  // 16 秒墙上时间可能只走了 4 秒游戏时间——敌人还没走到灯火里，测试就会莫名其妙地红
+  // （这块以前就有：10 轮 = 16 秒墙钟，偶发 kills=0）。
   let kills = 0;
-  for (let i = 0; i < 10 && kills === 0; i += 1) {
+  for (let i = 0; i < 40 && kills === 0; i += 1) {
+    const ranFor = await page.evaluate(() => window.__WICKLIGHT__.game.runTime);
+    if (ranFor > 36) break;
     await drainLevelUps();
     await page.keyboard.down(i % 2 === 0 ? 'KeyA' : 'KeyD');
     await sleep(700);
@@ -1106,10 +1111,35 @@ async function main() {
   await mobile.screenshot({ path: join(SHOTS, '15-mobile-menu.png') });
   expect(await mobile.evaluate(() => window.__WICKLIGHT__.wake.wanted) === false, '菜单里不要常亮（没必要一直占着）');
 
+  // 触摸控件只在"真在打"的时候上屏：它和菜单面板同一层、DOM 里更靠后，默认盖在上面。
+  // 844×390 的主菜单里那两枚圆按钮正好压在"成就 / 设置"上，点击会被它们吃掉。
+  const steal = await mobile.evaluate(() => {
+    const root = document.getElementById('touch-root');
+    const hit = [];
+    document.querySelectorAll('button, [data-act], [data-toggle], .card').forEach((el) => {
+      if (el.closest('#touch-root')) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return;
+      const b = el.getBoundingClientRect();
+      if (b.width < 2 || b.height < 2) return;
+      const cx = Math.round(b.x + b.width / 2);
+      const cy = Math.round(b.y + b.height / 2);
+      const top = document.elementFromPoint(cx, cy);
+      if (top && root.contains(top)) hit.push(`${el.className || el.tagName} @${cx},${cy}`);
+    });
+    return { on: root.classList.contains('is-on'), opacity: getComputedStyle(document.querySelector('.touch-stick')).opacity, hit };
+  });
+  expect(steal.on === false && Number(steal.opacity) < 0.05, '菜单里触摸控件不上屏', JSON.stringify(steal));
+  expect(steal.hit.length === 0, '菜单键不会被摇杆 / 按钮挡住点击', steal.hit.join('; '));
+
   await mobile.click('[data-act="play"]');
   await sleep(250);
   await mobile.click('[data-act="start"]');
   await sleep(1500);
+  expect(
+    await mobile.evaluate(() => document.getElementById('touch-root').classList.contains('is-on')),
+    '开局后触摸控件要上屏',
+  );
   const mobileOverlap = await mobile.evaluate(() => window.__PROBE__.overlaps('#touch-stick', '.hud__build'));
   expect(mobileOverlap.length === 0, '移动端摇杆不遮挡构筑信息', mobileOverlap.join('; '));
   const mobBounty = await mobile.evaluate(() => window.__PROBE__.layout('.hud__bounty'));
@@ -1275,6 +1305,41 @@ async function main() {
   expect(cdRing.cooling && Number(cdRing.ring) > 0, '冷却时按钮上要画冷却圈', JSON.stringify(cdRing));
   expect(Number(cdRing.later) < Number(cdRing.ring), '冷却圈会随时间退回去（不是画着不动）', JSON.stringify(cdRing));
   expect(cdRing.done === '' && cdRing.doneCooling === false, '转完了圈要消失（没圈 = 能按）', JSON.stringify(cdRing));
+
+  // 暂停时手还搭在摇杆上是常事：那一刻必须松手，恢复后角色不能自己往前跑
+  const holdPause = await mobile.evaluate(async () => {
+    const stick = document.getElementById('touch-stick');
+    const ctl = window.__WICKLIGHT__.touch;
+    const base = stick.querySelector('.touch-stick__base') || stick;
+    const r = base.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const t = new Touch({ identifier: 31, target: stick, clientX: cx, clientY: cy });
+    const fire = (type, x, y) =>
+      stick.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [new Touch({ identifier: 31, target: stick, clientX: x, clientY: y })],
+          targetTouches: [],
+          changedTouches: [new Touch({ identifier: 31, target: stick, clientX: x, clientY: y })],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    fire('touchstart', cx, cy);
+    fire('touchmove', cx + 46, cy);
+    const held = { x: ctl.moveX, y: ctl.moveY };
+    window.__WICKLIGHT__.game.togglePause();
+    await new Promise((r2) => setTimeout(r2, 260));
+    const after = { x: ctl.moveX, y: ctl.moveY, on: document.getElementById('touch-root').classList.contains('is-on') };
+    window.__WICKLIGHT__.game.togglePause();
+    await new Promise((r2) => setTimeout(r2, 260));
+    const back = { on: document.getElementById('touch-root').classList.contains('is-on') };
+    return { held, after, back, t: !!t };
+  });
+  expect(holdPause.held.x > 0.5, '摇杆推到底会有输入', JSON.stringify(holdPause));
+  expect(holdPause.after.x === 0 && holdPause.after.y === 0, '暂停时摇杆要松手（回来不能自己跑）', JSON.stringify(holdPause));
+  expect(holdPause.after.on === false, '暂停时触摸控件收起来（别压着暂停面板）', JSON.stringify(holdPause));
+  expect(holdPause.back.on === true, '继续游戏后触摸控件回来', JSON.stringify(holdPause));
 
   // 手机上的暂停入口：键盘的 Esc 在手机上不存在，HUD 得有一个按钮，
   // 而且它不能压住记分栏（它就是挂在记分栏左上角外侧的那一枚）

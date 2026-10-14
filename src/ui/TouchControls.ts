@@ -23,6 +23,8 @@ export class TouchControls {
   private dash = false;
   private nova = false;
   private isTouch = false;
+  /** 上屏状态（只在触屏上有意义）：null = 还没同步过 */
+  private visible: boolean | null = null;
   private readonly game: Game;
 
   constructor(game: Game) {
@@ -138,6 +140,34 @@ export class TouchControls {
     const scaled = Math.min(1, (m - DEAD_ZONE) / (1 - DEAD_ZONE)) / (m || 1);
     this.moveX = mx * scaled;
     this.moveY = my * scaled;
+  }
+
+  /**
+   * 触摸控件只在"真在打"的时候上屏（样式里靠 `#touch-root.is-on` 开关）。
+   * 菜单 / 暂停 / 升级 / 商店 / 结算这些面板和它同一层，而它在 DOM 里更靠后、默认盖在上面：
+   * 844×390 的主菜单实测，右下角那两枚圆按钮正好压住"成就 / 设置"两行菜单键，
+   * 点击会被吃掉（按钮不响应点击，但事件也不会再落到下面的菜单上）；灯火选择那屏更糟，
+   * 左下摇杆加右下按钮同时压在两张灯火卡上。
+   */
+  setActive(on: boolean): void {
+    if (!this.isTouch) return;
+    if (on === this.visible) return;
+    this.visible = on;
+    this.root.classList.toggle('is-on', on);
+    // 手指还按着的时候切了状态（暂停 / 死亡 / 掉进竖屏）：直接松手，
+    // 不然恢复战斗后角色会带着上一次的摇杆输入自己往前跑。
+    if (!on) this.release();
+  }
+
+  /** 松开全部输入：摇杆归零、两个按钮弹起。 */
+  private release(): void {
+    this.active = false;
+    this.pointerId = -1;
+    this.moveX = 0;
+    this.moveY = 0;
+    this.dash = false;
+    this.nova = false;
+    this.knob.style.transform = 'translate(-50%, -50%)';
   }
 
   apply(target: { moveX: number; moveY: number; dash: boolean; nova: boolean }): void {

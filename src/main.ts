@@ -72,7 +72,9 @@ function boot(): void {
       input.update();
       const st = input.state;
       const snap = { moveX: st.moveX, moveY: st.moveY, dash: st.dash, nova: st.nova };
-      touch.apply(snap);
+      // 触摸控件只在真正在打的时候上屏：面板就在同一层，它会盖住面板右下角的按钮
+      touch.setActive(game.state === 'playing');
+      if (game.state === 'playing') touch.apply(snap);
       game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova);
       if (st.pause) {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
@@ -102,6 +104,8 @@ function boot(): void {
   const orientation = setupOrientation((blocked) => {
     if (blocked) {
       if (game.state === 'playing') game.togglePause();
+      // 主循环马上要停，最后一帧的状态得在这里收干净（竖屏牌盖着的时候控件不该还留在下面）
+      touch.setActive(false);
       wake.set(false);
       loop.stop();
     } else if (booted) {
