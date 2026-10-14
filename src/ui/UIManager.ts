@@ -1,7 +1,7 @@
 import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { META_TREE } from '../data/meta';
-import { PASSIVE_MAP } from '../data/upgrades';
+import { PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
 import { CODEX_SECTIONS } from '../systems/CodexSystem';
 import { RELIC_MAP, TRIBES } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
@@ -14,7 +14,7 @@ import { CURSE_MAP } from '../data/curses';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
-import type { Difficulty, MetaNodeDef, UpgradeOffer } from '../types';
+import type { Difficulty, MetaNodeDef, UpgradeOffer, WeaponStats } from '../types';
 
 export class UIManager implements UIHost {
   private root: HTMLElement;
@@ -249,15 +249,72 @@ export class UIManager implements UIHost {
     return '';
   }
 
+  /**
+   * 等级刻度：一格一级，已经拿到的亮着，这张卡要点亮的那一格在呼吸。
+   * 三选一里最该一眼看出的就是"这一张是把谁推到第几级"。
+   */
+  private levelPips(o: UpgradeOffer): string {
+    const pips = Array.from({ length: Math.max(1, o.maxLevel) }, (_, i) => {
+      const cls = i < o.level - 1 ? 'is-on' : i === o.level - 1 ? 'is-next' : '';
+      return `<i${cls ? ` class="${cls}"` : ''}></i>`;
+    }).join('');
+    return `<div class="card__pips" title="Lv ${o.level}/${o.maxLevel}">${pips}</div>`;
+  }
+
   private offerCard(o: UpgradeOffer): string {
     const tagLabel = o.tag === 'evolve' ? '进化' : o.tag === 'new' ? '新' : '升级';
     return `<button class="card" data-offer="${o.kind}:${o.id}" style="--accent:${o.color}">
       <div class="card__icon">${o.icon}</div>
-      <div class="card__tag">${tagLabel} · ${o.level}/${o.maxLevel}</div>
+      <div class="card__top">
+        <span class="card__tag">${tagLabel}</span>
+        <span class="card__lv">Lv ${o.level}/${o.maxLevel}</span>
+      </div>
+      ${this.levelPips(o)}
       <div class="card__name">${o.name}</div>
       <div class="card__blurb">${o.blurb}</div>
+      ${this.offerDelta(o, o.tag === 'evolve' ? 2 : 3)}
       ${this.evolutionHint(o)}
     </button>`;
+  }
+
+  /** 一行"这一级改了什么"：`伤害 12 → 15`。
+   *  升级卡光有一句简介不够——简介说的是这把武器是什么，玩家真正要权衡的是下一级的数。 */
+  private offerDelta(o: UpgradeOffer, max = 3): string {
+    const rows = this.deltaRows(o).slice(0, max);
+    if (!rows.length) return '';
+    const cells = rows
+      .map((r) => {
+        const from = r.from === undefined ? '' : `<span class="dl__from">${r.from}</span><span class="dl__arrow">→</span>`;
+        return `<span class="dl"><span class="dl__k">${r.k}</span>${from}<span class="dl__to">${r.to}</span></span>`;
+      })
+      .join('');
+    return `<div class="card__delta">${cells}</div>`;
+  }
+
+  private deltaRows(o: UpgradeOffer): { k: string; from?: string; to: string }[] {
+    if (o.kind === 'weapon') {
+      const cur = this.game.player.weapons.get(o.id) ?? 0;
+      if (o.tag === 'evolve') {
+        const pred = Object.entries(WEAPON_MAP).find(([, d]) => d.evolve?.into === o.id);
+        const before = pred ? weaponAt(pred[0], pred[1].levels.length) : null;
+        // 进化卡只留两行，而且先排"变强"的那几个：进化本来就是换一种打法，
+        // 进阶武器少一两发/少一层穿透是设计，把它当成"缩水"写出来只会误导。
+        return weaponRows(before, weaponAt(o.id, 1), ['damage', 'cooldown', 'range', 'speed', 'count', 'radius', 'pierce', 'knockback', 'burn', 'slow']);
+      }
+      if (o.tag === 'new') return weaponRows(null, weaponAt(o.id, 1));
+      return weaponRows(weaponAt(o.id, cur), weaponAt(o.id, cur + 1));
+    }
+    const before = this.game.player.previewStats();
+    const after = this.game.player.previewStats({ id: o.id, level: o.level });
+    const rows = PASSIVE_STAT_ROWS.filter((row) => changed(before[row.key], after[row.key]))
+      .map((row) => ({
+        k: row.label,
+        from: formatStat(row, before[row.key]),
+        to: formatStat(row, after[row.key]),
+        score: Math.abs(after[row.key] - before[row.key]) / Math.max(1e-6, Math.abs(before[row.key])),
+      }))
+      .sort((a, b) => b.score - a.score);
+    return rows;
   }
 
   private levelup(): void {
@@ -539,6 +596,7 @@ export class UIManager implements UIHost {
         <div class="shop-item__icon">${it.icon}</div>
         <div class="shop-item__name">${it.name}</div>
         <div class="shop-item__blurb">${it.blurb}</div>
+        ${it.offer ? this.offerDelta(it.offer, 2) : ''}
         <div class="shop-item__price">${it.sold ? '已售出' : `${it.price} 🪙`}</div>
       </button>`,
       )
@@ -1084,4 +1142,70 @@ export class UIManager implements UIHost {
     });
     this.on('[data-act="back"]', () => this.backToOrigin());
   }
+}
+
+/** 升级卡的能力对照表：只列"可能被被动改动"的那些，顺序即优先级。 */
+const PASSIVE_STAT_ROWS: { key: keyof PlayerStats; label: string; kind: 'int' | 'mult' | 'pct' | 'rate' | 'sec' }[] = [
+  { key: 'damageMult', label: '伤害', kind: 'mult' },
+  { key: 'maxHp', label: '生命上限', kind: 'int' },
+  { key: 'cooldownMult', label: '攻击冷却', kind: 'mult' },
+  { key: 'critChance', label: '暴击率', kind: 'pct' },
+  { key: 'critMult', label: '暴击伤害', kind: 'mult' },
+  { key: 'moveSpeed', label: '移动速度', kind: 'int' },
+  { key: 'areaMult', label: '技能范围', kind: 'mult' },
+  { key: 'pickupRange', label: '拾取范围', kind: 'int' },
+  { key: 'regen', label: '每秒回复', kind: 'rate' },
+  { key: 'healOnLight', label: '光照回复', kind: 'rate' },
+  { key: 'burnMult', label: '灼烧伤害', kind: 'mult' },
+  { key: 'oilDecayMult', label: '灯油耗', kind: 'mult' },
+  { key: 'oilGainMult', label: '掉落灯油', kind: 'mult' },
+  { key: 'dashCooldown', label: '冲刺冷却', kind: 'sec' },
+  { key: 'luck', label: '黑暗减速', kind: 'pct' },
+];
+
+function changed(a: number, b: number): boolean {
+  return Math.abs(a - b) > 1e-9;
+}
+
+function formatStat(row: (typeof PASSIVE_STAT_ROWS)[number], v: number): string {
+  if (row.kind === 'mult') return `×${v.toFixed(2)}`;
+  if (row.kind === 'pct') return `${Math.round(v * 100)}%`;
+  if (row.kind === 'rate') return `+${v.toFixed(1)}`;
+  if (row.kind === 'sec') return `${v.toFixed(2)}s`;
+  return `${Math.round(v)}`;
+}
+
+/** 武器卡的那几行：`before` 为空 = 这是把新武器，写它的身板而不是变化量。 */
+function weaponRows(
+  before: WeaponStats | null,
+  after: WeaponStats,
+  order?: (keyof WeaponStats)[],
+): { k: string; from?: string; to: string }[] {
+  const int = (v: number) => `${Math.round(v)}`;
+  const sec = (v: number) => `${v.toFixed(2)}s`;
+  // 光矛 / 冰川这种"打到天边"的武器在数据里写的是 99，那是实现细节，不该印到卡面上
+  const pierce = (v: number) => (v >= 90 ? '∞' : String(Math.round(v)));
+  if (!before) {
+    const rows: { k: string; from?: string; to: string }[] = [{ k: '伤害', to: int(after.damage) }];
+    if (after.cooldown > 0) rows.push({ k: '间隔', to: sec(after.cooldown) });
+    if (after.count > 1) rows.push({ k: '数量', to: int(after.count) });
+    if (after.pierce > 0) rows.push({ k: '穿透', to: pierce(after.pierce) });
+    return rows;
+  }
+  const fields: { key: keyof WeaponStats; label: string; fmt: (v: number) => string }[] = [
+    { key: 'damage', label: '伤害', fmt: int },
+    { key: 'count', label: '数量', fmt: int },
+    { key: 'cooldown', label: '间隔', fmt: sec },
+    { key: 'range', label: '距离', fmt: int },
+    { key: 'radius', label: '体积', fmt: int },
+    { key: 'pierce', label: '穿透', fmt: pierce },
+    { key: 'speed', label: '速度', fmt: int },
+    { key: 'knockback', label: '击退', fmt: int },
+    { key: 'burn', label: '灼烧', fmt: sec },
+    { key: 'slow', label: '减速', fmt: (v) => `${Math.round(v * 100)}%` },
+  ];
+  const listed = order ? order.map((k) => fields.find((f) => f.key === k)!).filter(Boolean) : fields;
+  return listed
+    .filter((f) => changed(before[f.key], after[f.key]))
+    .map((f) => ({ k: f.label, from: f.fmt(before[f.key]), to: f.fmt(after[f.key]) }));
 }

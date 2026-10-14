@@ -648,6 +648,15 @@ async function main() {
   const cards = await page.evaluate(() => window.__PROBE__.layout('[data-offer]'));
   expect(cards.count >= 3, '升级面板给出三张卡', `count=${cards.count}`);
   expect(cards.issues.length === 0, '升级卡都在视口内', cards.issues.join('; '));
+  const cardInfo = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('[data-offer]')];
+    const deltas = all.map((c) => (c.querySelector('.card__delta')?.textContent ?? '').trim());
+    const pips = all.map((c) => c.querySelectorAll('.card__pips i').length);
+    return { deltas, pips, lv: all.map((c) => (c.querySelector('.card__lv')?.textContent ?? '').trim()) };
+  });
+  expect(cardInfo.deltas.some((d) => d.length > 0), `升级卡要写出这一级改了什么（${JSON.stringify(cardInfo.deltas)}）`);
+  expect(cardInfo.pips.every((n) => n > 0), `每张卡都要有等级刻度（${cardInfo.pips.join(',')}）`);
+  expect(cardInfo.lv.every((t) => /^Lv \d+\/\d+$/.test(t)), `卡上要写清第几级（${cardInfo.lv.join(' | ')}）`);
   await shot('06-levelup');
   await page.click('[data-offer]');
   await sleep(250);

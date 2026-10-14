@@ -188,57 +188,84 @@ export class Player {
     return this.passives.get(id) ?? 0;
   }
 
-  recomputeStats(): void {
-    this.stats = { ...this.base };
+  /**
+   * 整套重算，但**只算不写**：把当前被动 / 遗物 / 共鸣 / 祭坛 / 灯台 / 局外加成
+   * 全部套一遍，返回新的属性与标志位。
+   *
+   * 之所以要拆出这个纯函数：升级面板得回答"点了这张卡我会变成什么样"，
+   * 而那需要把"某件被动再多一级"的属性算出来——算完不能留在玩家身上
+   * （还没点），也不能让预览本身把血条顶掉。
+   */
+  private computeStats(passiveOverride?: { id: string; level: number }): { stats: PlayerStats; flags: PlayerFlags } {
+    const stats: PlayerStats = { ...this.base };
     for (const [id, lvl] of this.passives) {
-      PASSIVE_MAP[id]?.apply(this.stats, lvl);
+      const level = passiveOverride?.id === id ? passiveOverride.level : lvl;
+      PASSIVE_MAP[id]?.apply(stats, level);
     }
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
+    if (passiveOverride && !this.passives.has(passiveOverride.id)) {
+      PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
+    }
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
-      if (m) this.applyRelicMods(m);
+      if (m) this.applyRelicMods(m, stats, flags);
     }
     // 灯火共鸣：同族遗物凑够数量，额外叠一档修正
     for (const tribe of TRIBES) {
       const tier = this.tribeTier(tribe.id);
-      for (let i = 0; i < tier; i += 1) this.applyRelicMods(tribe.tiers[i].mods);
+      for (let i = 0; i < tier; i += 1) this.applyRelicMods(tribe.tiers[i].mods, stats, flags);
     }
     const sm = this.shrineMods;
-    this.stats.damageMult *= sm.damageMult;
-    this.stats.maxHp *= sm.maxHpMult;
-    this.stats.oilDecayMult *= sm.oilDecayMult;
-    this.stats.moveSpeed *= sm.moveSpeedMult;
-    this.stats.critChance += sm.critChance;
-    this.flags.goldMult *= sm.goldMult;
-    this.stats.damageMult *= this.pyreMods.damageMult;
-    this.stats.moveSpeed *= this.metaMods.moveSpeedMult;
+    stats.damageMult *= sm.damageMult;
+    stats.maxHp *= sm.maxHpMult;
+    stats.oilDecayMult *= sm.oilDecayMult;
+    stats.moveSpeed *= sm.moveSpeedMult;
+    stats.critChance += sm.critChance;
+    flags.goldMult *= sm.goldMult;
+    stats.damageMult *= this.pyreMods.damageMult;
+    stats.moveSpeed *= this.metaMods.moveSpeedMult;
+    return { stats, flags };
+  }
+
+  recomputeStats(): void {
+    const { stats, flags } = this.computeStats();
+    this.stats = stats;
+    this.flags = flags;
     this.hp = Math.min(this.hp, this.stats.maxHp);
   }
 
-  /** 把一份遗物修正套用到当前属性上（遗物与共鸣共用同一套规则）。 */
-  private applyRelicMods(m: RelicMods): void {
-    if (m.damageMult) this.stats.damageMult *= 1 + m.damageMult;
-    if (m.maxHpMult) this.stats.maxHp *= 1 + m.maxHpMult;
-    if (m.pickupMult) this.stats.pickupRange *= 1 + m.pickupMult;
-    if (m.moveSpeedMult) this.stats.moveSpeed *= 1 + m.moveSpeedMult;
-    if (m.critChance) this.stats.critChance += m.critChance;
-    if (m.critMult) this.stats.critMult += m.critMult;
-    if (m.dashMult) this.stats.dashCooldown *= Math.max(0.25, 1 - m.dashMult);
-    if (m.regen) this.stats.regen += m.regen;
-    if (m.oilDecayMult) this.stats.oilDecayMult *= Math.max(0.1, 1 + m.oilDecayMult);
-    if (m.oilGainMult) this.stats.oilGainMult *= 1 + m.oilGainMult;
-    if (m.areaMult) this.stats.areaMult *= 1 + m.areaMult;
-    if (m.cooldownMult) this.stats.cooldownMult *= Math.max(0.3, 1 + m.cooldownMult);
-    this.flags.extraProjectiles += m.extraProjectiles ?? 0;
-    this.flags.lifesteal += m.lifesteal ?? 0;
-    this.flags.chill = Math.max(this.flags.chill, m.chill ?? 0);
-    this.flags.contactMult *= 1 + (m.contactMult ?? 0);
-    this.flags.goldMult *= 1 + (m.goldMult ?? 0);
-    this.flags.novaHeal += m.novaHeal ?? 0;
-    if (m.lowOilDamage) this.flags.lowOilDamage = Math.max(this.flags.lowOilDamage, m.lowOilDamage);
-    if (m.novaBuff) this.flags.novaBuff = Math.max(this.flags.novaBuff, m.novaBuff);
-    if (m.pyreBonus) this.flags.pyreBonus *= 1 + m.pyreBonus;
-    if (m.pyreGuard) this.flags.pyreGuard *= Math.max(0.25, 1 - m.pyreGuard);
+  /**
+   * 预览：`previewStats({ id, level })` 算出"那件被动到了这一级"时的属性；
+   * 不传参数就是"此刻重算一遍"，等于 `this.stats` 的一份副本。全程不改真身。
+   */
+  previewStats(passiveOverride?: { id: string; level: number }): PlayerStats {
+    return this.computeStats(passiveOverride).stats;
+  }
+
+  /** 把一份遗物修正套用到给过来的属性上（遗物与共鸣共用同一套规则）。 */
+  private applyRelicMods(m: RelicMods, stats: PlayerStats = this.stats, flags: PlayerFlags = this.flags): void {
+    if (m.damageMult) stats.damageMult *= 1 + m.damageMult;
+    if (m.maxHpMult) stats.maxHp *= 1 + m.maxHpMult;
+    if (m.pickupMult) stats.pickupRange *= 1 + m.pickupMult;
+    if (m.moveSpeedMult) stats.moveSpeed *= 1 + m.moveSpeedMult;
+    if (m.critChance) stats.critChance += m.critChance;
+    if (m.critMult) stats.critMult += m.critMult;
+    if (m.dashMult) stats.dashCooldown *= Math.max(0.25, 1 - m.dashMult);
+    if (m.regen) stats.regen += m.regen;
+    if (m.oilDecayMult) stats.oilDecayMult *= Math.max(0.1, 1 + m.oilDecayMult);
+    if (m.oilGainMult) stats.oilGainMult *= 1 + m.oilGainMult;
+    if (m.areaMult) stats.areaMult *= 1 + m.areaMult;
+    if (m.cooldownMult) stats.cooldownMult *= Math.max(0.3, 1 + m.cooldownMult);
+    flags.extraProjectiles += m.extraProjectiles ?? 0;
+    flags.lifesteal += m.lifesteal ?? 0;
+    flags.chill = Math.max(flags.chill, m.chill ?? 0);
+    flags.contactMult *= 1 + (m.contactMult ?? 0);
+    flags.goldMult *= 1 + (m.goldMult ?? 0);
+    flags.novaHeal += m.novaHeal ?? 0;
+    if (m.lowOilDamage) flags.lowOilDamage = Math.max(flags.lowOilDamage, m.lowOilDamage);
+    if (m.novaBuff) flags.novaBuff = Math.max(flags.novaBuff, m.novaBuff);
+    if (m.pyreBonus) flags.pyreBonus *= 1 + m.pyreBonus;
+    if (m.pyreGuard) flags.pyreGuard *= Math.max(0.25, 1 - m.pyreGuard);
   }
 
   /** 当前持有某一族遗物的数量。 */

@@ -1671,6 +1671,42 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
 .card__tag { letter-spacing: 2px; margin: 4px 0 7px; }
 .card__name { font-size: 19px; letter-spacing: 1px; margin-bottom: 7px; }
 
+/* 升级卡的第二行信息：这是谁的第几级（刻度），以及这一级到底改了什么（数字）。
+   简介说的是"这把武器是什么"，而三选一真正要权衡的是"下一级的数"——
+   所以刻度画在名字上面，数值对照压在卡片下沿，像仪表上的一格刻度 + 一行读数。 */
+.card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card__top .card__tag { margin: 4px 0 0; }
+.card__lv { font-size: 11px; letter-spacing: 1px; color: rgba(230, 220, 200, 0.5); font-variant-numeric: tabular-nums; }
+.card__pips { display: flex; gap: 3px; margin: 5px 0 8px; }
+.card__pips i { width: 13px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.13); }
+.card__pips i.is-on {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 65%, #fff), var(--accent));
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.card__pips i.is-next {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent), 0 0 8px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: pip-breathe 1.7s ease-in-out infinite;
+}
+@keyframes pip-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.card__delta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.card__delta .dl { display: inline-flex; align-items: baseline; gap: 4px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.card__delta .dl__k { color: rgba(230, 220, 200, 0.45); }
+.card__delta .dl__from { color: rgba(230, 220, 200, 0.4); }
+.card__delta .dl__arrow { font-size: 9px; color: rgba(255, 200, 120, 0.55); }
+.card__delta .dl__to { color: #ffe9bd; font-weight: 700; }
+.shop-item .card__delta { margin-top: 8px; padding-top: 6px; }
+
 /* 升级面板：像一张被灯照着的木案 */
 .panel--plank {
   border-radius: 10px;
@@ -2719,6 +2755,10 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .card__name { font-size: 16px; margin-bottom: 5px; }
   .card__blurb { font-size: 11.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .card__hint { margin-top: 5px; font-size: 11px; line-height: 1.35; }
+  .card__pips { margin: 3px 0 5px; }
+  .card__pips i { width: 11px; }
+  .card__delta { gap: 2px 8px; margin-top: 6px; padding-top: 5px; }
+  .card__delta .dl { font-size: 10.5px; }
   .card-grid { gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .row-actions { margin-top: 11px; }
 }
@@ -2736,6 +2776,8 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .card__icon { height: 23px; font-size: 19px; }
   .card__blurb { line-height: 1.35; }
   .card__hint { display: none; }
+  /* 一排三张卡上，数值对照留两条就够（排序时最有分量的那两条排在最前） */
+  .card__delta .dl:nth-child(n+3) { display: none; }
 }
 /* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘 ─────────────────────────
    两点都是手机上才有的问题：
@@ -2791,6 +2833,8 @@ body.is-touch .key { display: none; }
 @media (orientation: landscape) and (max-height: 380px) {
   .panel { padding: 10px 14px; }
   .title { font-size: clamp(20px, 5vw, 25px); }
+  /* 最矮的那一档（SE 那种 320~375）：数值对照只留一条，先保三张卡都点到 */
+  .card__delta .dl:nth-child(n+2) { display: none; }
   .subtitle { display: none; }
   .panel__title { font-size: 16px; margin-bottom: 7px; }
   .menu-buttons { gap: 5px; margin: 7px 0 5px; }
