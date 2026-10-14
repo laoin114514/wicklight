@@ -27,6 +27,8 @@ import { MetaSystem } from '../systems/MetaSystem';
 import { AchievementSystem } from '../systems/AchievementSystem';
 import { CodexSystem, type CodexEntry } from '../systems/CodexSystem';
 import { RecordsSystem, type RecordHighlight } from '../systems/RecordsSystem';
+import { BountySystem } from '../systems/BountySystem';
+import type { BountyDef } from '../data/bounties';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -138,6 +140,7 @@ export class Game {
   achievements: AchievementSystem;
   codex: CodexSystem;
   records: RecordsSystem;
+  bounties: BountySystem;
   /** 这一局的结局，结算界面据此换文案。 */
   runOutcome: 'clear' | 'defeat' | null = null;
   /** 这一局刷新掉的纪录，结算界面拿去做"新纪录"徽章。 */
@@ -223,6 +226,7 @@ export class Game {
     this.achievements = new AchievementSystem(this.save, (id) => this.onAchievement(id));
     this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
     this.records = new RecordsSystem(this.save);
+    this.bounties = new BountySystem();
     const startStage = STAGES[0];
     this.level = generateLevel(startStage, 1);
     this.director = new Director(startStage, this.difficulty, this.rng);
@@ -333,6 +337,7 @@ export class Game {
     this.runOutcome = null;
     this.recordHighlights = [];
     this.achievementEmbers = 0;
+    this.bounties.reset();
     this.codex.reset();
     this.codexTimer = 0;
     this.syncCodex();
@@ -385,7 +390,45 @@ export class Game {
       this.player.oil = Math.min(this.player.oilMax, this.player.oil + this.player.oilMax * 0.5);
     }
     this.rollCurse(stage, index, fresh);
+    this.rollBounty();
     this.titleFor(stage);
+  }
+
+  /**
+   * 每关贴一张悬赏。第一关也有——它不是难度修正，而是一个方向感：
+   * 让"这一关我要干嘛"除了"活下去"之外还有一个具体答案。
+   */
+  private rollBounty(): void {
+    const depth = this.endless ? STAGES.length - 1 + Math.floor(this.wave / 5) : this.stageIndex;
+    const def = this.bounties.roll(this.rng, depth);
+    const where = this.endless ? `第 ${this.wave} 波` : '本关';
+    this.hud?.toast(`${def.icon} 悬赏 · ${def.name}（${where}）`);
+  }
+
+  /** 悬赏完成：发金币与补给。奖励给金币而非余烬，等于把出价换成"下一关更强"。 */
+  private checkBounty(): void {
+    const def: BountyDef | null = this.bounties.takeCompleted();
+    if (!def) return;
+    const gold = Math.round(def.reward.gold * this.player.flags.goldMult * this.curseGoldMult);
+    this.gold += gold;
+    const lines = [`+${gold} 🪙`];
+    if (def.reward.heal) {
+      const heal = this.player.stats.maxHp * def.reward.heal;
+      this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + heal);
+      lines.push(`生命 +${Math.round(heal)}`);
+    }
+    if (def.reward.oil) {
+      this.player.oil = Math.min(this.player.oilMax, this.player.oil + this.player.oilMax * def.reward.oil);
+      lines.push('灯油 +');
+    }
+    this.save.records.bounties += 1;
+    this.storage.save(this.save);
+    this.achievements.unlock('bounty_first');
+    if (this.save.records.bounties >= 40) this.achievements.unlock('bounty40');
+    this.audio.play('evolve');
+    this.floaters.label(this.player.x, this.player.y - 34, `悬赏完成 ${def.icon} ${lines.join(' · ')}`, '#ffd24e', 16);
+    this.particles.shockwave(this.player.x, this.player.y, def.color, 120, 0.5);
+    this.hud?.toast(`✅ 悬赏完成 · ${def.name} — ${lines.join(' · ')}`);
   }
 
   /**
@@ -464,6 +507,8 @@ export class Game {
       return;
     }
     this.runTime += dt;
+    this.bounties.tick(dt);
+    this.checkBounty();
     this.codexTimer -= dt;
     if (this.codexTimer <= 0) {
       this.codexTimer = 0.75;
@@ -714,6 +759,7 @@ export class Game {
       hit: (e, damage, crit, kx, ky, kb, opts) => this.applyHit(e, damage, crit, kx, ky, kb, opts),
       findTarget: (x, y, maxDist, requireLight) => this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist)),
       chainZap: (x, y, damage, jumps, range, color, opts) => this.chainZap(x, y, damage, jumps, range, color, opts),
+      onNova: () => this.bounties.onNova(),
     };
   }
 
@@ -937,6 +983,7 @@ export class Game {
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;
     this.damageTaken += scaled;
+    this.bounties.onPlayerHit();
     this.hitStop = Math.max(this.hitStop, 0.05);
     this.audio.play('hurt');
     this.camera.addTrauma(0.35, this.settings.data.shake * this.settings.motionScale);
@@ -953,6 +1000,7 @@ export class Game {
     this.combo += 1;
     this.comboTimer = 2.2;
     this.bestCombo = Math.max(this.bestCombo, this.combo);
+    this.bounties.onCombo(this.combo);
     const tier = this.combo >= 50 ? 4 : this.combo >= 30 ? 3 : this.combo >= 15 ? 2 : this.combo >= 6 ? 1 : 0;
     if (tier > this.comboTier) {
       this.comboTier = tier;
@@ -964,6 +1012,7 @@ export class Game {
     }
     const def = ENEMY_MAP[e.defId];
     if (def) this.codex.discover('enemy', e.defId);
+    this.bounties.onKill(e.defId);
     if (e.defId === 'splinter') {
       this.splinterKills += 1;
       if (this.splinterKills >= 12) this.achievements.unlock('splinter_slain');
@@ -1376,6 +1425,7 @@ export class Game {
   leaveShop(): void {
     this.audio.play('ui');
     if (this.endless) {
+      this.rollBounty();
       this.state = 'playing';
       this.ui?.showScreen('playing');
       return;
@@ -1499,6 +1549,7 @@ export class Game {
     this.achievements = new AchievementSystem(this.save, (id) => this.onAchievement(id));
     this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
     this.records = new RecordsSystem(this.save);
+    this.bounties = new BountySystem();
     this.ui?.setMeta(this.meta);
   }
 

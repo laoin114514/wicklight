@@ -25,6 +25,7 @@ export function defaultRecords(): RecordsData {
     totalTime: 0,
     clearedRuns: 0,
     endlessRuns: 0,
+    bounties: 0,
     lanterns: {},
   };
 }

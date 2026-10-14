@@ -222,7 +222,7 @@ async function main() {
   expect(recLayout.issues.length === 0, '生涯档案布局正常', recLayout.issues.join('; '));
   const recText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
   expect(recText.includes('生涯档案'), '生涯档案标题正确');
-  const recParts = ['个人纪录', '灯火战绩', '最近对局', '累计击杀', '最高连杀'].filter((k) => !recText.includes(k));
+  const recParts = ['个人纪录', '灯火战绩', '最近对局', '累计击杀', '最高连杀', '完成悬赏'].filter((k) => !recText.includes(k));
   expect(recParts.length === 0, '生涯档案分区齐全', recParts.join(','));
   expect(!/undefined|NaN/.test(recText), '生涯档案没有缺字段', recText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
   const recLanterns = await page.evaluate(() => document.querySelectorAll('.rec-lantern').length);
@@ -268,9 +268,21 @@ async function main() {
 
   await page.keyboard.press('Space'); // 冲刺
   await sleep(300);
+  // 先走完可能已经排队的升级面板：真实击杀会不会刚好升级取决于时序，
+  // 不排空的话 Esc / Tab 会被升级面板挡下，测试就变成看运气。
+  const drainLevelUps = async () => {
+    for (let i = 0; i < 6; i += 1) {
+      const st = await page.evaluate(() => window.__PROBE__.state());
+      if (!st || st.state !== 'levelup') return;
+      await page.click('[data-offer]');
+      await sleep(220);
+    }
+  };
+
   // 打满一整轮：等敌人走进灯火，再用燃爆收场
   let kills = 0;
   for (let i = 0; i < 10 && kills === 0; i += 1) {
+    await drainLevelUps();
     await page.keyboard.down(i % 2 === 0 ? 'KeyA' : 'KeyD');
     await sleep(700);
     await page.keyboard.up(i % 2 === 0 ? 'KeyA' : 'KeyD');
@@ -278,10 +290,30 @@ async function main() {
     await sleep(900);
     kills = (await page.evaluate(() => window.__WICKLIGHT__.game.kills));
   }
+  await drainLevelUps();
 
   const play = await page.evaluate(() => window.__PROBE__.state());
   expect(play && play.state === 'playing', '战斗进行中', JSON.stringify(play));
   expect(play && play.kills > 0, '真实按键操作下产生了击杀', `kills=${play.kills}`);
+
+  // ── 悬赏：HUD 上应常驻一张本关悬赏，并且进度真的在动 ──
+  const bounty = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const st = g.bounties.state;
+    const el = document.querySelector('.hud__bounty');
+    const r = el?.getBoundingClientRect();
+    return st
+      ? { name: st.def.name, kind: st.kind, target: st.target, progress: st.progress, done: st.done, text: el?.textContent ?? '', on: el?.classList.contains('is-on') ?? false, w: Math.round(r?.width ?? 0), left: Math.round(r?.left ?? 0) }
+      : null;
+  });
+  expect(!!bounty, '开局就贴了一张悬赏');
+  expect(bounty.text.includes(bounty.name), 'HUD 悬赏芯片显示了悬赏名', bounty.text);
+  expect(bounty.on, '悬赏芯片可见');
+  expect(bounty.left >= 0 && bounty.left + bounty.w <= 1280, '悬赏芯片没有溢出视口', JSON.stringify(bounty));
+  const clash = await page.evaluate(() => window.__PROBE__.overlaps('.hud__topleft', '.hud__bounty'));
+  expect(clash.length === 0, '悬赏追踪不压住左上角状态条', clash.join('; '));
+  const bountyLayout = await page.evaluate(() => window.__PROBE__.layout('.hud__bounty'));
+  expect(bountyLayout.issues.length === 0, '悬赏芯片布局正常', bountyLayout.issues.join('; '));
   const hudText = await page.evaluate(() => window.__PROBE__.text('.hud') ?? document.body.innerText.slice(0, 200));
   expect(hudText && hudText.length > 0, 'HUD 有内容');
   const playCanvas = await page.evaluate(() => window.__PROBE__.canvasStats());
@@ -289,6 +321,8 @@ async function main() {
   const hudLayout = await page.evaluate(() => window.__PROBE__.layout('.hud, .hud__top, .hud__bottom'));
   expect(hudLayout.issues.length === 0, 'HUD 元素都在视口内', hudLayout.issues.join('; '));
   await shot('04-play');
+
+  await drainLevelUps();
 
   // ── 4. 暂停 ──
   await page.keyboard.press('Escape');
@@ -302,6 +336,7 @@ async function main() {
   await sleep(250);
 
   // ── 4b. 构筑总览（Tab）──
+  await drainLevelUps();
   await page.keyboard.press('Tab');
   await sleep(300);
   const sheetState = await page.evaluate(() => window.__PROBE__.state());
@@ -523,6 +558,16 @@ async function main() {
   await sleep(1500);
   const mobileOverlap = await mobile.evaluate(() => window.__PROBE__.overlaps('#touch-stick', '.hud__build'));
   expect(mobileOverlap.length === 0, '移动端摇杆不遮挡构筑信息', mobileOverlap.join('; '));
+  const mobBounty = await mobile.evaluate(() => window.__PROBE__.layout('.hud__bounty'));
+  expect(mobBounty.issues.length === 0, '移动端悬赏芯片布局正常', mobBounty.issues.join('; '));
+  const mobClash = await mobile.evaluate(() => [
+    ...window.__PROBE__.overlaps('.hud__topleft', '.hud__bounty'),
+    ...window.__PROBE__.overlaps('.hud__topright', '.hud__bounty'),
+    ...window.__PROBE__.overlaps('.hud__build', '.hud__bounty'),
+    ...window.__PROBE__.overlaps('.hud__bounty', '.hud__stage'),
+  ]);
+  expect(mobClash.length === 0, '移动端悬赏芯片不压住状态栏 / 构筑信息 / 关卡名', mobClash.join('; '));
+
   const mobileAnn = await mobile.evaluate(() => window.__PROBE__.wraps('.announce'));
   expect(!mobileAnn || mobileAnn.count <= 1, '移动端公告不折行', JSON.stringify(mobileAnn));
 

@@ -79,9 +79,13 @@ npm run preview
 - **图鉴（编年史）**：100 个条目——15 种敌人（含精英与首领的应对说明）、16 件武器与进化、
   32 件遗物、14 个被动、7 种夜咒、9 种精英词缀、4 位灯火、3 张关卡。
   一切"被玩家看见过"的东西都会被记录，没见过的显示为问号；填满图鉴另有两项收集成就。
+- **悬赏（每关一张）**：每关开局随机贴一张小目标——猎杀契约（本关清掉 N 只指定敌人）、
+  烽火（连杀堆到 15 / 25）、燃爆（本关放 3 / 5 次）、静默（连续 45 / 75 秒不受伤）。
+  奖励一律是金币与补给而非余烬：金币只在局内花得掉，等于把出价换成"下一关更强"。
+  HUD 左侧常驻任务追踪，构筑总览里也能翻到。悬赏池会随关卡深度放开（第一关不会让你去打还没出场的敌人）。
 - **生涯档案**：结算时把每一局沉淀下来——个人纪录（最高连杀 / 单局击杀 / 单局伤害 / 最快通关……
   与结算界面的「🏅 新纪录」徽章联动）、四盏灯火各自的战绩对比，以及最近 12 局的战报列表。
-- **22 项成就 / 统计 / 本地存档**：成就解锁时额外发放余烬（共 1105 点），直接喂给局外解锁树；
+- **24 项成就 / 统计 / 本地存档**：成就解锁时额外发放余烬（共 1200 点），直接喂给局外解锁树；
   全部写入 `localStorage`，无后端。
 
 ## 画面与手感
@@ -115,7 +119,7 @@ node tools/render.mjs --scene boss1 --crop 560,240,260,180 --zoom 4
 ## 测试
 
 ```bash
-npm test          # 10 套离线测试（Node + 自研软件光栅化 Canvas）
+npm test          # 11 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 ```
@@ -125,8 +129,8 @@ npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长
 `tools/playtest.mjs` 会用 Playwright 启动**真实 Chromium**，通过内置的零依赖静态服务器打开构建产物，
 用真实键盘/鼠标走一遍完整流程，并把每一屏截图写到 `/tmp/wl/shots/`：
 
-- 菜单 → 图鉴 → 生涯档案 → 选灯火 / 难度 → 开局 → 真实按键移动 / 冲刺 / 燃爆 → 暂停 → 升级面板 →
-  商店 → 祭坛 → 死亡结算 → 余烬解锁树 → 设置 → 成就 → 生涯档案（战报已记录）→ 无尽之夜；
+- 菜单 → 图鉴 → 生涯档案 → 选灯火 / 难度 → 开局 → 真实按键移动 / 冲刺 / 燃爆（同时校验 HUD 上的悬赏追踪）
+  → 暂停 → 升级面板 → 商店 → 祭坛 → 死亡结算 → 余烬解锁树 → 设置 → 成就 → 生涯档案（战报已记录）→ 无尽之夜；
 - 同时对每一屏做**布局体检**（元素是否零尺寸、是否超出视口、页面是否出现滚动条、
   公告是否折行压住 HUD、触屏摇杆是否遮挡构筑信息）与**画布像素体检**（画面是否真的画出了东西）；
 - 并断言全程没有 `console.error`、未捕获异常与资源加载失败；移动端另跑一遍 390×844 竖屏。
@@ -148,6 +152,9 @@ npx playwright install chromium && npx playwright install-deps chromium
 - `data`：武器等级曲线单调、进化链闭合、遗物/夜咒字段完整，叠加全部遗物后属性仍然有限可用。
 - `codex`：图鉴条目无重复且条条有名称与说明、分类不为空；击杀敌人后立刻记录、
   玩家持有的武器/被动/遗物会被扫描进来、发现是幂等的、进度确实写进存档。
+- `bounty`：悬赏表字段完整、猎杀目标都指向真实存在且当关可行的敌人；
+  四种计数（猎杀 / 连杀 / 燃爆 / 静默）都能推进与完成，只发一次奖；
+  静默挨打会清零、换关会重抽；HUD 与构筑总览都要显示且无缺字段。
 - `records`：死亡与通关都会结算（通关同样给余烬）；纪录只升不降、更差的一局不会覆盖；
   战报按时间倒序累积、灯火战绩分别统计；成就余烬真的进账且不重复发放；
   界面渲染干净，老存档缺 `records` / `history` 字段也能平滑迁移。
@@ -201,10 +208,10 @@ wicklight/
 │   ├── core/    Game · Loop · Renderer · Camera · Input · PostFX · LightSystem
 │   │            Pool · Random · MathUtils · Events · Storage · Settings · Textures · Assets
 │   ├── audio/   AudioEngine
-│   ├── data/    weapons · upgrades · enemies · stages · lanterns · meta · achievements
+│   ├── data/    weapons · upgrades · enemies · stages · lanterns · meta · achievements · bounties
 │   ├── entities/ Player · Bullet(Projectile) · Pickup · Particle · enemies/Enemy(+behaviors)
 │   ├── systems/ Director · LevelGen · CollisionSystem · UpgradeSystem · LootSystem
-│   │            MetaSystem · AchievementSystem · CodexSystem · RecordsSystem · DifficultySystem
+│   │            MetaSystem · AchievementSystem · CodexSystem · RecordsSystem · BountySystem · DifficultySystem
 │   ├── ui/      HUD · UIManager · TouchControls
 │   ├── styles/  main.css
 │   ├── main.ts · types.ts

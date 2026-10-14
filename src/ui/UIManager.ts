@@ -296,6 +296,14 @@ export class UIManager implements UIHost {
       ? `<div class="lo-curse"><b>${g.curse.name}</b><span>${g.curse.blurb}</span></div>`
       : '<div class="lo-empty">本关暂无夜咒</div>';
 
+    const b = g.bounties.state;
+    const bounty = b
+      ? `<div class="lo-bounty ${b.done ? 'is-done' : ''}" style="--c:${b.def.color}">
+          <b>${b.def.icon} ${b.def.name}</b>
+          <span>${b.done ? '已完成 · 奖励已发放' : `${b.def.blurb}（${g.bounties.label}）· 奖励 ${b.def.reward.gold} 金币`}</span>
+        </div>`
+      : '<div class="lo-empty">本关没有悬赏</div>';
+
     this.show(`
       <div class="panel panel--loadout">
         <div class="panel__title">构筑总览</div>
@@ -323,6 +331,8 @@ export class UIManager implements UIHost {
             ${relics || '<div class="lo-empty">还没有遗物</div>'}
             <h4>夜咒</h4>
             ${curse}
+            <h4>悬赏</h4>
+            ${bounty}
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
@@ -592,6 +602,7 @@ export class UIManager implements UIHost {
       ['累计击杀', `${save.killsTotal}`],
       ['累计守夜', UIManager.hours(rec.totalTime)],
       ['通关次数', `${rec.clearedRuns}`],
+      ['完成悬赏', `${rec.bounties}`],
       ['无尽最佳', `${save.bestEndlessWave} 波`],
       ['当前余烬', `${save.embers}`],
     ]

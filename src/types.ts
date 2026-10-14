@@ -212,6 +212,8 @@ export interface RecordsData {
   totalTime: number;
   clearedRuns: number;
   endlessRuns: number;
+  /** 累计完成的悬赏数 */
+  bounties: number;
   lanterns: Record<string, LanternRecord>;
 }
 

@@ -18,6 +18,8 @@ export interface PlayerContext {
   hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number }) => boolean;
   findTarget: (x: number, y: number, maxDist: number, requireLight?: boolean) => Enemy | null;
   chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number }) => void;
+  /** 燃爆真正放出去的那一刻（用于悬赏计数等）。 */
+  onNova: () => void;
 }
 
 export interface PlayerFlags {
@@ -308,6 +310,7 @@ export class Player {
       knock = 760;
     }
     const color = style === 'lamplighter' ? '#7be0ff' : style === 'shadewalker' ? '#ff4d6d' : '#ffb14e';
+    ctx.onNova();
     ctx.audio('nova');
     ctx.shake(0.5);
     ctx.particles.shockwave(this.x, this.y, color, radius, 0.5);

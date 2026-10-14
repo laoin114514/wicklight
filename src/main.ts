@@ -11,6 +11,7 @@ import { PASSIVES as passives } from './data/upgrades';
 import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies } from './data/enemies';
 import { AFFIXES as affixes } from './data/affixes';
+import { BOUNTIES as bounties } from './data/bounties';
 
 function boot(): void {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -34,7 +35,7 @@ function boot(): void {
     hud,
     touch,
     // 供测试/调试读取的静态数据表（无副作用）
-    data: { weapons, relics, passives, curses },
+    data: { weapons, relics, passives, curses, bounties },
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes },
   };
@@ -79,7 +80,7 @@ function boot(): void {
     render: () => game.render(),
   });
 
-  void [weapons, relics, passives, curses, enemies, affixes];
+  void [weapons, relics, passives, curses, enemies, affixes, bounties];
 
   const ready = () => {
     game.renderer.setQuality(game.settings.data.quality);

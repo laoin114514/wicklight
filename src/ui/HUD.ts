@@ -22,6 +22,8 @@ export class HUD implements HUDHost {
   private comboBar!: HTMLElement;
   private curseEl!: HTMLElement;
   private curseSig = '~';
+  private bountyEl!: HTMLElement;
+  private bountySig = '~';
   private buildSig = '';
   private bossWrap!: HTMLElement;
   private bossName!: HTMLElement;
@@ -65,6 +67,7 @@ export class HUD implements HUDHost {
         <i class="hud__combo-bar"><u class="js-combo-bar"></u></i>
       </div>
       <div class="hud__curse js-curse"></div>
+      <div class="hud__bounty js-bounty"></div>
       <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · 自动开火 · Esc 暂停</div>
     `;
     this.root.appendChild(hud);
@@ -88,6 +91,7 @@ export class HUD implements HUDHost {
     this.comboNum = q('.js-combo-n');
     this.comboBar = q('.js-combo-bar');
     this.curseEl = q('.js-curse');
+    this.bountyEl = q('.js-bounty');
 
     const build = document.createElement('div');
     build.className = 'hud__build';
@@ -176,6 +180,27 @@ export class HUD implements HUDHost {
     this.curseEl.classList.add('is-on');
   }
 
+  /** 本关悬赏：进度条随击杀 / 连杀 / 燃爆 / 静默计时推进。 */
+  private updateBounty(): void {
+    const b = this.game.bounties.state;
+    const sig = b ? `${b.def.id}:${b.done}:${Math.floor(b.progress)}` : '~';
+    if (sig === this.bountySig) return;
+    this.bountySig = sig;
+    if (!b) {
+      this.bountyEl.textContent = '';
+      this.bountyEl.classList.remove('is-on');
+      return;
+    }
+    const frac = this.game.bounties.frac;
+    this.bountyEl.innerHTML =
+      `<b>${b.def.icon} ${b.def.name}</b>` +
+      `<span>${b.done ? '✓ 已完成' : this.game.bounties.label}</span>` +
+      `<i><u style="width:${Math.round(frac * 100)}%"></u></i>`;
+    this.bountyEl.style.setProperty('--c', b.def.color);
+    this.bountyEl.classList.toggle('is-done', b.done);
+    this.bountyEl.classList.add('is-on');
+  }
+
   update(dt: number): void {
     const g = this.game;
     this.hpFill.style.width = `${Math.max(0, (g.player.hp / g.player.stats.maxHp) * 100)}%`;
@@ -193,6 +218,7 @@ export class HUD implements HUDHost {
     this.stageEl.textContent = stage;
     this.setBoss(g.bossName, g.bossFrac);
     this.updateCurse();
+    this.updateBounty();
 
     const comboOn = g.combo >= 3;
     if (comboOn !== this.comboEl.classList.contains('is-on')) this.comboEl.classList.toggle('is-on', comboOn);

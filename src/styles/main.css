@@ -885,3 +885,43 @@ body.is-touch .hud__hint { display: none; }
   .rec-run { flex-wrap: wrap; }
 }
 .hl--more { background: none; border-style: dashed; border-color: rgba(255, 200, 90, 0.3); color: var(--text-dim); box-shadow: none; }
+
+/* ── 悬赏 ── */
+/* 悬赏做成左侧的"任务追踪"：顶部中央是公告与 toast 的地盘，别去挤。 */
+.hud__bounty {
+  position: absolute;
+  left: 18px;
+  top: 116px;
+  width: 200px;
+  display: grid;
+  gap: 3px;
+  padding: 8px 12px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--c, #ffd24e);
+  background: rgba(8, 7, 12, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--c, #ffd24e);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.hud__bounty.is-on { opacity: 0.94; }
+.hud__bounty.is-done { opacity: 0.55; }
+.hud__bounty b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud__bounty span { color: var(--text-dim); font-size: 11px; }
+.hud__bounty i { display: block; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.hud__bounty i u { display: block; height: 100%; background: var(--c, #ffd24e); transition: width 0.2s ease; }
+
+.lo-bounty { padding: 8px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.04); border-left: 2px solid var(--c, #ffd24e); }
+.lo-bounty b { color: var(--c, #ffd24e); font-size: 13px; }
+.lo-bounty span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-dim); }
+.lo-bounty.is-done { opacity: 0.65; }
+
+/* 触屏左侧已经被构筑信息占了，悬赏追踪改挂到右上角状态栏下面 */
+body.is-touch .hud__bounty { left: auto; right: 12px; top: 136px; }
+
+@media (max-width: 640px) {
+  .hud__bounty { width: 150px; font-size: 10.5px; padding: 6px 9px 7px; }
+}

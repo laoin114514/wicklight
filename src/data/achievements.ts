@@ -21,6 +21,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'endless40', name: '长夜不熄', blurb: '在无尽模式抵达第 40 波。', embers: 120 },
   { id: 'codex50', name: '博物学者', blurb: '图鉴中记录 50 个条目。', embers: 80 },
   { id: 'codex_all', name: '无所不窥', blurb: '把图鉴里的条目全部点亮。', embers: 200 },
+  { id: 'bounty_first', name: '赏金猎人', blurb: '完成第一次悬赏。', embers: 15 },
+  { id: 'bounty40', name: '赏金贯日', blurb: '累计完成 40 次悬赏。', embers: 80 },
   { id: 'runs25', name: '长明不熄', blurb: '累计进行 25 局冒险。', embers: 60 },
   { id: 'clears3', name: '三度长明', blurb: '累计通关 3 次。', embers: 90 },
 ];
