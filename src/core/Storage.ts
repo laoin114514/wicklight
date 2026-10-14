@@ -47,6 +47,19 @@ function safeParse(raw: string | null): Partial<SaveData> | null {
   }
 }
 
+/**
+ * 系统里开了"减少动态效果"（iOS 的辅助功能 / 安卓的无障碍）就照做：屏幕震动、
+ * 故障切片、抖动这一套对新存档默认关掉。玩家在设置里改过之后以存档为准。
+ */
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
 export class Storage {
   private memory: SaveData | null = null;
   private available: boolean;
@@ -59,7 +72,15 @@ export class Storage {
     if (this.memory) return this.memory;
     const base = defaultSave();
     if (this.available) {
-      const parsed = safeParse(localStorage.getItem(KEY));
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(KEY);
+      } catch {
+        raw = null;
+      }
+      const parsed = safeParse(raw);
+      // 没有存档 = 第一次玩：这时候才按系统偏好来（老存档一律尊重玩家自己的选择）
+      if (!parsed && prefersReducedMotion()) base.settings.reduceMotion = true;
       if (parsed) {
         this.memory = {
           ...base,

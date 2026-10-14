@@ -93,6 +93,12 @@ function boot(): void {
   // 竖屏闸门：手机横过来之前不跑主循环——竖屏那点视野本来也没法玩，
   // 而且省下的这些帧正好留给转屏动画。
   let booted = false;
+  // 切到后台（接电话、切应用、锁屏）自动暂停：rAF 本来就停了，但直接回到战场上，
+  // 玩家会先挨一顿打才反应过来。回来时停在暂停面板上，由玩家自己决定何时继续。
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && game.state === 'playing') game.togglePause();
+  });
+
   const orientation = setupOrientation((blocked) => {
     if (blocked) {
       if (game.state === 'playing') game.togglePause();

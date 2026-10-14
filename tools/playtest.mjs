@@ -1269,6 +1269,23 @@ async function main() {
   await mobile.click('[data-act="resume"]');
   await sleep(400);
 
+  // 切到后台（接电话 / 切应用 / 锁屏）要自动暂停：回来时别站在怪堆里
+  const bgPaused = await mobile.evaluate(async () => {
+    const desc = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 80));
+    const state = window.__WICKLIGHT__.game.state;
+    const hasResume = !!document.querySelector('[data-act="resume"]');
+    if (desc) Object.defineProperty(Document.prototype, 'hidden', desc);
+    delete document.hidden;
+    return { state, hasResume };
+  });
+  expect(bgPaused.state === 'paused', '切到后台会自动暂停', JSON.stringify(bgPaused));
+  expect(bgPaused.hasResume, '后台回来停在暂停面板上', JSON.stringify(bgPaused));
+  await mobile.click('[data-act="resume"]');
+  await sleep(400);
+
   // 手机上的设置面板多一项触感开关，点一下要真的翻转并存进设置
   await mobile.evaluate(() => window.__WICKLIGHT__.game.togglePause());
   await sleep(320);
@@ -1286,6 +1303,28 @@ async function main() {
     return { text: el ? el.textContent.trim() : null, value: window.__WICKLIGHT__.game.settings.data.vibrate };
   });
   expect(hapAfter.value === !hapBefore.value && hapAfter.text !== hapBefore.text, '触感开关点得动、写得进设置', JSON.stringify({ hapBefore, hapAfter }));
+
+  // 全新存档 + 系统的"减少动态效果"：第一次玩就该按系统偏好来（存档为空才这么做）
+  const freshCtx = await browser.newContext({ viewport: { width: 900, height: 500 } });
+  const freshPage = await freshCtx.newPage();
+  await freshPage.emulateMedia({ reducedMotion: 'reduce' });
+  await freshPage.goto(base, { waitUntil: 'load' });
+  await freshPage.waitForFunction(() => !!window.__WICKLIGHT__, null, { timeout: 20000 });
+  const rmFresh = await freshPage.evaluate(() => ({
+    reduceMotion: window.__WICKLIGHT__.game.settings.data.reduceMotion,
+    motionScale: window.__WICKLIGHT__.game.settings.motionScale,
+  }));
+  expect(rmFresh.reduceMotion === true && rmFresh.motionScale === 0, '新存档会跟随系统的"减少动态效果"', JSON.stringify(rmFresh));
+  // 玩过一局之后（存档里有玩家自己的选择）就不再被系统偏好覆盖
+  await freshPage.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.settings.set('reduceMotion', false);
+  });
+  await freshPage.reload({ waitUntil: 'load' });
+  await freshPage.waitForFunction(() => !!window.__WICKLIGHT__, null, { timeout: 20000 });
+  const rmKept = await freshPage.evaluate(() => window.__WICKLIGHT__.game.settings.data.reduceMotion);
+  expect(rmKept === false, '玩家自己关掉"减少动态效果"之后，系统偏好不再覆盖存档', String(rmKept));
+  await freshCtx.close();
 
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));

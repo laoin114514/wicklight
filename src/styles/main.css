@@ -697,6 +697,12 @@ body.is-touch .hud__pause { display: grid; }
 }
 .hud__pause:active { transform: scale(0.94); }
 
+/* 系统里开了"减少动态效果"：提示牌那盏翻倒的提灯也别晃了 */
+@media (prefers-reduced-motion: reduce) {
+  .rotate__lamp,
+  .rotate__lamp i { animation: none; }
+}
+
 /* ── Shop ── */
 .panel--shop { width: min(94vw, 860px); }
 .shop-wallet { text-align: center; color: var(--text-dim); margin-bottom: 14px; letter-spacing: 1px; }
