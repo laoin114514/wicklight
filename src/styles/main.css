@@ -663,6 +663,40 @@ body {
 }
 .touch-btn--nova { background: rgba(70, 36, 10, 0.7); border-color: var(--amber); }
 
+/* 暂停键：只给触屏（桌面有 Esc/P，HUD 不必多一个按钮）。
+   挂在右上角记分栏的左上角外侧——那一块在横屏下是空的，而且它绝对定位，不参与 grid 排版，
+   所以既不会把记分栏撑高，也不会跟任何芯片抢位置。 */
+.hud__pause {
+  display: none;
+  position: absolute;
+  left: -44px;
+  top: -2px;
+  width: 36px;
+  height: 36px;
+  grid-auto-flow: column;
+  place-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(196, 158, 96, 0.5);
+  background: radial-gradient(circle at 50% 35%, rgba(46, 38, 30, 0.92), rgba(14, 13, 17, 0.86));
+  color: var(--amber-bright);
+  pointer-events: auto;
+  touch-action: manipulation;
+  animation: none;
+}
+body.is-touch .hud__pause { display: grid; }
+.hud__pause i {
+  display: block;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 0 6px rgba(255, 190, 110, 0.55);
+}
+.hud__pause:active { transform: scale(0.94); }
+
 /* ── Shop ── */
 .panel--shop { width: min(94vw, 860px); }
 .shop-wallet { text-align: center; color: var(--text-dim); margin-bottom: 14px; letter-spacing: 1px; }

@@ -77,6 +77,7 @@ const SELS = [
   '#touch-stick',
   '.touch-buttons',
   '.announce',
+  '.hud__pause',
 ];
 
 const WS = (process.env.WS || '568,640,740,844,915,1024').split(',').map(Number);

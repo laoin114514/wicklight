@@ -167,6 +167,12 @@ const instrument = () => {
       g.light.setScale(g.renderer.dpr);
     }
     if (kill === 'world') g.drawWorld = () => {};
+    // 地面那一块拆开量：陈设 / 细节 / 墙都是数据，清空即可（画布命令数按子系统数得出来）
+    if (kill === 'decor' && g.level) g.level.decor = [];
+    if (kill === 'details' && g.level) g.level.details = [];
+    if (kill === 'walls' && g.level) g.level.walls = [];
+    if (kill === 'shrines' && g.level) g.level.shrines = [];
+    if (kill === 'pyres' && g.level) g.level.pyres = [];
     if (kill === 'pointers') g.drawTargetPointers = () => {};
     if (kill === 'glow') g.drawPyreGlow = () => {};
     if (kill === 'hud') g.hud.update = () => {};

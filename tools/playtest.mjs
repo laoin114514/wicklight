@@ -1243,6 +1243,32 @@ async function main() {
   expect(cancelSafe.afterCancel === false, 'touchcancel（来电 / 系统手势）要松开冲刺，不能卡住', JSON.stringify(cancelSafe));
   expect(cancelSafe.afterEnd === false, '抬起冲刺按钮要松开', JSON.stringify(cancelSafe));
 
+  // 手机上的暂停入口：键盘的 Esc 在手机上不存在，HUD 得有一个按钮，
+  // 而且它不能压住记分栏（它就是挂在记分栏左上角外侧的那一枚）
+  const pauseBtn = await mobile.evaluate(() => {
+    const el = document.querySelector('.hud__pause');
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    const chip = document.querySelector('.hud__topright').getBoundingClientRect();
+    const overlapping = !(b.right <= chip.left + 1 || b.left >= chip.right - 1 || b.bottom <= chip.top + 1 || b.top >= chip.bottom - 1);
+    return { w: Math.round(b.width), h: Math.round(b.height), x: Math.round(b.left), y: Math.round(b.top), overlapping };
+  });
+  expect(pauseBtn !== null, '手机上 HUD 有暂停按钮', JSON.stringify(pauseBtn));
+  expect(pauseBtn && pauseBtn.w >= 32 && pauseBtn.h >= 32, '暂停按钮够大，手指点得中', JSON.stringify(pauseBtn));
+  expect(pauseBtn && !pauseBtn.overlapping, '暂停按钮不压住记分栏', JSON.stringify(pauseBtn));
+  await mobile.click('.hud__pause');
+  await sleep(350);
+  const pausedByTap = await mobile.evaluate(() => ({
+    state: window.__WICKLIGHT__.game.state,
+    hasResume: !!document.querySelector('[data-act="resume"]'),
+    wake: window.__WICKLIGHT__.wake.wanted,
+  }));
+  expect(pausedByTap.state === 'paused', '点暂停按钮会暂停', JSON.stringify(pausedByTap));
+  expect(pausedByTap.hasResume, '暂停面板出来了（手机上的构筑总览从这里进）', JSON.stringify(pausedByTap));
+  expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
+  await mobile.click('[data-act="resume"]');
+  await sleep(400);
+
   // 手机上的设置面板多一项触感开关，点一下要真的翻转并存进设置
   await mobile.evaluate(() => window.__WICKLIGHT__.game.togglePause());
   await sleep(320);

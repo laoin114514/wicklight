@@ -61,6 +61,7 @@ export class HUD implements HUDHost {
         <div class="hud__level">Lv <b>1</b></div>
       </div>
       <div class="hud__topright">
+        <button class="hud__pause" data-act="pause" type="button" aria-label="暂停"><i></i><i></i></button>
         <div class="hud__stat"><span>波次</span><b class="js-wave">0</b></div>
         <div class="hud__stat"><span>时间</span><b class="js-time">0:00</b></div>
         <div class="hud__stat"><span>击杀</span><b class="js-kill">0</b></div>
@@ -84,6 +85,9 @@ export class HUD implements HUDHost {
     `;
     this.root.appendChild(hud);
     this.hudEl = hud;
+    // 手机上唯一的暂停入口（键盘的 Esc / P 在手机上不存在）：暂停面板里才有构筑总览。
+    // tabindex 与 aria-label 都有了，键盘（桌面）按不到也没关系——桌面上它是 hidden 的。
+    hud.querySelector('.hud__pause')?.addEventListener('click', () => this.game.togglePause());
 
     const q = <T extends HTMLElement>(sel: string) => hud.querySelector(sel) as T;
     this.hpFill = hud.querySelector('.bar--hp i') as HTMLElement;
