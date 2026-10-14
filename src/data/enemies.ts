@@ -1,0 +1,25 @@
+import type { EnemyDef } from '../types';
+
+export const ENEMIES: EnemyDef[] = [
+  { id: 'shade', name: '影蛭', hp: 14, speed: 68, radius: 13, damage: 8, xp: 3, oil: 4, behavior: 'chase', color: '#4a5b8f', minWave: 1 },
+  { id: 'crawler', name: '砾行者', hp: 12, speed: 52, radius: 12, damage: 10, xp: 4, oil: 3, behavior: 'dash', color: '#8f6f4a', minWave: 1 },
+  { id: 'spitter', name: '喷糜者', hp: 20, speed: 40, radius: 15, damage: 9, xp: 6, oil: 5, behavior: 'ranged', color: '#6f4a8f', minWave: 2 },
+  { id: 'moth', name: '灯蛾', hp: 18, speed: 96, radius: 14, damage: 7, xp: 5, oil: 6, behavior: 'dive', color: '#a58f4a', minWave: 3 },
+  { id: 'bulwark', name: '石守', hp: 90, speed: 34, radius: 22, damage: 14, xp: 12, oil: 10, behavior: 'tank', color: '#5a5f6f', minWave: 4 },
+  { id: 'oilsapper', name: '蚀烛', hp: 30, speed: 74, radius: 16, damage: 6, xp: 8, oil: 0, behavior: 'drain', color: '#8f4a6f', minWave: 5 },
+  { id: 'bomber', name: '爆裂菇', hp: 26, speed: 56, radius: 17, damage: 26, xp: 7, oil: 6, behavior: 'bomber', color: '#c96a2f', minWave: 3 },
+  { id: 'splinter', name: '碎魂', hp: 34, speed: 62, radius: 16, damage: 11, xp: 7, oil: 6, behavior: 'chase', color: '#5f86d0', minWave: 4, splits: { id: 'shade', count: 2 } },
+  { id: 'lancer', name: '刺脊', hp: 30, speed: 74, radius: 15, damage: 14, xp: 8, oil: 6, behavior: 'charge', color: '#c85a86', minWave: 5 },
+  { id: 'beacon', name: '引灯', hp: 48, speed: 44, radius: 17, damage: 10, xp: 11, oil: 10, behavior: 'beacon', color: '#e8d38a', minWave: 6 },
+
+  { id: 'wickmother', name: '烛母', hp: 320, speed: 42, radius: 34, damage: 16, xp: 90, oil: 60, behavior: 'chase', color: '#c96a2f', elite: true, minWave: 1 },
+  { id: 'darkless', name: '无光者', hp: 400, speed: 58, radius: 32, damage: 20, xp: 110, oil: 70, behavior: 'chase', color: '#2b2b3a', elite: true, lightShy: true, requiresLight: true, minWave: 1 },
+
+  { id: 'thornlord', name: '荆棘领主', hp: 1500, speed: 34, radius: 50, damage: 20, xp: 380, oil: 200, behavior: 'chase', color: '#6f9c3f', boss: true, phases: 3 },
+  { id: 'extinguisher', name: '熄灯者', hp: 2600, speed: 40, radius: 56, damage: 24, xp: 400, oil: 220, behavior: 'chase', color: '#3a2f5a', boss: true, phases: 3 },
+  { id: 'emberwake', name: '焚天', hp: 4200, speed: 46, radius: 64, damage: 30, xp: 620, oil: 320, behavior: 'ranged', color: '#a52a1f', boss: true, phases: 3 },
+];
+
+export const ENEMY_MAP: Record<string, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.id, e]));
+
+export const NORMAL_ENEMIES = ENEMIES.filter((e) => !e.elite && !e.boss).map((e) => e.id);

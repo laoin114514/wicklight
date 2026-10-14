@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#07080c" />
+    <meta name="description" content="灯芯 WICKLIGHT — 灯火即视野与火力的暗夜生存动作肉鸽" />
+    <title>WICKLIGHT · 灯芯</title>
+    <link rel="stylesheet" href="./src/styles/main.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <canvas id="game" class="game-canvas" aria-label="游戏画面"></canvas>
+      <div id="fx" class="fx-root" aria-hidden="true"></div>
+      <div id="ui-root" class="ui-root"></div>
+      <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+      <div id="touch-root" class="touch-root" aria-hidden="true">
+        <div id="touch-stick" class="touch-stick" data-role="stick">
+          <div class="touch-stick__base" data-role="stick-base"></div>
+          <div class="touch-stick__knob" data-role="stick-knob"></div>
+        </div>
+        <div class="touch-buttons">
+          <button class="touch-btn touch-btn--dash" data-action="dash" type="button">冲刺</button>
+          <button class="touch-btn touch-btn--nova" data-action="nova" type="button">燃爆</button>
+        </div>
+      </div>
+
+      <div id="boot-screen" class="boot">
+        <div class="boot__flame"></div>
+        <div class="boot__logo">WICK<span>LIGHT</span></div>
+        <div class="boot__sub">灯芯 · 让光活下去</div>
+        <div class="boot__bar"><i></i></div>
+        <div class="boot__hint" id="boot-hint">正在点燃灯芯…</div>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="noscript">本游戏需要启用 JavaScript 才能运行。</div>
+    </noscript>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
