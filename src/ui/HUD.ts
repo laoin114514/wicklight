@@ -140,6 +140,16 @@ export class HUD implements HUDHost {
     window.setTimeout(() => el.remove(), 2600);
   }
 
+  /** 首次遭遇的提示卡：比 toast 多一行说明，停得也久一些（7 秒）。 */
+  tip(title: string, text: string): void {
+    const el = document.createElement('div');
+    el.className = 'toast toast--tip';
+    el.innerHTML = `<b>${title}</b><span>${text}</span>`;
+    this.toastRoot.appendChild(el);
+    window.setTimeout(() => el.classList.add('is-out'), 6400);
+    window.setTimeout(() => el.remove(), 7200);
+  }
+
   announce(text: string, big = false): void {
     this.announceEl.textContent = text;
     this.announceEl.className = `announce is-show${big ? ' is-big' : ''}`;

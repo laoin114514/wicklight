@@ -52,7 +52,7 @@ const BEHAVIOR_LABEL: Record<string, string> = {
 };
 
 /** 关卡险境的玩家向说法。 */
-const HAZARD_LABEL: Record<string, string> = {
+export const HAZARD_LABEL: Record<string, string> = {
   fog: '浓雾',
   meteor: '陨石雨',
   collapse: '塌方',
@@ -60,6 +60,20 @@ const HAZARD_LABEL: Record<string, string> = {
   eruption: '熔岩喷发',
   oilvoid: '灯油枯竭',
   echoes: '回声涌来',
+};
+
+/**
+ * 险境的打法提示：第一次遇上某个险境时弹一次。
+ * 险境每十几秒就来一次，但"该怎么应对"不该靠死几次学会。
+ */
+export const HAZARD_TIP: Record<string, string> = {
+  fog: '视野会被压到只剩灯焰周围一圈，先往空地挪，别在敌群里硬撑。',
+  meteor: '落点先亮一圈预警，站进去就挨砸——边走边打，别在原地待着。',
+  collapse: '地面会被砸开，短时间内别贴着墙和石堆走。',
+  wispstorm: '相位风暴会撕碎灯光，视野忽明忽暗；先把灯油补满再进敌群。',
+  eruption: '熔岩喷发留下的火海会封路，把它当成会移动的墙。',
+  oilvoid: '灯油被直接抽走——那几秒灯火又暗又弱，先退开再说。',
+  echoes: '会从远处刷出「回响」：它们追的是你一秒前的位置，走折线，别直线跑。',
 };
 
 const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;

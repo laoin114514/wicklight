@@ -275,6 +275,8 @@ export interface SaveData {
   settings: SettingsData;
   /** 首局的开局引导是否已经放完（老存档没有这个字段，等于没放过）。 */
   hintsSeen?: boolean;
+  /** 已经弹过的"首次遭遇"提示（精英 / 首领 / 险境），只弹一次。 */
+  tips?: string[];
 }
 
 export interface SettingsData {

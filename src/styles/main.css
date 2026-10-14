@@ -554,6 +554,21 @@ body {
 .announce.is-big { font-size: clamp(20px, 2.7vw, 34px); color: #fff; }
 
 .toast-root { display: flex; flex-direction: column; align-items: center; gap: 6px; justify-content: flex-start; padding-top: 90px; }
+/* 首次遭遇的提示卡：比普通 toast 宽、有左色条、两行 */
+.toast--tip {
+  display: grid;
+  gap: 2px;
+  max-width: min(92vw, 520px);
+  padding: 9px 16px 10px;
+  border-radius: 12px;
+  border-left: 3px solid var(--amber);
+  background: rgba(12, 10, 14, 0.88);
+  text-align: left;
+  animation: toastin 0.3s ease;
+}
+.toast--tip b { color: var(--amber-bright); font-size: 13.5px; letter-spacing: 1px; }
+.toast--tip span { color: var(--text-dim); font-size: 12px; line-height: 1.45; letter-spacing: 0.4px; }
+
 .toast {
   pointer-events: none;
   padding: 8px 16px;

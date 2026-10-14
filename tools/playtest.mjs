@@ -357,7 +357,29 @@ async function main() {
   expect(playCanvas && playCanvas.litFrac > 0.02, '战斗画面有实际内容', JSON.stringify(playCanvas));
   const hudLayout = await page.evaluate(() => window.__PROBE__.layout('.hud, .hud__top, .hud__bottom'));
   expect(hudLayout.issues.length === 0, 'HUD 元素都在视口内', hudLayout.issues.join('; '));
-  await shot('04-play');
+
+  // ── 首次遭遇提示：精英登场时要给一句"怎么打" ──
+  const tip = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.tips = [];
+    g.enemies.clear();
+    const e = g.enemies.spawn('wickmother', g.player.x + 260, g.player.y, 1, 1);
+    g.applyAffix(e, 'warded');
+    g.scanEncounters();
+    g.enemies.clear();
+    const el = [...document.querySelectorAll('.toast--tip')].pop();
+    const r = el?.getBoundingClientRect();
+    return {
+      text: (el?.innerText ?? '').replace(/\n/g, ' '),
+      w: Math.round(r?.width ?? 0),
+      h: Math.round(r?.height ?? 0),
+      left: Math.round(r?.left ?? 0),
+      right: Math.round(r?.right ?? 0),
+    };
+  });
+  expect(/烛母/.test(tip.text) && /咒盾/.test(tip.text), '首次遇到精英弹出提示卡', tip.text);
+  expect(tip.w > 0 && tip.h > 0 && tip.left >= 0 && tip.right <= 1280, '提示卡有尺寸且在视口内', JSON.stringify(tip));
+  await shot('04b-tip');
 
   await drainLevelUps();
 

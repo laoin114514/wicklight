@@ -31,6 +31,7 @@ import { BountySystem } from '../systems/BountySystem';
 import type { BountyDef } from '../data/bounties';
 import { BOUNTY_MAP } from '../data/bounties';
 import { CURSE_MAP } from '../data/curses';
+import { HAZARD_LABEL, HAZARD_TIP } from '../systems/CodexSystem';
 import { buildDailyPlan, dailyKey, dailyLabel, dailyScore, defaultDaily, type DailyPlan } from '../systems/DailySystem';
 import type { DailySave } from '../types';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
@@ -136,6 +137,8 @@ export interface UIHost {
 export interface HUDHost {
   setBoss(name: string | null, frac: number): void;
   toast(text: string): void;
+  /** 首次遭遇的提示卡（标题 + 一行说明）。 */
+  tip(title: string, text: string): void;
   announce(text: string, big?: boolean): void;
 }
 
@@ -613,6 +616,7 @@ export class Game {
     if (this.codexTimer <= 0) {
       this.codexTimer = 0.75;
       this.syncCodex();
+      this.scanEncounters();
     }
     this.light.begin();
     this.particles.update(dt);
@@ -1441,6 +1445,36 @@ export class Game {
     this.codexBatchCount = 0;
   }
 
+  /**
+   * 首次遭遇精英 / 首领时弹一张打法提示。
+   *
+   * 每只精英还随机带一条词缀，所以提示按「敌人 + 词缀」去重：
+   * 同一个"咒盾烛母"只讲一次，下次换个词缀再讲——玩家学到的是具体的应对，而不是一句"小心"。
+   */
+  private scanEncounters(): void {
+    this.enemies.forEach((e) => {
+      if (!e.def.boss && !e.def.elite) return;
+      const affix = e.affix ? AFFIX_MAP[e.affix] : null;
+      const head = e.def.boss ? '首领' : '精英';
+      const parts = [e.def.note ?? '', affix ? `${affix.name}：${affix.blurb}` : ''];
+      this.showTip(
+        `${e.defId}|${e.affix ?? ''}`,
+        `${head} · ${e.def.name}${affix ? ` · ${affix.name}` : ''}`,
+        parts.filter(Boolean).join('　'),
+      );
+    });
+  }
+
+  /** 弹一张提示卡（同一条只弹一次，之后写进存档）。 */
+  showTip(key: string, title: string, text: string): boolean {
+    const seen = (this.save.tips ??= []);
+    if (seen.includes(key)) return false;
+    seen.push(key);
+    this.storage.save(this.save);
+    this.hud?.tip(title, text);
+    return true;
+  }
+
   private gainXp(amount: number): void {
     this.xp += amount;
     while (this.xp >= this.xpToNext) {
@@ -1599,6 +1633,8 @@ export class Game {
 
   private handleHazard(kind: string): void {
     const p = this.player;
+    const tip = HAZARD_TIP[kind];
+    if (tip) this.showTip(`hazard:${kind}`, `险境 · ${HAZARD_LABEL[kind] ?? kind}`, tip);
     switch (kind) {
       case 'meteor':
       case 'collapse': {
