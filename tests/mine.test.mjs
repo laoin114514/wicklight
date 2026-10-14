@@ -257,6 +257,86 @@ test('伏灯：一圈按距离衰减，进化的那颗还留一片火', async (t
   assert.equal(plain.grounds.length, 0, '1 级的伏灯只炸一圈，不留火');
 });
 
+test('伏灯：排得密会连爆成一串，而且是一节一节烧过去的', async (t) => {
+  const game = await open(t, 'chain');
+  const MINE = MINE_OF();
+  // 三颗排成一条线，间距（50）小于一颗的爆炸半径（60）——连爆够得着
+  game.placeMine(0, 0, 40, 60, 30, 0);
+  game.placeMine(50, 0, 40, 60, 30, 0);
+  game.placeMine(100, 0, 40, 60, 30, 0);
+  const e = statue(game, 0, 0);
+  game.mines.forEach((m) => {
+    m.arm = 0;
+  });
+  run(game, 1, 0, 0);
+  assert.equal(game.mines.length, 2, '第一颗被踩响：这一帧只该少一颗');
+  // 一串是**一蹦一蹦**烧过去的：这一炸只点得着挨着的那一颗，
+  // 隔了一颗远（100px > 爆炸半径 60）的那颗此刻还得凉着。
+  const lit = game.mines.filter((m) => m.fuse > 0);
+  const cold = game.mines.filter((m) => m.fuse === 0);
+  assert.equal(lit.length, 1, '只该点着挨着的那一颗');
+  assert.equal(cold.length, 1, '隔了一颗远的那颗还凉着（连爆够不着它）');
+  assert.equal(lit[0].link, 1, '被点着的那颗记着自己是这一串的第二节');
+  assert.equal(lit[0].arm, 0, '点着的同时就该免掉上弦——它已经被"用掉"了');
+  assert.equal(lit[0].fuseX, 0, '引信从前面那一颗的落点烧过来');
+  // 引信烧完，第二颗响，这才点着第三颗
+  run(game, Math.ceil(MINE.chainFuse * 60) + 2, 0, 0);
+  assert.equal(game.mines.length, 1, '第二颗接着响');
+  assert.ok(game.mines[0].fuse > 0, '第三颗这时才被点着');
+  assert.equal(game.mines[0].link, 2, '第三节');
+  run(game, Math.ceil(MINE.chainFuse * 60) + 2, 0, 0);
+  assert.equal(game.mines.length, 0, '第三颗也顺着响完——一串三颗');
+  assert.equal(game.mineChainBest, 3, `最长一串该记 3 颗（实际 ${game.mineChainBest}）`);
+  assert.ok(e.hp < 1e6 - 50, `一串炸过去掉得该比单响多（hp=${e.hp}）`);
+
+  // 引信点着了就不再看有没有人来踩：上弦还没走完、场上一个敌人都没有，时间到照样响
+  const solo = await open(t, 'fuse');
+  solo.placeMine(0, 0, 40, 60, 30, 0);
+  solo.mines[0].arm = MINE.arm;
+  solo.mines[0].fuse = MINE.chainFuse;
+  run(solo, 1, 0, 0);
+  assert.equal(solo.mines.length, 1, '引信还没烧到头');
+  run(solo, Math.ceil(MINE.chainFuse * 60) + 2, 0, 0);
+  assert.equal(solo.mines.length, 0, '引信烧到头就该响（它已经不为踩踏服务了）');
+
+  // 排得开就一颗一颗响：两百像素外那颗既够不着、也不该被点着
+  const apart = await open(t, 'apart');
+  apart.placeMine(0, 0, 40, 60, 30, 0);
+  apart.placeMine(200, 0, 40, 60, 30, 0);
+  statue(apart, 0, 0);
+  apart.mines.forEach((m) => {
+    m.arm = 0;
+  });
+  run(apart, 20, 0, 0);
+  assert.equal(apart.mines.length, 1, '离得远的那颗还在（连爆够不着它）');
+  assert.equal(apart.mines[0].fuse, 0, '它的引信没被点着');
+  assert.equal(apart.mineChainBest, 1, '这一响只是单响');
+});
+
+test('伏灯：一串连到 4 颗解「一串灯」，结算里写出最长的一串', async (t) => {
+  const game = await open(t, 'chain4');
+  const MINE = MINE_OF();
+  assert.equal(game.save.achievements.includes('minechain'), false, '开局不该有这个成就');
+  for (let i = 0; i < 4; i += 1) game.placeMine(i * 40, 0, 40, 60, 30, 0);
+  statue(game, 0, 0);
+  game.mines.forEach((m) => {
+    m.arm = 0;
+  });
+  run(game, 2 + Math.ceil(MINE.chainFuse * 60) * 4, 0, 0);
+  assert.equal(game.mines.length, 0, '四颗应当一路串到底');
+  assert.equal(game.mineChainBest, 4, `最长一串该是 4 颗（实际 ${game.mineChainBest}）`);
+  assert.ok(game.save.achievements.includes('minechain'), '串到 4 颗该解锁「一串灯」');
+  assert.ok(game.ui.statsBlock().includes('最长一串'), '结算面板里应写出最长的一串');
+  // 单响不该在结算里凑出"最长一串"那一行
+  const solo = await open(t, 'chain4solo');
+  solo.placeMine(0, 0, 40, 60, 30, 0);
+  statue(solo, 0, 0);
+  solo.mines[0].arm = 0;
+  run(solo, 3, 0, 0);
+  assert.equal(solo.mineChainBest, 1);
+  assert.ok(!solo.ui.statsBlock().includes('最长一串'), '只单响过就不该写"最长一串"');
+});
+
 test('伏灯：一次炸到五只解「伏击」', async (t) => {
   const game = await open(t, 'ach');
   assert.equal(game.save.achievements.includes('mine_multi'), false, '开局不该有这个成就');

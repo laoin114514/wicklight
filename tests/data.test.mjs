@@ -61,6 +61,10 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(mine.fireDps > 0 && mine.fireLife > 0, '进化留下的那片火要有时间也有伤害');
   assert.ok(mine.multiHit >= 3, '「伏击」的门槛不该一颗雷炸一下就够');
   assert.ok(mine.lightRadius > mine.glow, '照亮周围的光该比灯身那圈光晕大');
+  assert.ok(mine.chainReach >= 0.5, '连爆够得着的范围不该比一颗的爆炸半径小太多（那样就永远串不起来）');
+  assert.ok(mine.chainFuse > 0 && mine.chainFuse < mine.arm, '连爆的引信要短到"一串"听起来像一串，又不为 0（同一帧一起炸就只剩一团白光）');
+  assert.ok(mine.chainFuse >= 2 / 60, '引信至少得让人看见几帧，不然连爆在画面上是"瞬移"');
+  assert.ok(mine.chainBest >= 3, '「一串灯」的门槛不该一颗雷加一颗邻居就够');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

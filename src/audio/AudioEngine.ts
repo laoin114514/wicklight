@@ -116,7 +116,11 @@ export class AudioEngine {
     src.stop(t + dur + 0.02);
   }
 
-  play(name: string): void {
+  /**
+   * 播一个音效。`step` 目前只有连爆用它——一串雷依次响起来的时候，
+   * 每一节要比上一节高一点，耳朵才听得出"这是个串"。
+   */
+  play(name: string, step = 0): void {
     if (!this.started) return;
     switch (name) {
       case 'shoot':
@@ -166,6 +170,13 @@ export class AudioEngine {
         break;
       case 'evolve':
         this.tone(440, 0.5, 'triangle', 0.14, 1320);
+        break;
+      case 'chain':
+        // 连爆：一串雷被挨个点着。压得比引爆本身轻（它是"串起来了"这件事的提示，
+        // 不是又炸了一次），音高随节数一级一级往上走。
+        if (this.throttle('chain', 45)) {
+          this.tone(430 + step * 130, 0.09, 'square', 0.055, 880 + step * 170);
+        }
         break;
       case 'graze':
         // 掠影：一声很轻的"叮"。它一秒钟能响好几下，所以压得比别的都低、节流也更狠

@@ -6,7 +6,7 @@
  *   node tools/playtest.mjs [--headed] [--keep]
  */
 import { createServer } from 'node:http';
-import { readFile, stat, mkdir } from 'node:fs/promises';
+import { readFile, stat, mkdir, writeFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -591,6 +591,117 @@ async function main() {
   expect(litMine > 40, '地上那盏伏灯真的画出来了（摆了雷，那片像素亮起来）', `变亮像素 ${litMine} 个`);
   await shot('03d-mine');
 
+  // ── 3a6. 连爆：一蹦一蹦地烧过去，不是同一帧一起炸 ──
+  // 四颗雷排成一条线（间距 50px < 一颗的爆炸半径 60px），石守站在离人最近的那颗上
+  // （它半径 22 + 触发 40 = 62，挨着的那颗也在它的圈里——所以这里顺带验了
+  // "一帧只响一颗、而且响离怪最近的那一颗"）。
+  // 这一段必须是**真的帧**：引信烧的是真时间，离线测试里把 arm 抹成 0 再空跑推不出
+  // "每一节各占一帧"。采样器挂在 requestAnimationFrame 上，逐帧记'还活着哪几颗、哪几颗引信在烧'。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.mines.length = 0;
+    g.mineChainBest = 0;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    // 这一局手里那把伏灯会一直往地上撒新的雷（站着不动就撒在脚边），把账搅乱——先摘掉。
+    // （3a5 结尾本来就要把武器还回去，这里不必自己恢复。）
+    p.weapons.clear();
+    [150, 200, 250, 300].forEach((x, i) => {
+      g.placeMine(x, 0, 40, 60, 40, 0);
+      g.mines[g.mines.length - 1].cid = i;
+      g.mines[g.mines.length - 1].arm = 0;
+    });
+    // 这一波还在刷怪。引信只隔 0.09 秒，随便一只新刷出来的影蛭踩歪一颗，
+    // "一串四颗"就量不干净了——把导演挂起一会儿（下面原样还回去），场上只留摆好的那一只。
+    const d = g.director;
+    window.__DIR__ = { phase: d.phase, intro: d.introTimer, spawn: d.spawnTimer, spawned: d.spawned, wave: d.wave, hazard: d.hazardTimer };
+    d.phase = 'intro';
+    d.introTimer = 1e9;
+    d.hazardTimer = 1e9;
+    const e = g.enemies.spawn('bulwark', 150, 0, 1, 0);
+    e.hp = 1e6;
+    e.maxHp = 1e6;
+    e.speed = 0;
+    e.spawnTimer = 0;
+    const log = [];
+    let shotData = null;
+    let frames = 0;
+    let blown = 0;
+    let prevLen = 4;
+    const step = () => {
+      const gg = window.__WICKLIGHT__.game;
+      const mine = gg.mines.filter((m) => m.cid !== undefined);
+      log.push({
+        alive: mine.map((m) => m.cid),
+        lit: mine.filter((m) => m.fuse > 0).map((m) => m.cid),
+        foes: gg.enemies.count,
+      });
+      // 引信正烧着的那一帧把画面存下来：一蹦一蹦中间的样子，截图才拍得到。
+      // 特意等火花烧到半路（而不是刚点着那一帧）——刚点着的时候火花头还贴在上一颗的残骸上，
+      // 图里看不出"有一根引信正在烧"。引信总共约 5 帧，blow 过半大概落在第 2~3 帧。
+      if (mine.length < prevLen) blown += 1;
+      prevLen = mine.length;
+      // 等烧到第二跳之后再截：头一炸的白光还盖在地上，引信那点火花画在一团爆闪旁边就等于没画。
+      // 第二跳的起点是上一颗的残骸（一颗熄灭的小灯），火花这时候才看得清。
+      const fuseMax = window.__WICKLIGHT__.data.mines.chainFuse;
+      if (!shotData && blown >= 2 && mine.some((m) => m.fuse > 0 && m.fuse <= fuseMax * 0.8)) {
+        shotData = gg.renderer.canvas.toDataURL('image/png');
+      }
+      frames += 1;
+      if (frames < 90) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    window.__CHAIN__ = { log: () => log, shot: () => shotData };
+  });
+  await sleep(1700);
+  const chain = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const c = window.__CHAIN__;
+    return { log: c.log(), shot: c.shot(), best: g.mineChainBest, ach: g.save.achievements.includes('minechain') };
+  });
+  const chainLog = chain.log;
+  // 第一响和"开局那四颗"之间必须比一次：引信是 0.09 秒，石守踩上去那一帧可能就落在
+  // 第一个采样点之前（采样器挂上 rAF 的时候，世界已经又走过一帧了）——不垫这一下会漏掉头一响。
+  const drops = [];
+  let prev = [0, 1, 2, 3];
+  for (let i = 0; i < chainLog.length; i += 1) {
+    if (chainLog[i].alive.length < prev.length) drops.push(i);
+    prev = chainLog[i].alive;
+  }
+  expect(
+    chainLog.every((r) => r.foes === 1),
+    '这 1.7 秒里场上只有摆好的那一只（没被新刷的怪踩歪）',
+    `敌人数量 ${[...new Set(chainLog.map((r) => r.foes))].join('/')}`,
+  );
+  expect(drops.length === 4, '四颗雷全都响了', `响了几次：${drops.length}`);
+  expect(new Set(drops).size === drops.length, '每颗各占一帧（不是同一帧一起炸）', JSON.stringify(drops));
+  const gaps = drops.slice(1).map((f, i) => f - drops[i]);
+  expect(
+    gaps.every((d) => d >= 3 && d <= 12),
+    '一节和一节之间隔着引信那 0.09 秒（约 5 帧）',
+    `间隔帧数 ${JSON.stringify(gaps)}`,
+  );
+  const firstLit = chainLog[drops[0]]?.lit ?? [];
+  expect(firstLit.length === 1, '第一炸只点着挨着它的那一颗（够不着的不点）', JSON.stringify(firstLit));
+  expect(
+    (chainLog[drops[0]]?.alive ?? []).length === 3,
+    '这一炸只少一颗（另外三颗还在原地）',
+    JSON.stringify(chainLog[drops[0]]?.alive),
+  );
+  expect(chain.best === 4, '最长的一串记 4 颗', `mineChainBest=${chain.best}`);
+  expect(chain.ach, '串到 4 颗解「一串灯」');
+  if (chain.shot) {
+    await writeFile(join(SHOTS, '03e-mine-chain.png'), Buffer.from(String(chain.shot).split(',')[1], 'base64'));
+    ok('连爆中间那一帧存了下来', '03e-mine-chain.png');
+  } else {
+    fail('连爆中间那一帧存了下来', '采样器没抓到引信烧着的那一帧');
+  }
+
   // 图鉴里认得这两件：名字与进化都该在
   const mineCodex = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -609,6 +720,17 @@ async function main() {
     const p = g.player;
     g.mines.length = 0;
     g.enemies.clear();
+    if (window.__DIR__) {
+      const d = g.director;
+      d.phase = window.__DIR__.phase;
+      d.introTimer = window.__DIR__.intro;
+      d.spawnTimer = window.__DIR__.spawn;
+      d.spawned = window.__DIR__.spawned;
+      d.wave = window.__DIR__.wave;
+      d.hazardTimer = window.__DIR__.hazard;
+      delete window.__DIR__;
+    }
+    delete window.__CHAIN__;
     p.weapons.clear();
     for (const [id, lv] of window.__SAVED_WEAPONS__ ?? []) p.weapons.set(id, lv);
     p.x = 0;

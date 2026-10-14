@@ -183,6 +183,13 @@ interface Mine {
   fire: number;
   /** 画面上的一点随机相位：一排雷不该同步地闪 */
   phase: number;
+  /** 连爆引信：> 0 表示"被旁边那一颗点着了"，正在读秒（这期间不再等踩，只等引信烧完） */
+  fuse: number;
+  /** 点着它的那一颗在哪（地上那道烧过来的火花要从这儿画起） */
+  fuseX: number;
+  fuseY: number;
+  /** 这是这一串里的第几节（0 = 被踩响的那一颗；音高与成就都看这个数） */
+  link: number;
 }
 
 /** 地上的一盏弃灯（「分灯」放下的）。 */
@@ -373,6 +380,8 @@ export class Game {
   mines: Mine[] = [];
   /** 本局一共布下过多少颗（结算用）。 */
   mineCount = 0;
+  /** 本局连爆过的最长一串有几颗（结算用；1 = 只是单响） */
+  mineChainBest = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -529,6 +538,7 @@ export class Game {
     this.lampCount = 0;
     this.mines.length = 0;
     this.mineCount = 0;
+    this.mineChainBest = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -2090,7 +2100,21 @@ export class Game {
   placeMine(x: number, y: number, damage: number, radius: number, trigger: number, fire: number): void {
     // 地上最多留六颗：不给上限的话，一路小跑就能铺出一条雷带（见 data/mines.ts）
     if (this.mines.length >= MINE.max) this.mines.shift();
-    this.mines.push({ x, y, life: MINE.life, arm: MINE.arm, damage, radius, trigger, fire, phase: this.rng.next() * 6.283 });
+    this.mines.push({
+      x,
+      y,
+      life: MINE.life,
+      arm: MINE.arm,
+      damage,
+      radius,
+      trigger,
+      fire,
+      phase: this.rng.next() * 6.283,
+      fuse: 0,
+      fuseX: x,
+      fuseY: y,
+      link: 0,
+    });
     this.mineCount += 1;
     // 第一次布下伏灯就把「机制」那一章的条目记上（图鉴里的数是现取的，改调参会自己跟上）
     this.codex.discover('mechanic', 'mine');
@@ -2104,6 +2128,13 @@ export class Game {
    */
   private resolveMines(dt: number): void {
     if (!this.mines.length) return;
+    // 这一帧有没有谁被踩响。一帧只响一颗，而且响的是**离怪最近的那一颗**：
+    // 雷撒得密的时候（落点间距中位数只有 16px，见 README 的台架记录），
+    // 一只怪常常同时站在两三颗雷的触发圈里——按数组顺序随便挑一颗的话，
+    // 爆炸中心会飘到怪脚边之外，而且被点着的邻居会从两个方向同时烧（一格串被拆成两半）。
+    // 挑最近的那颗，爆炸就正好在它脚下，一串灯也只从脚下往外烧。
+    let stepped = -1;
+    let steppedDist = Infinity;
     for (let i = this.mines.length - 1; i >= 0; i -= 1) {
       const m = this.mines[i];
       m.life -= dt;
@@ -2115,18 +2146,28 @@ export class Game {
         this.particles.burst(m.x, m.y, 6, '#8b7f6a', { speed: 60, size: 2, life: 0.5 });
         continue;
       }
+      // 引信点着了：这颗已经"有主"了，不再等踩踏，只等引信烧到脚边
+      if (m.fuse > 0) {
+        m.fuse -= dt;
+        if (m.fuse <= 0) this.detonateMine(m, i);
+        continue;
+      }
       if (m.arm > 0) {
         m.arm -= dt;
         continue;
       }
-      let fired = false;
+      let near = Infinity;
       this.enemies.forEach((e) => {
-        if (fired) return;
         const rr = m.trigger + e.radius;
-        if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= rr * rr) fired = true;
+        const d = (e.x - m.x) ** 2 + (e.y - m.y) ** 2;
+        if (d <= rr * rr && d < near) near = d;
       });
-      if (fired) this.detonateMine(m, i);
+      if (near < steppedDist) {
+        stepped = i;
+        steppedDist = near;
+      }
     }
+    if (stepped >= 0) this.detonateMine(this.mines[stepped], stepped);
   }
 
   /** 伏灯被踩响：一圈爆炸（进化的那颗还会在脚下留一片火）。 */
@@ -2143,6 +2184,23 @@ export class Game {
     if (m.fire > 0) this.addGround(m.x, m.y, radius * 0.75, MINE.fireLife, MINE.fireDps);
     // 一次炸到一片：这是伏灯最想要的那一下（也是「伏击」成就的判据）
     if (hits >= MINE.multiHit) this.achievements.unlock('mine_multi');
+    // 连爆：这一炸够得着的其他雷会被引信点着。排得密就一串响，排得开就一颗一颗响——
+    // 不是同一帧一起炸（那样看见的只是一团白光），而是隔 0.09 秒顺着串烧过去。
+    const reach = radius * MINE.chainReach;
+    let lit = 0;
+    for (const other of this.mines) {
+      if (other.fuse > 0 || other === m) continue;
+      if ((other.x - m.x) ** 2 + (other.y - m.y) ** 2 > reach * reach) continue;
+      other.fuse = MINE.chainFuse;
+      other.fuseX = m.x;
+      other.fuseY = m.y;
+      other.link = m.link + 1;
+      other.arm = 0;
+      lit += 1;
+    }
+    if (lit) this.audio.play('chain', Math.min(m.link + 1, 5));
+    this.mineChainBest = Math.max(this.mineChainBest, m.link + 1);
+    if (m.link + 1 >= MINE.chainBest) this.achievements.unlock('minechain');
     this.audio.play('nova');
     this.haptics.mine();
   }
@@ -3681,16 +3739,18 @@ export class Game {
   }
 
   /**
-   * 地上的伏灯。三件事要一眼看得出来：
+   * 地上的伏灯。四件事要一眼看得出来：
    * **在哪儿**（暖色的灯身与光）、**上弦了没有**（外圈那道进度弧，没转完就是还不能踩）、
-   * 以及**它能管多大一片**（上弦之后才出现的虚线触发圈——不该在还没上弦的时候就吓人）。
+   * **它能管多大一片**（上弦之后才出现的虚线触发圈——不该在还没上弦的时候就吓人），
+   * 以及**它是不是已经被点着了引信**（地上那道从上一颗烧过来的火花，火花烧到头它就响）。
    * 快烧尽时灯身会暗下去：那是"这颗要没了，别指望它"的暗示。
    */
   private drawMines(ctx: CanvasRenderingContext2D): void {
     if (!this.mines.length) return;
     ctx.save();
     for (const m of this.mines) {
-      const armed = m.arm <= 0;
+      // 引信点着了也算"亮着"：它已经不为踩踏服务了，而是马上一声
+      const armed = m.arm <= 0 || m.fuse > 0;
       // 快烧尽（最后 1.6 秒）开始黯淡：不画个倒计时，而是让它的光弱下去
       const fade = clamp(m.life / 1.6, 0, 1);
       const pulse = 0.5 + Math.sin(this.time * 6 + m.phase) * 0.5;
@@ -3700,6 +3760,29 @@ export class Game {
       ctx.beginPath();
       ctx.ellipse(m.x, m.y + 4, 12, 5, 0, 0, Math.PI * 2);
       ctx.fill();
+      // 引信：从上一颗雷烧到这一颗的那道火花。一串雷唯一看得见的部分就是它，
+      // 所以画得显眼：烧过的路径留一道暗红，火花头是个亮点。
+      if (m.fuse > 0) {
+        const blow = 1 - clamp(m.fuse / MINE.chainFuse, 0, 1);
+        const hx = m.fuseX + (m.x - m.fuseX) * blow;
+        const hy = m.fuseY + (m.y - m.fuseY) * blow;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(255,110,40,0.45)';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(m.fuseX, m.fuseY);
+        ctx.lineTo(hx, hy);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,196,90,0.3)';
+        ctx.beginPath();
+        ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,246,214,0.95)';
+        ctx.beginPath();
+        ctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      }
       // 灯身：矮胖的灯笼。先画壳，再把光叠在壳上——
       // 顺序反过来（先光后壳）的时候，那点光会把壳糊成一团火球，看不出"这是盏灯"。
       ctx.fillStyle = '#241f2e';
@@ -3766,8 +3849,9 @@ export class Game {
         ctx.beginPath();
         ctx.arc(m.x, m.y - 2, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - m.arm / MINE.arm));
         ctx.stroke();
-      } else {
-        // 触发圈：虚线，随呼吸一涨一缩——它管的范围看得见，才谈得上"布"这个字
+      } else if (m.fuse <= 0) {
+        // 触发圈：虚线，随呼吸一涨一缩——它管的范围看得见，才谈得上"布"这个字。
+        // （引信烧着的那颗不画：它已经不为"等谁来踩"服务了）
         ctx.globalAlpha = (0.16 + pulse * 0.12) * fade;
         ctx.strokeStyle = '#ffb14e';
         ctx.lineWidth = 2;

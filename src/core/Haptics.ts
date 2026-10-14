@@ -48,6 +48,7 @@ export function haptic(pattern: number | number[], enabled = true): void {
  */
 export class CombatHaptics {
   private hurtCd = 0;
+  private mineCd = 0;
   private lowArmed = true;
   private readonly on: () => boolean;
 
@@ -59,6 +60,7 @@ export class CombatHaptics {
   /** 每帧：濒死心跳 + 受伤节流。dt 用游戏自己的时间，不碰 performance.now（好测）。 */
   update(dt: number, hpFrac: number): void {
     if (this.hurtCd > 0) this.hurtCd -= dt;
+    if (this.mineCd > 0) this.mineCd -= dt;
     if (hpFrac <= 0.25) {
       if (this.lowArmed) {
         this.lowArmed = false;
@@ -91,8 +93,11 @@ export class CombatHaptics {
   /**
    * 「伏灯」被踩响的那一下：短促的两下。它和燃爆（一次性的大震）不一样——
    * 这是"你自己埋的东西生效了"，手感上更该像敲了一下，而不是挨了一下。
+   * 一串雷连爆时（每节只隔 0.09 秒）也只震头一下：连震四下就变成按摩棒了。
    */
   mine(): void {
+    if (this.mineCd > 0) return;
+    this.mineCd = 0.3;
     haptic([8, 26, 8], this.on());
   }
 
@@ -103,6 +108,7 @@ export class CombatHaptics {
   /** 重开一局：把节流与"濒死武装"复位。 */
   reset(): void {
     this.hurtCd = 0;
+    this.mineCd = 0;
     this.lowArmed = true;
   }
 }

@@ -70,8 +70,19 @@ test('触感节奏：受伤有节流、濒死只响一次、升级和受伤分�
   assert.equal(game.state, 'levelup', '测试前提：攒够经验会弹出升级面板');
   assert.deepEqual(vibes.slice(before), [[18, 50, 18]], `升级要有一套自己的节奏（${JSON.stringify(vibes.slice(before))}）`);
 
-  // ── 死亡：长震一下 ──
+  // ── 伏灯：踩响是一套自己的节奏，而且一串连爆只震头一下 ──
+  const beforeMine = vibes.length;
+  game.haptics.mine();
+  assert.deepEqual(vibes.slice(beforeMine), [[8, 26, 8]], '伏灯踩响是 8-26-8：「你自己埋的东西生效了」，不是挨了一下');
+  game.haptics.mine();
+  assert.equal(vibes.length, beforeMine + 1, '连爆的第二节（隔 0.09 秒）不重复震——一串雷不能震成按摩棒');
+  // 升级面板还挂着，整局是暂停的（节流计时也不走）——先把面板收起来再往下走时间
   game.state = 'playing';
+  tick(25);
+  game.haptics.mine();
+  assert.equal(vibes.length, beforeMine + 2, '过了窗口，下一串照样震');
+
+  // ── 死亡：长震一下 ──
   game.player.hp = 5;
   game.player.invuln = 0;
   game.damagePlayer(999);
