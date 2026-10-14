@@ -305,6 +305,8 @@ export interface InputState {
   focus: boolean;
   pause: boolean;
   sheet: boolean;
+  /** 分灯：一次性输入（按下那一帧为 true），不是按住 */
+  lamp: boolean;
 }
 
 export interface PointerState {

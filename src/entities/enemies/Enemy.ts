@@ -77,8 +77,17 @@ export interface EnemyContext {
   ignitGround: (x: number, y: number) => void;
   /** 在战场上留下一片「滞行雾」（织雾者） */
   fog: (x: number, y: number, r: number) => void;
-  /** 最近的、还亮着的灯台（吹灯客的目标）；没有就返回 null */
+  /**
+   * 最近的、还亮着的灯台，或者玩家放下的那盏弃灯（吹灯客的目标）；没有就返回 null。
+   * 弃灯也算在内：那盏小灯更脆，一口气就能吹灭。
+   */
   pyreTarget: (x: number, y: number) => { x: number; y: number } | null;
+  /**
+   * 「分灯」放下的那盏弃灯（附近没有就返回 null）：黑暗会被它引走。
+   * 只有本来就在追你的那些行为会跟过去——吹灯客（有自己的目标）与
+   * 回响（追的是你一秒前站的地方）不在此列，这两种怪的性格才不会被抹平。
+   */
+  lureTarget?: (x: number, y: number) => { x: number; y: number } | null;
   /** 站在灯台边时把灯焰抽掉一点（吹灯客） */
   quench: (x: number, y: number, dt: number) => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
@@ -301,12 +310,23 @@ export class EnemySystem {
   }
 
   private behave(e: Enemy, dt: number, ctx: EnemyContext, slow: number): void {
-    const dx = ctx.px - e.x;
-    const dy = ctx.py - e.y;
+    // 地上有灯的话，"追谁"这件事整个换一个人：移动与射程都以那盏灯为准。
+    // 两个例外：吹灯客有自己的目标（灯台 / 弃灯），回响追的是你过去的脚印。
+    const behavior = e.def.behavior;
+    const lure =
+      behavior === 'quench' || behavior === 'echo' ? null : (ctx.lureTarget?.(e.x, e.y) ?? null);
+    const tx = lure ? lure.x : ctx.px;
+    const ty = lure ? lure.y : ctx.py;
+    const dx = tx - e.x;
+    const dy = ty - e.y;
     const d = Math.hypot(dx, dy) || 1;
     const nx = dx / d;
     const ny = dy / d;
     e.angle = Math.atan2(dy, dx);
+    // 有几个行为是"朝你开火 / 抽你的油"：它们仍旧认你，只是被灯牵着走
+    const pdx = ctx.px - e.x;
+    const pdy = ctx.py - e.y;
+    const playerDist = lure ? Math.hypot(pdx, pdy) || 1 : d;
     const lit = this.isLit(e, ctx);
     let speedMul = slow * e.buff;
     if (e.def.lightShy && lit) speedMul *= 0.55;
@@ -339,9 +359,9 @@ export class EnemySystem {
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
         e.attackCd -= dt;
-        if (e.attackCd <= 0 && d < 520) {
+        if (e.attackCd <= 0 && playerDist < 520) {
           e.attackCd = 2.1;
-          ctx.shoot(e.x, e.y, e.angle, 250, e.damage, '#c9a3ff', true, e.defId);
+          ctx.shoot(e.x, e.y, Math.atan2(pdy, pdx), 250, e.damage, '#c9a3ff', true, e.defId);
         }
         break;
       }
@@ -409,7 +429,7 @@ export class EnemySystem {
         const dir = d > keep + 30 ? 1 : d < keep - 30 ? -1 : 0;
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
-        if (d < 460) {
+        if (playerDist < 460) {
           ctx.snuffLight(dt * 0.025);
           if (Math.random() < dt * 8) ctx.burst(e.x, e.y, 1, '#c98fe8', { speed: 30, size: 2, life: 0.5 });
         }

@@ -81,6 +81,30 @@ const GRID_STEP = 150;
 /** 墙体精灵外扩：投影往右下偏 (6, 8)，2px 描边还有一半在框外，留 12px 富余。 */
 const WALL_SPRITE_PAD = 12;
 
+/**
+ * 「分灯」：把一小罐灯油点在地上，照亮一小圈，并把附近的黑暗引过去。
+ * 它是一次**取舍**而不是一次免费的控制：油就是光，光就是命——
+ * 分出一点油，换几秒钟"黑暗去扑那盏灯、而不是扑你"。
+ */
+const LAMP_COST = 0.14;
+const LAMP_COOLDOWN = 7;
+const LAMP_LIFE = 11;
+/** 亮芯的半径：它是一盏小灯，固定大小（不跟你手上的灯火一起变大） */
+const LAMP_RADIUS = 152;
+/**
+ * 引怪的半径，同时也是"被照亮的那一大片"的半径。
+ *
+ * 一开始这里只画了一圈虚线（半径 430），截图一看全是错：844×390 的横屏高的一半才 195，
+ * 那么大一个圆只有两条几乎笔直的弧落在屏幕里，看着像画面撕裂，不像"警戒线"。
+ * 改成让**光照本身**说明这一片：亮芯之外再补一圈很淡的大光，
+ * 于是"亮着的地方 = 会引怪的地方"成了同一条规则，不用再解释。
+ */
+const LAMP_LURE = 340;
+/** 少于这个油量不让分：油见底本来就要开始掉血，别让玩家把自己点死 */
+const LAMP_MIN_OIL = 0.2;
+/** 怪凑到这么近就把灯吃掉（人越多，灯灭得越快） */
+const LAMP_SNUFF_R = 34;
+
 interface WallSprite {
   canvas: HTMLCanvasElement;
   x: number;
@@ -133,6 +157,14 @@ interface Ground {
   life: number;
   dps: number;
   kind?: 'fire' | 'poison' | 'mud' | 'frost';
+}
+
+/** 地上的一盏弃灯（「分灯」放下的）。 */
+export interface DroppedLamp {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
 }
 
 interface Decal {
@@ -287,6 +319,14 @@ export class Game {
   private hintQueue: { at: number; text: string }[] = [];
   /** 本关灯台总数（HUD 显示 n/m）。 */
   pyreTotal = 0;
+  /** 地上的弃灯（「分灯」放下的那盏小灯）。 */
+  lamps: DroppedLamp[] = [];
+  lampCd = 0;
+  lampCdMax = 0;
+  /** 本局分过几盏灯（结算用） */
+  lampCount = 0;
+  /** 还没教过「分灯」时，开局安静下来之后弹那张说明卡（秒，<0 = 不用弹） */
+  private lampTipIn = -1;
   private pyreChannel: Pyre | null = null;
   hitStop = 0;
   slowmo = 0;
@@ -306,7 +346,7 @@ export class Game {
   private frameCooldowns = { hurt: 0 };
   private emberTimer = 0;
   private moteTimer = 0;
-  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false };
+  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false };
   private startSeed = 1;
   /** 当前性能档位（掌上设备 / 桌面 × 画质），每帧开头刷新一次，全游戏只有这一处结论。 */
   profile: PerfProfile = perfProfile('high');
@@ -429,6 +469,13 @@ export class Game {
     this.time = 0;
     this.runTime = 0;
     this.wave = 0;
+    this.lamps.length = 0;
+    this.lampCd = 0;
+    this.lampCdMax = 0;
+    this.lampCount = 0;
+    // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
+    // 也别在最乱的那两秒讲新东西
+    this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
     this.kills = 0;
     this.xp = 0;
     this.xpToNext = 8;
@@ -693,6 +740,10 @@ export class Game {
   // ─────────────────────────── gameplay ───────────────────────────
 
   update(dt: number): void {
+    // 一次性输入要在这一帧吃干净：暂停 / 升级面板里按下的那次不能攒着，
+    // 等回到战场上再"自己"放下一盏灯。
+    const lampPressed = this.inputSnapshot.lamp;
+    this.inputSnapshot.lamp = false;
     this.time += dt;
     this.postfx.update(dt);
     this.floaters.update(dt);
@@ -738,6 +789,19 @@ export class Game {
       this.fogTimer -= dt;
       this.darknessBoost = Math.max(this.curseDarkness, this.darknessBoost - dt * 0.15);
     }
+    if (this.lampTipIn > 0) {
+      this.lampTipIn -= dt;
+      if (this.lampTipIn <= 0) {
+        this.lampTipIn = -1;
+        this.showTip(
+          'verb:lamp',
+          '分灯 · 把黑暗引开',
+          '按 E（手机上点右下角的「分灯」）在原地点一盏小灯：它照亮一小圈，并把附近的黑暗引过去。' +
+            '油就是光，所以这是拿自己的亮换几秒喘息；凑上来的怪会把它吃掉。',
+        );
+      }
+    }
+    if (lampPressed) this.tryPlantLamp();
     if (this.hintQueue.length && this.runTime >= this.hintQueue[0].at) {
       const hint = this.hintQueue.shift();
       if (hint) this.hud?.toast(hint.text);
@@ -806,6 +870,7 @@ export class Game {
     this.resolveGrounds(dt);
 
     this.updatePyres(dt);
+    this.updateLamps(dt);
     this.pickups.update(dt, this.player.x, this.player.y, this.player.stats.pickupRange, (p) => this.collect(p));
 
     this.camera.resize(this.renderer.width, this.renderer.height);
@@ -915,8 +980,28 @@ export class Game {
     return best ? { x: best.x, y: best.y } : null;
   }
 
+  /** 吹灯客的目标：最近的亮灯台，或者最近的弃灯（谁近扑谁）。 */
+  private nearestLitOrLamp(x: number, y: number, maxDist: number): { x: number; y: number } | null {
+    const pyre = this.nearestLitPyre(x, y, maxDist);
+    const lamp = this.nearestLamp(x, y, maxDist);
+    if (!lamp) return pyre;
+    if (!pyre) return { x: lamp.x, y: lamp.y };
+    const dp = Math.hypot(pyre.x - x, pyre.y - y);
+    const dl = Math.hypot(lamp.x - x, lamp.y - y);
+    return dl < dp ? { x: lamp.x, y: lamp.y } : pyre;
+  }
+
   /** 吹灯客站在灯台边抽灯焰；灯焰归零，这座灯台就重新熄掉。 */
   private quenchPyre(x: number, y: number, dt: number): void {
+    // 你放下的那盏小灯更脆：吹灯客贴身就是一口气的事
+    for (let i = this.lamps.length - 1; i >= 0; i -= 1) {
+      const l = this.lamps[i];
+      if ((l.x - x) ** 2 + (l.y - y) ** 2 < 70 * 70) {
+        this.lamps.splice(i, 1);
+        this.particles.burst(l.x, l.y - 10, 12, '#b6a6ff', { speed: 80, size: 2.2, life: 0.5 });
+        return;
+      }
+    }
     let best: Pyre | null = null;
     let bestD = Infinity;
     for (const py of this.level.pyres) {
@@ -969,6 +1054,80 @@ export class Game {
     const def = ENEMY_MAP.snuffer;
     if (def?.note) this.showTip('quench:snuffer', `敌人 · ${def.name}`, def.note);
     this.hud?.toast('💨 有东西朝灯台去了');
+  }
+
+  /** 分灯：扣油、点亮。返回是否真的放下了（测试与手感都看这个返回值）。 */
+  tryPlantLamp(): boolean {
+    if (this.state !== 'playing') return false;
+    if (this.lampCd > 0) return false;
+    const p = this.player;
+    if (p.oil < LAMP_MIN_OIL) {
+      this.hud?.toast('🪫 灯油不够分灯（要两成）');
+      return false;
+    }
+    p.oil = Math.max(0, p.oil - LAMP_COST);
+    this.lamps.push({ x: p.x, y: p.y, life: LAMP_LIFE, maxLife: LAMP_LIFE });
+    this.lampCd = LAMP_COOLDOWN;
+    this.lampCdMax = LAMP_COOLDOWN;
+    this.lampCount += 1;
+    this.audio.play('lamp');
+    this.particles.burst(p.x, p.y - 6, 14, '#ffca7a', { speed: 120, size: 2.6, life: 0.6 });
+    this.hud?.toast('🕯️ 分灯 · 黑暗会朝它去');
+    return true;
+  }
+
+  /**
+   * 地上的弃灯：寿命到了就熄；有怪凑近会被"吃掉"（提前熄）。
+   * 人越多灯灭得越快——一群人扑上来时它只能顶一两秒，
+   * 所以它是"买几秒空间"，不是"清场"。
+   */
+  private updateLamps(dt: number): void {
+    if (this.lampCd > 0) this.lampCd = Math.max(0, this.lampCd - dt);
+    if (!this.lamps.length) return;
+    for (let i = this.lamps.length - 1; i >= 0; i -= 1) {
+      const l = this.lamps[i];
+      l.life -= dt;
+      let snuffed = false;
+      this.enemies.forEach((e) => {
+        if (snuffed) return;
+        const dx = e.x - l.x;
+        const dy = e.y - l.y;
+        if (dx * dx + dy * dy <= LAMP_SNUFF_R * LAMP_SNUFF_R) snuffed = true;
+      });
+      if (snuffed && l.life > 0.35) {
+        l.life = 0.35;
+        this.particles.burst(l.x, l.y - 10, 12, '#b6a6ff', { speed: 90, size: 2.4, life: 0.5 });
+      }
+      if (this.rng.next() < dt * 4) this.particles.ember(l.x + this.rng.range(-6, 6), l.y - 16, '#ffc46b');
+      if (l.life > 0) continue;
+      this.lamps.splice(i, 1);
+      this.particles.burst(l.x, l.y - 8, 10, '#8b7f6a', { speed: 70, size: 2, life: 0.5 });
+    }
+  }
+
+  /** 最近的弃灯（黑暗被它引走时用）。没有就返回 null。 */
+  nearestLamp(x: number, y: number, maxDist = LAMP_LURE): DroppedLamp | null {
+    let best: DroppedLamp | null = null;
+    let bestD = maxDist * maxDist;
+    for (const l of this.lamps) {
+      const d = (l.x - x) ** 2 + (l.y - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = l;
+      }
+    }
+    return best;
+  }
+
+  /** 分灯的冷却比例（0 = 可以按，1 = 刚放完）——触屏那枚按钮画圈就靠它。 */
+  get lampCdFrac(): number {
+    if (this.lampCdMax <= 0) return 0;
+    return clamp(this.lampCd / this.lampCdMax, 0, 1);
+  }
+
+  /** 现在能不能分灯（冷却好了、油够、在打）。 */
+  get lampReady(): boolean {
+    return this.state === 'playing' && this.lampCd <= 0 && this.player.oil >= LAMP_MIN_OIL;
   }
 
   private updateShrines(): void {
@@ -1186,7 +1345,9 @@ export class Game {
       spawnAdd: (defId, x, y) => this.enemies.spawn(defId, x, y, this.director.bossHpMult * 0.6, this.director.bossDmgMult),
       ignitGround: (x, y) => this.addGround(x, y, 60, 4, 10),
       fog: (x, y, r) => this.addGround(x, y, r, 8, 0, 'mud'),
-      pyreTarget: (x, y) => this.nearestLitPyre(x, y, 1600),
+      // 吹灯客的目标：最近的亮灯台，或者你刚放下的那盏弃灯（谁近扑谁）
+      pyreTarget: (x, y) => this.nearestLitOrLamp(x, y, 1600),
+      lureTarget: (x, y) => this.nearestLamp(x, y),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
       spikes: (x, y, r) => {
@@ -2355,11 +2516,12 @@ export class Game {
 
   // ─────────────────────────── render ───────────────────────────
 
-  setInput(moveX: number, moveY: number, dash: boolean, nova: boolean): void {
+  setInput(moveX: number, moveY: number, dash: boolean, nova: boolean, lamp = false): void {
     this.inputSnapshot.moveX = moveX;
     this.inputSnapshot.moveY = moveY;
     this.inputSnapshot.dash = dash;
     this.inputSnapshot.nova = nova;
+    if (lamp) this.inputSnapshot.lamp = true;
   }
 
   /** 主菜单 / 图鉴类界面：不放实时战斗，改画一张动态"守夜人剪影"海报。 */
@@ -2850,6 +3012,7 @@ export class Game {
     this.drawHazards(ctx);
     this.drawShrines(ctx);
     this.drawPyres(ctx);
+    this.drawLamps(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
@@ -3084,6 +3247,56 @@ export class Game {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 地上的弃灯。两件事要一眼看得出来：光在哪（灯焰与光照），
+   * 以及"这一片是饵"（一圈虚线）。最后 2.6 秒灯焰开始萎下去——
+   * 那是"要灭了，趁现在"的倒计时。
+   */
+  private drawLamps(ctx: CanvasRenderingContext2D): void {
+    if (!this.lamps.length) return;
+    ctx.save();
+    for (const l of this.lamps) {
+      const fade = clamp(l.life / 2.6, 0, 1);
+      const flicker = 1 + Math.sin(this.time * 9 + l.x * 0.05) * 0.08;
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.beginPath();
+      ctx.ellipse(l.x, l.y + 7, 16, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#2b2536';
+      ctx.beginPath();
+      ctx.moveTo(l.x - 7, l.y + 4);
+      ctx.lineTo(l.x + 7, l.y + 4);
+      ctx.lineTo(l.x + 4, l.y - 12);
+      ctx.lineTo(l.x - 4, l.y - 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#3d3550';
+      ctx.beginPath();
+      ctx.ellipse(l.x, l.y - 13, 10, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const glowR = 44 * flicker * (0.4 + 0.6 * fade);
+      const g = ctx.createRadialGradient(l.x, l.y - 18, 0, l.x, l.y - 18, glowR);
+      g.addColorStop(0, `rgba(255,240,200,${0.55 * fade})`);
+      g.addColorStop(0.42, `rgba(255,170,70,${0.3 * fade})`);
+      g.addColorStop(1, 'rgba(255,110,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(l.x, l.y - 18, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,246,214,${0.8 * fade})`;
+      ctx.beginPath();
+      ctx.ellipse(l.x, l.y - 22, 4.5 * flicker, 8 * flicker * (0.45 + 0.55 * fade), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // 两盏灯：亮芯（看得见的那盏）+ 一大圈很淡的光（"这一片都会被引过去"）
+      this.light.addLight(l.x, l.y, LAMP_RADIUS * (0.4 + 0.6 * fade), 0.85 * fade, 0.05);
+      this.light.addLight(l.x, l.y, LAMP_LURE * (0.55 + 0.45 * fade), 0.2 * fade, 0);
+      this.light.addGlow(l.x, l.y, LAMP_RADIUS * 0.9 * fade, 0.45 * fade);
+    }
+    ctx.restore();
   }
 
   private drawDecals(ctx: CanvasRenderingContext2D): void {

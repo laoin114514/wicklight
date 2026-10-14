@@ -22,6 +22,8 @@ export class TouchControls {
   private moveY = 0;
   private dash = false;
   private nova = false;
+  /** 分灯是一次性动作（按下就放，不需要按住），所以只记"这一帧按过" */
+  private lampQueued = false;
   private isTouch = false;
   /** 上屏状态（只在触屏上有意义）：null = 还没同步过 */
   private visible: boolean | null = null;
@@ -82,6 +84,7 @@ export class TouchControls {
 
     this.bindButton('[data-action="dash"]', 'dash', 12);
     this.bindButton('[data-action="nova"]', 'nova', 22);
+    this.bindLampButton('[data-action="lamp"]', 16);
   }
 
   /**
@@ -107,6 +110,28 @@ export class TouchControls {
     // 手指按住后滑出按钮再抬起：浏览器会把事件继续发给这个元素，但鼠标/笔路径没有 touch 事件
     btn.addEventListener('pointerup', () => { this[action] = false; });
     btn.addEventListener('pointercancel', () => { this[action] = false; });
+  }
+
+  /**
+   * 分灯按钮：**按下就放**，不是按住。所以只记一个"这一帧按过"的标记，
+   * 由 `apply()` 交给游戏，交给之后就清掉（不然会一帧一帧地放着）。
+   */
+  private bindLampButton(selector: string, buzz: number): void {
+    const btn = this.root.querySelector(selector) as HTMLElement | null;
+    if (!btn) return;
+    const press = (e: TouchEvent) => {
+      this.lampQueued = true;
+      this.buzz(buzz);
+      e.preventDefault();
+    };
+    btn.addEventListener('touchstart', press, { passive: false });
+    // 鼠标 / 笔也要能点（调试与桌面触屏）
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') {
+        this.lampQueued = true;
+        this.buzz(buzz);
+      }
+    });
   }
 
   private buzz(ms: number): void {
@@ -167,14 +192,19 @@ export class TouchControls {
     this.moveY = 0;
     this.dash = false;
     this.nova = false;
+    this.lampQueued = false;
     this.knob.style.transform = 'translate(-50%, -50%)';
   }
 
-  apply(target: { moveX: number; moveY: number; dash: boolean; nova: boolean }): void {
+  apply(target: { moveX: number; moveY: number; dash: boolean; nova: boolean; lamp: boolean }): void {
     if (!this.isTouch) return;
     target.moveX = this.moveX;
     target.moveY = this.moveY;
     target.dash = this.dash;
     target.nova = this.nova;
+    if (this.lampQueued) {
+      target.lamp = true;
+      this.lampQueued = false;
+    }
   }
 }

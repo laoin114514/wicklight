@@ -47,8 +47,10 @@ export class HUD implements HUDHost {
   /** 触屏的冲刺 / 燃爆按钮（桌面为 null）：冷却圈的角度按 1/32 档记忆，别每帧写 style。 */
   private dashBtn: HTMLElement | null = null;
   private novaBtn: HTMLElement | null = null;
+  private lampBtn: HTMLElement | null = null;
   private lastCd = new WeakMap<HTMLElement, string>();
   private dashFiring = false;
+  private lampEmpty = false;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -58,6 +60,7 @@ export class HUD implements HUDHost {
     if (isTouchDevice()) {
       this.dashBtn = document.querySelector('.touch-btn--dash');
       this.novaBtn = document.querySelector('.touch-btn--nova');
+      this.lampBtn = document.querySelector('.touch-btn--lamp');
     }
   }
 
@@ -92,7 +95,7 @@ export class HUD implements HUDHost {
       <div class="hud__curse js-curse"></div>
       <div class="hud__bounty js-bounty"></div>
       <div class="hud__pyre js-pyre"></div>
-      <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · 自动开火 · Esc 暂停</div>
+      <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · E 分灯 · 自动开火 · Esc 暂停</div>
     `;
     this.root.appendChild(hud);
     this.hudEl = hud;
@@ -396,8 +399,17 @@ export class HUD implements HUDHost {
    * 分档写 style：60fps 下每帧写会让浏览器反复排队样式重算，1/32 档在小圆上看不出来。
    */
   private updateTouchButtons(): void {
-    if (!this.dashBtn && !this.novaBtn) return;
+    if (!this.dashBtn && !this.novaBtn && !this.lampBtn) return;
     const p = this.game.player;
+    if (this.lampBtn) {
+      // 分灯不算"按住"，它只有"能不能按"：冷却走一圈，油不够就暗下去
+      this.cdRing(this.lampBtn, this.game.lampCdFrac);
+      const empty = p.oil < 0.2;
+      if (empty !== this.lampEmpty) {
+        this.lampEmpty = empty;
+        this.lampBtn.classList.toggle('is-empty', empty);
+      }
+    }
     if (this.dashBtn) {
       this.cdRing(this.dashBtn, p.dashCdFrac);
       const firing = p.dashTimer > 0;

@@ -80,12 +80,12 @@ function boot(): void {
     update: (dt) => {
       input.update();
       const st = input.state;
-      const snap = { moveX: st.moveX, moveY: st.moveY, dash: st.dash, nova: st.nova };
+      const snap = { moveX: st.moveX, moveY: st.moveY, dash: st.dash, nova: st.nova, lamp: st.lamp };
       // 触摸控件只在真正在打的时候上屏：面板就在同一层，它会盖住面板右下角的按钮
       touch.setActive(game.state === 'playing');
       if (game.state === 'playing') touch.apply(snap);
       backGuard.sync(game.state === 'playing');
-      game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova);
+      game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova, snap.lamp);
       if (st.pause) {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
       }

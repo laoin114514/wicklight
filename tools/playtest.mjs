@@ -294,6 +294,19 @@ async function main() {
   expect(moved > 40, '键盘输入真的驱动了角色移动', `位移 ${moved.toFixed(0)}px`);
   expect(p1.oil < p0.oil, '灯油在战斗中持续燃烧', `${p0.oil} → ${p1.oil}`);
 
+  // ── 3a2. 分灯（E）：真按键 → 地上多一盏灯、扣掉自己的油、进冷却 ──
+  // 这是这一版新加的"动词"，所以要用真键盘走一遍，而不是只跑离线测试。
+  const oilBeforeLamp = await page.evaluate(() => window.__WICKLIGHT__.game.player.oil);
+  await page.keyboard.press('KeyE');
+  await sleep(200);
+  const lampState = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { lamps: g.lamps.length, oil: +g.player.oil.toFixed(3), cd: +g.lampCd.toFixed(1), ready: g.lampReady };
+  });
+  expect(lampState.lamps === 1, '按 E 分灯：地上多了一盏灯', JSON.stringify(lampState));
+  expect(lampState.oil < oilBeforeLamp, '分灯扣的是自己的灯油（油就是光）', `${oilBeforeLamp.toFixed(3)} → ${lampState.oil}`);
+  expect(lampState.cd > 0 && lampState.ready === false, '分完灯要进冷却，冷却中不该报可用', JSON.stringify(lampState));
+
   // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
   // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
   // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。
@@ -1189,6 +1202,33 @@ async function main() {
     ...window.__PROBE__.overlaps('.hud__bounty', '.hud__stage'),
   ]);
   expect(mobClash.length === 0, '移动端悬赏芯片不压住状态栏 / 构筑信息 / 关卡名', mobClash.join('; '));
+  // 手机上那第三枚圆按钮：布局要在视口里、不压芯片，而且真按下去要放得下灯
+  const lampBtn = await mobile.evaluate(() => {
+    const el = document.querySelector('.touch-btn--lamp');
+    const b = el.getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2, w: Math.round(b.width), h: Math.round(b.height) };
+  });
+  expect(lampBtn.w >= 48 && lampBtn.h >= 48, '分灯按钮够大（拇指点得中）', JSON.stringify(lampBtn));
+  const lampBtnLayout = await mobile.evaluate(() => window.__PROBE__.layout('.touch-btn--lamp'));
+  expect(lampBtnLayout.issues.length === 0, '分灯按钮布局正常', lampBtnLayout.issues.join('; '));
+  const lampBtnClash = await mobile.evaluate(() => [
+    ...window.__PROBE__.overlaps('.touch-btn--lamp', '.hud__pyre'),
+    ...window.__PROBE__.overlaps('.touch-btn--lamp', '.hud__bounty'),
+    ...window.__PROBE__.overlaps('.touch-btn--lamp', '.hud__stage'),
+  ]);
+  expect(lampBtnClash.length === 0, '分灯按钮不压住右侧那几枚芯片', lampBtnClash.join('; '));
+  const lampsBefore = await mobile.evaluate(() => {
+    window.__WICKLIGHT__.game.player.oil = 1;
+    return window.__WICKLIGHT__.game.lamps.length;
+  });
+  await mobile.touchscreen.tap(lampBtn.x, lampBtn.y);
+  await sleep(220);
+  expect(
+    (await mobile.evaluate(() => window.__WICKLIGHT__.game.lamps.length)) === lampsBefore + 1,
+    '手机上点「分灯」真的放得下一盏灯（触摸路径不是摆设）',
+  );
+  await mobile.screenshot({ path: join(SHOTS, '17-mobile-lamp.png') });
+
   const mobPyre = await mobile.evaluate(() => window.__PROBE__.layout('.hud__pyre'));
   expect(mobPyre.issues.length === 0, '移动端灯台芯片布局正常', mobPyre.issues.join('; '));
   const mobPyreClash = await mobile.evaluate(() => [

@@ -469,6 +469,7 @@ export class UIManager implements UIHost {
         <div><span>完成悬赏</span><b>${g.bounties.completedThisRun}</b></div>
         <div><span>最强一击</span><b>${Math.round(g.maxHit)}</b></div>
         <div><span>燃爆</span><b>${g.novaCount} 次</b></div>
+        ${g.lampCount > 0 ? `<div><span>分灯</span><b>${g.lampCount} 盏</b></div>` : ''}
       </div>`;
   }
 

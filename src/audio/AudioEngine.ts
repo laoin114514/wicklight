@@ -155,6 +155,11 @@ export class AudioEngine {
       case 'ui':
         this.tone(700, 0.06, 'triangle', 0.08);
         break;
+      case 'lamp':
+        // 分灯：一声很轻的"噗"，尾音往上走一点（点着了），不是冲刺那种亮点
+        this.noise(0.16, 0.07, 620, 0.4);
+        this.tone(300, 0.24, 'sine', 0.09, 620);
+        break;
       case 'quench':
         this.noise(0.42, 0.15, 900, 0.5);
         this.tone(300, 0.4, 'sine', 0.07, 90);
