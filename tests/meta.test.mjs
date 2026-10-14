@@ -105,9 +105,18 @@ test('解锁树：新节点真的改变开局', async (t) => {
 
   assert.ok(game.gold >= baseGold + 40, `钱袋应让开局金币 +40（${baseGold} → ${game.gold}）`);
   assert.ok(Math.abs(p.baseLightMult - (baseLight + 0.12)) < 1e-6, `暗视应让起始灯火 +12%（${p.baseLightMult}）`);
+  // 开局遗物自己也可能带移速（轻羽 / 疾风靴 / 厚皮……），所以先把局外加成摘掉量一次基线，
+  // 再比"有它 / 没它"的比值——这样量到的才是夜行那一份，而不是随机遗物的运气
+  const speedWithMeta = p.stats.moveSpeed;
+  const savedMeta = p.metaMods.moveSpeedMult;
+  p.metaMods.moveSpeedMult = 1;
+  p.recomputeStats();
+  const speedNoMeta = p.stats.moveSpeed;
+  p.metaMods.moveSpeedMult = savedMeta;
+  p.recomputeStats();
   assert.ok(
-    Math.abs(p.stats.moveSpeed / baseSpeed - 1.07) < 1e-6,
-    `夜行应让起始移速 +7%（${baseSpeed} → ${p.stats.moveSpeed}）`,
+    Math.abs(speedWithMeta / speedNoMeta - 1.07) < 1e-6,
+    `夜行应让起始移速 +7%（${speedNoMeta} → ${speedWithMeta}）`,
   );
   assert.equal(p.relics.size, baseRelics + 1, `旧灯应让开局多一件遗物（${baseRelics} → ${p.relics.size}）`);
   const relicId = [...p.relics][0];
@@ -116,10 +125,13 @@ test('解锁树：新节点真的改变开局', async (t) => {
   assert.ok(p.stats.maxHp > 0 && p.hp > 0, '开局应是满血');
 
   // 移速加成要经得起"中途重算"（拿到遗物会 recomputeStats，别把局外加成冲掉）
+  const beforeRelic = p.stats.moveSpeed;
   p.addRelic('loom');
+  p.recomputeStats();
+  // 织光囊只加拾取范围，所以移速应当分毫不动——被冲掉的话这里立刻就会掉下来
   assert.ok(
-    Math.abs(p.stats.moveSpeed / baseSpeed - 1.07) < 1e-6,
-    `拿到遗物重算之后，夜行的移速加成仍该在（${p.stats.moveSpeed}）`,
+    Math.abs(p.stats.moveSpeed - beforeRelic) < 1e-6,
+    `拿到遗物重算之后，夜行的移速加成仍该在（${beforeRelic} → ${p.stats.moveSpeed}）`,
   );
 
   // ── 面板：把新节点也渲染出来，且没有缺字段 ──

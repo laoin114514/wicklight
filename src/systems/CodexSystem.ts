@@ -18,7 +18,7 @@ import { WEAPON_MAP } from '../data/weapons';
 import type { Player } from '../entities/Player';
 import type { SaveData } from '../types';
 
-export type CodexKind = 'enemy' | 'weapon' | 'relic' | 'passive' | 'curse' | 'affix' | 'lantern' | 'stage';
+export type CodexKind = 'enemy' | 'weapon' | 'relic' | 'passive' | 'curse' | 'affix' | 'lantern' | 'stage' | 'hazard';
 
 export interface CodexEntry {
   kind: CodexKind;
@@ -49,6 +49,7 @@ const BEHAVIOR_LABEL: Record<string, string> = {
   echo: '沿你一秒前的路径追击',
   weaver: '留下滞行雾',
   siphon: '吊在中距离抽取灯火',
+  quench: '专扑你点亮的灯台',
 };
 
 /** 关卡险境的玩家向说法。 */
@@ -80,6 +81,44 @@ export const HAZARD_TIP: Record<string, string> = {
   coldfront: '踩进霜冻里会又慢又费油、灯火也暗一截，不咬人但很拖；提前绕开那几片蓝霜。',
 };
 
+/** 险境的一句话是什么样：图鉴里先讲"它长什么样"，再讲"怎么应付"。 */
+export const HAZARD_DESC: Record<string, string> = {
+  fog: '大片浓雾压过来，灯火被压到只剩脚边一圈。',
+  meteor: '天上开始落石，落点会先亮起一圈预警。',
+  collapse: '地面接连砸开，贴着墙和石堆走最容易吃亏。',
+  wispstorm: '灯光被撕碎，视野忽明忽暗，像隔着水面看东西。',
+  eruption: '熔岩在脚下绽开，留下一片会封路的火海。',
+  oilvoid: '灯油被整片抽走，灯火骤然变暗。',
+  echoes: '黑暗里涌出追着你旧脚印的回响。',
+  bramble: '一圈荆棘合拢，只留一道缺口。',
+  coldfront: '一片霜冻铺开，踩上去又慢又费油。',
+};
+
+/** 险境在卡片上的图标与配色。 */
+const HAZARD_ICON: Record<string, string> = {
+  fog: '🌫️',
+  meteor: '☄️',
+  collapse: '🧱',
+  wispstorm: '🌀',
+  eruption: '🌋',
+  oilvoid: '🫗',
+  echoes: '🔊',
+  bramble: '🌿',
+  coldfront: '❄️',
+};
+
+const HAZARD_COLOR: Record<string, string> = {
+  fog: '#8fa7ff',
+  meteor: '#ff7a2f',
+  collapse: '#c9a3ff',
+  wispstorm: '#7be0ff',
+  eruption: '#ff6b3d',
+  oilvoid: '#ffd24e',
+  echoes: '#9fd8ff',
+  bramble: '#9fd45a',
+  coldfront: '#bfe6ff',
+};
+
 const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;
 const r1 = (v: number): string => `${Math.round(v * 10) / 10}`;
 
@@ -97,6 +136,7 @@ export const CODEX_SECTIONS: CodexSection[] = [
   { kind: 'curse', title: '夜咒', hint: '经历后记录' },
   { kind: 'affix', title: '精英词缀', hint: '遇到精英后记录' },
   { kind: 'lantern', title: '灯火', hint: '解锁后记录' },
+  { kind: 'hazard', title: '险境', hint: '遇上后记录' },
   { kind: 'stage', title: '关卡', hint: '抵达后记录' },
 ];
 
@@ -203,6 +243,22 @@ export function codexCatalog(): CodexEntry[] {
       rows: [
         ['初始武器', WEAPON_MAP[l.weapon]?.name ?? l.weapon],
         ['初始被动', `${PASSIVE_MAP[l.passive]?.name ?? l.passive}（${PASSIVE_MAP[l.passive]?.blurb ?? ''}）`],
+      ],
+    });
+  }
+  // 险境：以前只在关卡条目里提一句，现在单独成一章——它本来就是每关都在发生的事
+  for (const id of Object.keys(HAZARD_LABEL)) {
+    const where = STAGES.filter((s) => s.hazards.includes(id)).map((s) => s.theme.name);
+    out.push({
+      kind: 'hazard',
+      id,
+      name: HAZARD_LABEL[id],
+      blurb: HAZARD_DESC[id] ?? '',
+      color: HAZARD_COLOR[id] ?? '#8fa7ff',
+      icon: HAZARD_ICON[id],
+      rows: [
+        ['怎么应付', HAZARD_TIP[id] ?? '——'],
+        ['出现的关卡', where.join('、') || '无尽之夜'],
       ],
     });
   }

@@ -1814,6 +1814,7 @@ export class Game {
     const p = this.player;
     const tip = HAZARD_TIP[kind];
     if (tip) this.showTip(`hazard:${kind}`, `险境 · ${HAZARD_LABEL[kind] ?? kind}`, tip);
+    this.codex.discover('hazard', kind);
     switch (kind) {
       case 'meteor':
       case 'collapse': {

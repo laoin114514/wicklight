@@ -45,6 +45,31 @@ test('荆棘回廊与寒潮：围住你、拖住你，而且讲得清', async (t
   const cityRows = (game.codex.entry('stage:nightcity').rows ?? []).map(([, v]) => v).join(' ');
   assert.ok(cityRows.includes('寒潮'), '关卡的险境应写出「寒潮」');
 
+  // ── 险境单独成一章：九种险境各自有条目，写清"长什么样"与"怎么应付" ──
+  const hazardEntries = game.codex.entries.filter((e) => e.kind === 'hazard');
+  assert.equal(hazardEntries.length, 9, `险境应有 9 条（实际 ${hazardEntries.length}）`);
+  assert.equal(game.codex.sectionTotal('hazard'), 9, '险境分类的条目数应与之一致');
+  for (const id of ['fog', 'meteor', 'collapse', 'wispstorm', 'eruption', 'oilvoid', 'echoes', 'bramble', 'coldfront']) {
+    const entry = game.codex.entry(`hazard:${id}`);
+    assert.ok(entry, `缺少险境条目：${id}`);
+    assert.ok(!entry.name.includes(id), `险境条目应写中文名而不是原始 id（${entry.name}）`);
+    assert.ok((entry.blurb ?? '').length > 4, `${id} 缺少"它长什么样"的一句话`);
+    const joined = (entry.rows ?? []).map(([k, v]) => `${k}${v}`).join(' ');
+    assert.ok(joined.includes('怎么应付'), `${id} 条目应给出应对方法`);
+    assert.ok(joined.includes('出现的关卡'), `${id} 条目应写出它出现在哪些关`);
+    assert.ok(!/undefined|NaN|\[object Object\]/.test(`${entry.name}${entry.blurb}${joined}`), `${id} 条目里出现了缺字段`);
+  }
+  // 险境是"遇上才算发现"：没碰上之前是问号
+  assert.ok(!game.codex.has('hazard', 'coldfront'), '没遇上寒潮之前不该解锁它');
+  game.hazards.length = 0;
+  game.handleHazard('coldfront');
+  assert.ok(game.codex.has('hazard', 'coldfront'), '遇上寒潮后应记进图鉴');
+  // 图鉴界面上要看得到这一章
+  const cxHtml = (game.ui.showScreen('codex'), game.ui.screen.innerHTML);
+  assert.ok(cxHtml.includes('险境'), '图鉴里应有「险境」这一章');
+  assert.ok(cxHtml.includes('遇上后记录'), '险境章节应写明它是怎么解锁的');
+  assert.ok(cxHtml.includes('寒潮'), '已遇上的险境在目录里显示真名');
+
   // ── 荆棘回廊：一圈荆棘围着玩家，只留一道缺口 ──
   game.hazards.length = 0;
   game.player.x = 0;

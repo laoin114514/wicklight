@@ -214,12 +214,13 @@ async function main() {
   const codexText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
   const codexTitle = await page.evaluate(() => document.querySelector('.panel__title')?.textContent ?? '');
   expect(codexText.includes('图鉴 ·'), '图鉴显示总进度', codexTitle);
-  const missingSection = ['敌人', '武器', '遗物', '被动', '夜咒', '精英词缀', '灯火', '关卡'].filter((k) => !codexText.includes(k));
+  const missingSection = ['敌人', '武器', '遗物', '被动', '夜咒', '精英词缀', '灯火', '险境', '关卡'].filter((k) => !codexText.includes(k));
   expect(missingSection.length === 0, '图鉴分区齐全', missingSection.join(','));
   expect(!/undefined|NaN/.test(codexText), '图鉴没有缺字段', codexText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
   expect(codexText.includes('尚未发现'), '未发现的条目显示为占位');
+  expect(codexText.includes('遇上后记录'), '险境一章写明它是"遇上才记录"的');
   const codexCards = await page.evaluate(() => document.querySelectorAll('.cx').length);
-  expect(codexCards >= 95, '图鉴列出了全部条目', `${codexCards} 张卡`);
+  expect(codexCards >= 100, '图鉴列出了全部条目', `${codexCards} 张卡`);
   await shot('01b-codex');
 
   // 刚开局一条都还没发现，所以这时候不该有任何可点开的条目

@@ -40,7 +40,7 @@ test('图鉴：目录完整、发现流程与界面区分', async (t) => {
   assert.ok(game.codex.total() >= 95, `图鉴条目应当足够丰富（${game.codex.total()}）`);
 
   // 每个分类都得有条目，否则界面上会出现空标题
-  for (const section of ['enemy', 'weapon', 'relic', 'passive', 'curse', 'affix', 'lantern', 'stage']) {
+  for (const section of ['enemy', 'weapon', 'relic', 'passive', 'curse', 'affix', 'lantern', 'hazard', 'stage']) {
     assert.ok(game.codex.sectionTotal(section) > 0, `${section} 分类为空`);
   }
 
