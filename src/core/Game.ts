@@ -930,6 +930,9 @@ export class Game {
         this.director.bossDmgMult * 0.9,
       );
     }
+    // 第一次点灯就会招来它：这是唯一一次"它想干什么"还来得及讲清楚的时机
+    const def = ENEMY_MAP.snuffer;
+    if (def?.note) this.showTip('quench:snuffer', `敌人 · ${def.name}`, def.note);
     this.hud?.toast('💨 有东西朝灯台去了');
   }
 

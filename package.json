@@ -11,9 +11,9 @@
     "serve": "node scripts/serve.mjs",
     "start": "npm run build && node scripts/serve.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs",
-    "playtest": "node tools/playtest.mjs",
-    "perf": "node tools/perf.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "playtest": "npm run build && node tools/playtest.mjs",
+    "perf": "npm run build && node tools/perf.mjs"
   },
   "keywords": ["game", "canvas", "roguelite", "survivors", "webaudio", "typescript"],
   "license": "MIT",

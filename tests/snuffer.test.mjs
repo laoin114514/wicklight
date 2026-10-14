@@ -31,6 +31,8 @@ test('吹灯客：扑灯台、吹灭灯焰、余温收回', async (t) => {
   game.player.stats.maxHp = 1e6;
   game.player.hp = 1e6;
 
+  const tips = () => hud.toastRoot.children.filter((c) => String(c.className).includes('toast--tip'));
+
   const def = catalog.enemies.find((e) => e.id === 'snuffer');
   assert.ok(def, '敌人表里应有「吹灯客」');
   assert.equal(def.behavior, 'quench', '吹灯客应该用扑灯台的行为');
@@ -40,6 +42,8 @@ test('吹灯客：扑灯台、吹灭灯焰、余温收回', async (t) => {
   assert.ok((def.note ?? '').includes('灯台'), '图鉴说明要讲清它冲着灯台来');
 
   // ── 点亮一座灯台：灯焰是满的，而且会招来吹灯客 ──
+  game.save.tips = [];
+  const tipsBefore = tips().length; // newRun 进第一关时已经弹过一张「关卡」卡
   const pyre = game.level.pyres[0];
   game.enemies.clear();
   game.player.x = pyre.x;
@@ -56,6 +60,11 @@ test('吹灯客：扑灯台、吹灭灯焰、余温收回', async (t) => {
     assert.ok(d > 300 && d < 900, `吹灯客应刷在灯台附近的黑暗里（${Math.round(d)}）`);
   }
   assert.ok(alive.some((e) => e.defId !== 'snuffer'), '点灯的动静照旧会叫来普通敌人');
+  // 第一次点灯就要把"它想干什么"讲清楚——这是唯一一次来得及讲的时机
+  const quenchTip = tips().slice(tipsBefore).find((c) => c.innerHTML.includes('吹灯客'));
+  assert.ok(quenchTip, '首次点灯应弹一张「吹灯客」的说明卡');
+  assert.ok(quenchTip.innerHTML.includes('灯台'), '这张卡要说明它冲着灯台来');
+  assert.ok(game.save.tips.includes('quench:snuffer'), '说明卡应写进存档');
 
   // ── 它朝灯台走，而不是朝你走 ──
   const walker = snuffers[0];
@@ -99,11 +108,16 @@ test('吹灯客：扑灯台、吹灭灯焰、余温收回', async (t) => {
   assert.ok(Math.hypot(loner.x - game.player.x, loner.y - game.player.y) < 300, '没有灯可吹时它会照常追人');
 
   // ── 灯焰只影响画面，不影响它能不能被点回来 ──
+  const tipsBeforeRelight = tips().length;
   game.player.x = pyre.x;
   game.player.y = pyre.y;
   for (let i = 0; i < 90; i += 1) game.updatePyres(1 / 60);
   assert.equal(pyre.lit, true, '熄灭的灯台可以重新点亮');
   assert.equal(pyre.flame, 1, '重新点亮后灯焰回到满值');
+  assert.ok(
+    !tips().slice(tipsBeforeRelight).some((c) => c.innerHTML.includes('吹灯客')),
+    '吹灯客的说明只讲一次，第二次点灯不再打扰',
+  );
 
   // ── 走主循环也不会报错（挂载点没被改坏）──
   game.enemies.clear();
