@@ -40,6 +40,7 @@ import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { GRAZE } from '../data/graze';
+import { MINE } from '../data/mines';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
@@ -158,6 +159,30 @@ interface Ground {
   life: number;
   dps: number;
   kind?: 'fire' | 'poison' | 'mud' | 'frost';
+}
+
+/**
+ * 地上的一颗「伏灯」。
+ *
+ * 它和弃灯（分灯放下的那盏）是两种东西：弃灯是**饵**，怪会去吃掉它；
+ * 伏灯是**雷**，怪踩上来它就炸——所以它不怕被啃，只怕没人来。
+ */
+interface Mine {
+  x: number;
+  y: number;
+  /** 剩余寿命（放着不管也会自己烧尽） */
+  life: number;
+  /** 上弦还剩多久：> 0 时踩不响（刚放下就炸的话，它是手雷不是陷阱） */
+  arm: number;
+  damage: number;
+  /** 爆炸半径（已经被范围加成乘过一遍，爆炸时再补另一半，与火球同一条算式） */
+  radius: number;
+  /** 触发距离（量到怪的边缘，所以大块头会踩得更早） */
+  trigger: number;
+  /** 炸完在地上留下的那片火烧几层（0 = 不留火，只有进化的连珠伏灯会留） */
+  fire: number;
+  /** 画面上的一点随机相位：一排雷不该同步地闪 */
+  phase: number;
 }
 
 /** 地上的一盏弃灯（「分灯」放下的）。 */
@@ -344,6 +369,10 @@ export class Game {
   pyreTotal = 0;
   /** 地上的弃灯（「分灯」放下的那盏小灯）。 */
   lamps: DroppedLamp[] = [];
+  /** 地上的伏灯（武器「伏灯」撒下的雷）。 */
+  mines: Mine[] = [];
+  /** 本局一共布下过多少颗（结算用）。 */
+  mineCount = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -498,6 +527,8 @@ export class Game {
     this.lampCd = 0;
     this.lampCdMax = 0;
     this.lampCount = 0;
+    this.mines.length = 0;
+    this.mineCount = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -931,6 +962,7 @@ export class Game {
     this.resolveGraze(dt);
 
     this.updateBlazeEmbers(dt);
+    this.resolveMines(dt);
     this.updatePyres(dt);
     this.updateLamps(dt);
     this.pickups.update(dt, this.player.x, this.player.y, this.player.stats.pickupRange, (p) => this.collect(p));
@@ -1367,6 +1399,7 @@ export class Game {
         this.novaCount += 1;
         this.bounties.onNova();
       },
+      mine: (x, y, damage, radius, trigger, fire) => this.placeMine(x, y, damage, radius, trigger, fire),
     };
   }
 
@@ -2007,18 +2040,111 @@ export class Game {
 
   private explode(p: Projectile): void {
     const radius = p.explode * (1 + (this.player.stats.areaMult - 1) * 0.5);
-    this.particles.shockwave(p.x, p.y, '#ff7a2f', radius, 0.45);
-    this.particles.burst(p.x, p.y, 18, '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
-    this.camera.addTrauma(0.2, this.settings.data.shake * this.settings.motionScale);
-    this.addDecal(p.x, p.y, radius * 0.8, 'rgba(20,8,4,0.55)', 6);
-    this.enemies.forEach((e) => {
-      const d = Math.hypot(e.x - p.x, e.y - p.y);
-      if (d <= radius + e.radius) {
-        const falloff = 1 - clamp((d / radius) * 0.5, 0, 0.6);
-        const dmg = p.damage * falloff;
-        this.applyHit(e, dmg, false, e.x - p.x, e.y - p.y, p.knockback, { burn: p.burn, slow: p.slow });
-      }
+    this.blast(p.x, p.y, radius, p.damage, {
+      knockback: p.knockback,
+      burn: p.burn,
+      slow: p.slow,
+      spark: '#ff9d2e',
+      sparkCount: 18,
     });
+  }
+
+  /**
+   * 一圈爆炸，火球的落地爆炸与「伏灯」都是它。
+   *
+   * 抽出来是因为它们是同一件事——"以某点为心，按距离衰减打一圈"；
+   * 分开写迟早会有一边被忘掉（比如后来给火球加了击退、忘了给伏灯加）。
+   * 返回值是**炸到了几只**：伏灯的成就与音效层次要看这个数。
+   */
+  private blast(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    opts: { knockback?: number; burn?: number; slow?: number; ring?: string; spark?: string; sparkCount?: number } = {},
+  ): number {
+    const ring = opts.ring ?? '#ff7a2f';
+    this.particles.shockwave(x, y, ring, radius, 0.45);
+    this.particles.burst(x, y, opts.sparkCount ?? 14, opts.spark ?? '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
+    this.camera.addTrauma(0.2, this.settings.data.shake * this.settings.motionScale);
+    this.addDecal(x, y, radius * 0.8, 'rgba(20,8,4,0.55)', 6);
+    let hits = 0;
+    this.enemies.forEach((e) => {
+      const d = Math.hypot(e.x - x, e.y - y);
+      if (d > radius + e.radius) return;
+      // 边缘只吃四成：站在爆炸圈最外沿不该和正中一样疼
+      const falloff = 1 - clamp((d / radius) * 0.5, 0, 0.6);
+      this.applyHit(e, damage * falloff, false, e.x - x, e.y - y, opts.knockback ?? 0, { burn: opts.burn, slow: opts.slow });
+      hits += 1;
+    });
+    return hits;
+  }
+
+  /**
+   * 布一颗「伏灯」。
+   *
+   * 落点由玩家决定（武器在玩家身后 22px 处撒下来），这里只管放上去：
+   * 上弦半秒、亮一盏小灯（黑暗里得看得见它，而且它本来就是一盏灯）、
+   * 上弦期间踩不响——那是玩家刚转身离开的那半秒。
+   */
+  placeMine(x: number, y: number, damage: number, radius: number, trigger: number, fire: number): void {
+    // 地上最多留六颗：不给上限的话，一路小跑就能铺出一条雷带（见 data/mines.ts）
+    if (this.mines.length >= MINE.max) this.mines.shift();
+    this.mines.push({ x, y, life: MINE.life, arm: MINE.arm, damage, radius, trigger, fire, phase: this.rng.next() * 6.283 });
+    this.mineCount += 1;
+    // 第一次布下伏灯就把「机制」那一章的条目记上（图鉴里的数是现取的，改调参会自己跟上）
+    this.codex.discover('mechanic', 'mine');
+    this.particles.burst(x, y, 5, '#ffca7a', { speed: 90, size: 2.4, life: 0.4 });
+    this.audio.play('ui');
+  }
+
+  /**
+   * 伏灯：上弦、亮着、等人踩；踩到就炸，放着不管就自己烧尽。
+   * 自己烧尽**不炸**——不然"跑过去把雷耗掉"就成了一种清场手段。
+   */
+  private resolveMines(dt: number): void {
+    if (!this.mines.length) return;
+    for (let i = this.mines.length - 1; i >= 0; i -= 1) {
+      const m = this.mines[i];
+      m.life -= dt;
+      // 雷本来就是一盏灯：它照亮脚边一小圈（既是"它在哪"的答案，也让它能被看见）
+      this.light.addLight(m.x, m.y, MINE.lightRadius, MINE.lightIntensity);
+      this.light.addGlow(m.x, m.y, MINE.glow, 0.15);
+      if (m.life <= 0) {
+        this.mines.splice(i, 1);
+        this.particles.burst(m.x, m.y, 6, '#8b7f6a', { speed: 60, size: 2, life: 0.5 });
+        continue;
+      }
+      if (m.arm > 0) {
+        m.arm -= dt;
+        continue;
+      }
+      let fired = false;
+      this.enemies.forEach((e) => {
+        if (fired) return;
+        const rr = m.trigger + e.radius;
+        if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= rr * rr) fired = true;
+      });
+      if (fired) this.detonateMine(m, i);
+    }
+  }
+
+  /** 伏灯被踩响：一圈爆炸（进化的那颗还会在脚下留一片火）。 */
+  private detonateMine(m: Mine, index: number): void {
+    this.mines.splice(index, 1);
+    const radius = m.radius * (1 + (this.player.stats.areaMult - 1) * 0.5);
+    const hits = this.blast(m.x, m.y, radius, m.damage, {
+      knockback: MINE.knockback,
+      burn: m.fire,
+      ring: '#ffb14e',
+      spark: '#ffd9a0',
+      sparkCount: 22,
+    });
+    if (m.fire > 0) this.addGround(m.x, m.y, radius * 0.75, MINE.fireLife, MINE.fireDps);
+    // 一次炸到一片：这是伏灯最想要的那一下（也是「伏击」成就的判据）
+    if (hits >= MINE.multiHit) this.achievements.unlock('mine_multi');
+    this.audio.play('nova');
+    this.haptics.mine();
   }
 
   private addGround(
@@ -3255,6 +3381,7 @@ export class Game {
     this.drawShrines(ctx);
     this.drawPyres(ctx);
     this.drawLamps(ctx);
+    this.drawMines(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
@@ -3549,6 +3676,108 @@ export class Game {
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 地上的伏灯。三件事要一眼看得出来：
+   * **在哪儿**（暖色的灯身与光）、**上弦了没有**（外圈那道进度弧，没转完就是还不能踩）、
+   * 以及**它能管多大一片**（上弦之后才出现的虚线触发圈——不该在还没上弦的时候就吓人）。
+   * 快烧尽时灯身会暗下去：那是"这颗要没了，别指望它"的暗示。
+   */
+  private drawMines(ctx: CanvasRenderingContext2D): void {
+    if (!this.mines.length) return;
+    ctx.save();
+    for (const m of this.mines) {
+      const armed = m.arm <= 0;
+      // 快烧尽（最后 1.6 秒）开始黯淡：不画个倒计时，而是让它的光弱下去
+      const fade = clamp(m.life / 1.6, 0, 1);
+      const pulse = 0.5 + Math.sin(this.time * 6 + m.phase) * 0.5;
+      const flicker = 1 + Math.sin(this.time * 9 + m.phase * 3) * 0.06;
+      // 一小片压在地上的影子：它是**摆件**，不是站着的灯（弃灯是站着的，伏灯是蹲着的）
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.beginPath();
+      ctx.ellipse(m.x, m.y + 4, 12, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 灯身：矮胖的灯笼。先画壳，再把光叠在壳上——
+      // 顺序反过来（先光后壳）的时候，那点光会把壳糊成一团火球，看不出"这是盏灯"。
+      ctx.fillStyle = '#241f2e';
+      ctx.beginPath();
+      ctx.moveTo(m.x - 9, m.y + 4);
+      ctx.lineTo(m.x + 9, m.y + 4);
+      ctx.lineTo(m.x + 6, m.y - 10);
+      ctx.lineTo(m.x - 6, m.y - 10);
+      ctx.closePath();
+      ctx.fill();
+      // 提梁：两根斜撑 + 一横，灯和火球的分界线就在这几笔上
+      ctx.strokeStyle = '#4a4160';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(m.x - 6, m.y - 10);
+      ctx.lineTo(m.x - 3.5, m.y - 15);
+      ctx.lineTo(m.x + 3.5, m.y - 15);
+      ctx.lineTo(m.x + 6, m.y - 10);
+      ctx.stroke();
+      ctx.fillStyle = '#3a3350';
+      ctx.beginPath();
+      ctx.ellipse(m.x, m.y + 4, 9.5, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(m.x - 8, m.y - 11);
+      ctx.lineTo(m.x + 8, m.y - 11);
+      ctx.lineTo(m.x + 5, m.y - 15);
+      ctx.lineTo(m.x - 5, m.y - 15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      // 罩子里那点芯：上弦之前是冷的（青灰），上弦之后是暖的（琥珀）——颜色本身就是状态。
+      // 半径收得很小：伏灯的亮该是"灯芯"，不是"炸开的那一下"（那一下由 blast 去画）。
+      const coreR = (armed ? 13 : 9) * (0.55 + 0.45 * fade) * flicker;
+      const cg = ctx.createRadialGradient(m.x, m.y - 4, 0, m.x, m.y - 4, coreR);
+      if (armed) {
+        cg.addColorStop(0, `rgba(255,244,212,${0.92 * fade})`);
+        cg.addColorStop(0.45, `rgba(255,178,80,${0.42 * fade})`);
+        cg.addColorStop(1, 'rgba(255,120,20,0)');
+      } else {
+        cg.addColorStop(0, `rgba(206,232,250,${0.62 * fade})`);
+        cg.addColorStop(0.5, `rgba(120,172,214,${0.28 * fade})`);
+        cg.addColorStop(1, 'rgba(90,140,190,0)');
+      }
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y - 4, coreR, 0, Math.PI * 2);
+      ctx.fill();
+      // 洒在脚边地上的那一圈光（比弃灯小得多：它只是一盏小灯，别和主灯抢）
+      const poolR = 30 * (0.55 + 0.45 * fade) * (1 + pulse * 0.06);
+      const pg = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, poolR);
+      pg.addColorStop(0, armed ? `rgba(255,168,78,${0.2 * fade})` : `rgba(120,180,220,${0.13 * fade})`);
+      pg.addColorStop(1, 'rgba(255,120,20,0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, poolR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // 上弦进度：一圈从正上方顺时针合拢的弧；合拢了就等于"能踩了"
+      if (!armed) {
+        ctx.globalAlpha = 0.5 + pulse * 0.25;
+        ctx.strokeStyle = '#bfe0ff';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y - 2, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - m.arm / MINE.arm));
+        ctx.stroke();
+      } else {
+        // 触发圈：虚线，随呼吸一涨一缩——它管的范围看得见，才谈得上"布"这个字
+        ctx.globalAlpha = (0.16 + pulse * 0.12) * fade;
+        ctx.strokeStyle = '#ffb14e';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 9]);
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.trigger * (0.97 + pulse * 0.03), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }

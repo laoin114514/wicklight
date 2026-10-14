@@ -13,6 +13,7 @@ import { LANTERNS } from '../data/lanterns';
 import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { GRAZE } from '../data/graze';
+import { MINE } from '../data/mines';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
 import { WEAPON_MAP } from '../data/weapons';
@@ -308,6 +309,29 @@ export function codexCatalog(): CodexEntry[] {
       ],
     ],
     extra: '焰是自己擦出来的，让它一直烧下去的是击杀：停下来喘口气，焰就自己烧完了。',
+  });
+  // 伏灯：同样是"每时每刻都在发生、但界面上讲不清楚"的东西——
+  // 它跟别的武器不一样的地方全在"地上那颗雷的规则"上，所以这一条讲的是地皮，不是伤害。
+  const mineDef = WEAPON_MAP.mine;
+  const mineChainDef = WEAPON_MAP.mine_chain;
+  out.push({
+    kind: 'mechanic',
+    id: 'mine',
+    name: '伏灯',
+    blurb: '跑着撒在身后的雷：上弦半秒，之后谁踩上来就炸一圈。位置也是要攒的东西。',
+    color: '#ffca7a',
+    icon: '🕯️',
+    rows: [
+      ['怎么摆', '撒在身后 22px；站着不动时绕自己撒一圈'],
+      ['上弦', `${MINE.arm} 秒（这半秒踩不响）`],
+      ['触发距离', `1 级 ${mineDef.levels[0].range} → 满级 ${mineDef.levels[mineDef.levels.length - 1].range}px；判定时再加怪自己的半径`],
+      ['爆炸半径', `1 级 ${mineDef.levels[0].radius} → 满级 ${mineDef.levels[mineDef.levels.length - 1].radius}px，边缘只吃四成`],
+      ['寿命', `${MINE.life} 秒；自己烧尽不炸`],
+      ['地上最多', `${MINE.max} 颗（再多就先烧掉最老的那颗）`],
+      ['不伤自己', '玩家自己的爆炸从来不伤自己（火球也一样）'],
+      ['进化', `满级 + 灼心 → 「${mineChainDef.name}」：一次两颗 + 留一片火`],
+    ],
+    extra: `一次炸到 ${MINE.multiHit} 只以上会解「伏击」。它强不强全看你怎么走——把追兵引到雷上，还是自己绕圈把它们甩在两百像素外。`,
   });
   for (const s of STAGES) {
     out.push({

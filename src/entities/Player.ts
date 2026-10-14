@@ -32,6 +32,11 @@ export interface PlayerContext {
   ) => void;
   /** 燃爆真正放出去的那一刻（用于悬赏计数等）。 */
   onNova: () => void;
+  /**
+   * 伏灯：在地上布一颗雷。
+   * 位置由玩家给（Player 只知道"我朝哪儿走"），落点判定与爆炸都在 Game 里。
+   */
+  mine: (x: number, y: number, damage: number, radius: number, trigger: number, fire: number) => void;
 }
 
 export interface PlayerFlags {
@@ -772,6 +777,19 @@ export class Player {
           });
         }
         ctx.audio('shoot');
+        break;
+      }
+      case 'mine': {
+        // 撒在**身后**：伏灯是"跑着撒"的雷，追兵踩着它，你已经跑到别处去了。
+        // 站着不动时没有"身后"，就绕着自己撒一圈（仍然能用，只是少了那点意思）。
+        const count = this.countOf(st);
+        const moving = Math.hypot(this.vx, this.vy) > 20;
+        const back = (moving ? Math.atan2(this.vy, this.vx) : this.angle) + Math.PI;
+        for (let i = 0; i < count; i += 1) {
+          const a = back + (i - (count - 1) / 2) * 0.75;
+          ctx.mine(this.x + Math.cos(a) * 22, this.y + Math.sin(a) * 22, dmg, st.radius * area, st.range, st.burn);
+        }
+        ctx.audio('lamp');
         break;
       }
       case 'spray': {

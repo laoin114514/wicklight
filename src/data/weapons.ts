@@ -121,6 +121,23 @@ export const WEAPONS: WeaponDef[] = [
     evolve: { passive: 'haste', into: 'frost_glacier' },
   },
 
+  // 「伏灯」这两件里，`range` 是**踩响**的距离，`radius` 是它炸多大一片。
+  // `burn` 对它们又是另一件事：那是"炸完在地上留下的那片火烧几层"，
+  // 0 就是不留火——所以 1 级的伏灯只炸一圈，进化的连珠伏灯才留一片
+  // （留火的时间 / 伤害在 data/mines.ts 的 fireLife / fireDps）。
+  {
+    id: 'mine',
+    name: '伏灯',
+    kind: 'mine',
+    color: '#ffca7a',
+    blurb: '跑着往身后撒一颗伏灯：上弦之后被踩到就炸一圈。',
+    levels: scale(
+      { ...base, damage: 34, cooldown: 2.6, count: 1, speed: 0, range: 40, radius: 58, pierce: 0, spread: 0, knockback: 95 },
+      { damage: 16, cooldown: 0.92, count: 0.25, radius: 5, range: 4 },
+    ),
+    evolve: { passive: 'might', into: 'mine_chain' },
+  },
+
   // ── Evolved forms (unlocked via UpgradeSystem) ──
   {
     id: 'ring_corona',
@@ -204,6 +221,18 @@ export const WEAPONS: WeaponDef[] = [
     levels: scale({ ...base, damage: 44, cooldown: 0.85, count: 3, speed: 620, range: 460, radius: 17, pierce: 99, slow: 1.6, knockback: 140 }, { damage: 17, range: 26, slow: 0.4, cooldown: 0.93 }),
   },
   {
+    id: 'mine_chain',
+    name: '连珠伏灯',
+    kind: 'mine',
+    color: '#ffb14e',
+    blurb: '一次布下两颗，炸完还留一片火——一条会自己烧起来的路。',
+    evolved: true,
+    levels: scale(
+      { ...base, damage: 104, cooldown: 1.5, count: 2, speed: 0, range: 60, radius: 92, pierce: 0, spread: 0, knockback: 140, burn: 2 },
+      { damage: 22, cooldown: 0.93, radius: 6, range: 3 },
+    ),
+  },
+  {
     id: 'spray_firestorm',
     name: '焚风',
     kind: 'spray',
@@ -223,4 +252,4 @@ export function weaponAt(id: string, level: number): WeaponStats {
 }
 
 export const STARTER_WEAPONS = ['ring', 'wisp', 'fireball', 'whip', 'shard', 'spray'] as const;
-export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang'] as const;
+export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang', 'mine'] as const;

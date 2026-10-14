@@ -489,6 +489,138 @@ async function main() {
   });
   await sleep(200);
 
+  // ── 3a5. 伏灯：跑着撒、上弦之后踩得响、地上那盏灯真的画出来了 ──
+  // 这是"位置"的第二种用法（第一种是掠影）。位置这件事全落在地皮上，
+  // 所以"跑着撒"要用真键盘跑一段才算数，光在离线测试里调 placeMine 证明不了。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.mines.length = 0;
+    g.mineCount = 0;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    // 这一段只留伏灯：要量的是"上弦那半秒踩上去吃不吃伤害"，
+    // 别的武器（守夜人开局那个火环就够得着 240px 外）会把账搅乱。
+    // 不用 recomputeStats —— 那是重算属性，会把这一局撑到 1e6 的血量收回去。
+    window.__SAVED_WEAPONS__ = [...p.weapons.entries()];
+    p.weapons.clear();
+    p.weapons.set('mine', 3);
+  });
+  await sleep(120);
+  await page.keyboard.down('KeyD');
+  await sleep(700);
+  await page.keyboard.up('KeyD');
+  await sleep(200);
+  const dropped = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const m = g.mines[0];
+    return { n: g.mines.length, px: Math.round(g.player.x), mx: m ? Math.round(m.x) : null, count: g.mineCount };
+  });
+  expect(dropped.n > 0, '按着方向键跑，身后会留下伏灯', JSON.stringify(dropped));
+  expect(dropped.mx !== null && dropped.mx < dropped.px, '它撒在**身后**，不是脚底下', JSON.stringify(dropped));
+  expect(dropped.count > 0, '布下的颗数记在结算里', `mineCount=${dropped.count}`);
+
+  // 上弦 / 触发：自己摆一枚离人 240px 的雷，再往雷上放一只石守。
+  // 离人远是为了量得干净——人这半秒里什么都不做，它吃到的每一滴血都只可能来自伏灯。
+  const staged = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.mines.length = 0;
+    g.placeMine(240, 0, 60, 80, 40, 0);
+    window.__MINE__ = g.mines[0];
+    const e = g.enemies.spawn('bulwark', 240, 0, 1, 0);
+    e.hp = 1e6;
+    e.maxHp = 1e6;
+    e.speed = 0;
+    window.__MINE_TARGET__ = e;
+    return { arm: +g.mines[0].arm.toFixed(2) };
+  });
+  expect(staged.arm > 0, '刚放下的伏灯还在上弦', JSON.stringify(staged));
+  await sleep(220);
+  const still = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { gone: !g.mines.includes(window.__MINE__), hp: Math.round(window.__MINE_TARGET__.hp) };
+  });
+  expect(!still.gone, '上弦还没走完：石守站在雷上也踩不响', JSON.stringify(still));
+  expect(still.hp === 1e6, '那半秒里踩上去不该吃一点伤害', `hp=${still.hp}`);
+  await sleep(760);
+  const boom = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { gone: !g.mines.includes(window.__MINE__), hp: Math.round(window.__MINE_TARGET__.hp) };
+  });
+  expect(boom.gone, '上弦之后被踩到就炸了（那颗从地上消失）', JSON.stringify(boom));
+  expect(boom.hp <= 1e6 - 50, '这一炸真的打到了踩上来的那只（正中该吃满 60）', `hp=${boom.hp}`);
+
+  // 画面上：伏灯是"看得见的一盏灯"，不是一颗隐形的雷。
+  // 同一个窗口，先在没有雷的时候采一次，再摆上两颗（都上弦好，触发圈也画出来）采第二次。
+  const mineShot = () =>
+    page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      const r = g.renderer;
+      const s = g.camera.worldToScreen(g.player.x, g.player.y);
+      const dpr = r.dpr;
+      const x = Math.max(0, Math.round((s.x + 6) * dpr));
+      const y = Math.max(0, Math.round((s.y - 76) * dpr));
+      const w = Math.round(130 * dpr);
+      const hh = Math.round(160 * dpr);
+      return [...r.canvas.getContext('2d').getImageData(x, y, w, hh).data];
+    });
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    // 清场：刚才那只石守就站在雷旁边，留着他这一枪会当场炸掉，
+    // 像素比对与截图都会变成一团白光（雷要"静静地摆着"才看得出它长什么样）
+    g.enemies.clear();
+    g.mines.length = 0;
+  });
+  await sleep(360);
+  const noMine = await mineShot();
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.placeMine(g.player.x + 70, g.player.y, 40, 60, 34, 2);
+    g.placeMine(g.player.x + 70, g.player.y + 58, 40, 60, 34, 0);
+    g.mines.forEach((m) => {
+      m.arm = 0;
+    });
+  });
+  await sleep(360);
+  const withMine = await mineShot();
+  const litMine = ringDiff(noMine, withMine);
+  expect(litMine > 40, '地上那盏伏灯真的画出来了（摆了雷，那片像素亮起来）', `变亮像素 ${litMine} 个`);
+  await shot('03d-mine');
+
+  // 图鉴里认得这两件：名字与进化都该在
+  const mineCodex = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return {
+      mine: g.codex.entry('weapon:mine')?.name ?? '',
+      chain: g.codex.entry('weapon:mine_chain')?.name ?? '',
+      mech: g.codex.has('mechanic', 'mine'),
+    };
+  });
+  expect(mineCodex.mine.includes('伏灯') && mineCodex.chain.includes('连珠'), '图鉴收录了伏灯与它的进化', JSON.stringify(mineCodex));
+  expect(mineCodex.mech, '布过第一颗雷之后，图鉴「机制」章多出一条伏灯', JSON.stringify(mineCodex));
+
+  // 收尾：把这一段借走的东西还回去（武器、地上的雷、敌人），别让后面的段落量到别人的账
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.mines.length = 0;
+    g.enemies.clear();
+    p.weapons.clear();
+    for (const [id, lv] of window.__SAVED_WEAPONS__ ?? []) p.weapons.set(id, lv);
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    delete window.__SAVED_WEAPONS__;
+    delete window.__MINE__;
+    delete window.__MINE_TARGET__;
+  });
+  await sleep(200);
+
   // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
   // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
   // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。

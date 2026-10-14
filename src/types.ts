@@ -5,7 +5,7 @@ export interface Vec2 {
 
 export type Difficulty = 'relaxed' | 'normal' | 'nightmare';
 
-export type WeaponKind = 'orbit' | 'wisp' | 'fireball' | 'whip' | 'shard' | 'spray' | 'arc' | 'beam' | 'boomerang';
+export type WeaponKind = 'orbit' | 'wisp' | 'fireball' | 'whip' | 'shard' | 'spray' | 'arc' | 'beam' | 'boomerang' | 'mine';
 
 export interface WeaponStats {
   damage: number;

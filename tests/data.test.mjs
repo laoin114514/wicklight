@@ -20,9 +20,9 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
-  // 掠影那一串调参值是张"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
+  // 掠影、伏灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze') continue;
+    if (name === 'graze' || name === 'mines') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -48,6 +48,19 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(graze.blazeHeatMult >= 0.4 && graze.blazeHeatMult <= 0.6, '烧着时攒热只该攒一半上下');
   assert.ok(graze.blazeCarry > 0 && graze.blazeCarry <= 0.6, '烧完留下的热度不该超过一半');
   assert.ok(graze.blazeExtend > 0 && graze.blazeExtendCap > 1, '焰里击杀应当能续焰，而且有上限');
+
+  // ── 伏灯的调参表：和掠影同一类（改了不报错，只会让手感变味）──
+  const mine = data.mines;
+  assert.ok(mine, '构建产物应导出伏灯调参表');
+  for (const [k, v] of Object.entries(mine)) {
+    assert.equal(typeof v, 'number', `mines.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `mines.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(mine.arm < mine.life * 0.2, '上弦只该占寿命的一小截：它是"先放着"的东西，不是手雷');
+  assert.ok(mine.max >= 3, '地上至少要能同时摆几颗，不然"布"这个字立不住');
+  assert.ok(mine.fireDps > 0 && mine.fireLife > 0, '进化留下的那片火要有时间也有伤害');
+  assert.ok(mine.multiHit >= 3, '「伏击」的门槛不该一颗雷炸一下就够');
+  assert.ok(mine.lightRadius > mine.glow, '照亮周围的光该比灯身那圈光晕大');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

@@ -88,6 +88,14 @@ export class CombatHaptics {
     haptic([6, 34, 22], this.on());
   }
 
+  /**
+   * 「伏灯」被踩响的那一下：短促的两下。它和燃爆（一次性的大震）不一样——
+   * 这是"你自己埋的东西生效了"，手感上更该像敲了一下，而不是挨了一下。
+   */
+  mine(): void {
+    haptic([8, 26, 8], this.on());
+  }
+
   died(): void {
     haptic(160, this.on());
   }
