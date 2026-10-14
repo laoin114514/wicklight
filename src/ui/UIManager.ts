@@ -1,4 +1,4 @@
-import { ACHIEVEMENTS } from '../data/achievements';
+import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { META_TREE } from '../data/meta';
 import { PASSIVE_MAP } from '../data/upgrades';
@@ -808,12 +808,22 @@ export class UIManager implements UIHost {
   }
 
   private achievements(): void {
-    const list = ACHIEVEMENTS.map((a) => {
+    const row = (a: (typeof ACHIEVEMENTS)[number]) => {
       const ok = this.game.save.achievements.includes(a.id);
       return `<div class="ach ${ok ? 'is-ok' : ''}">
         <div class="ach__mark">${ok ? '🏆' : '🔒'}</div>
         <div class="ach__body"><div class="ach__name">${a.name}</div><div class="ach__blurb">${a.blurb}</div></div>
         ${a.embers ? `<div class="ach__reward ${ok ? 'is-ok' : ''}">+${a.embers} 余烬</div>` : ''}
+      </div>`;
+    };
+    // 分组展示：30 条成就在一个平铺列表里很难扫，分组之后"下一步该冲什么"一眼可见
+    const list = ACHIEVEMENT_GROUPS.map((group) => {
+      const items = ACHIEVEMENTS.filter((a) => a.group === group);
+      if (!items.length) return '';
+      const got = items.filter((a) => this.game.save.achievements.includes(a.id)).length;
+      return `<div class="ach-group">
+        <div class="ach-group__title">${group} <b>${got}/${items.length}</b></div>
+        <div class="ach-list">${items.map(row).join('')}</div>
       </div>`;
     }).join('');
     const earned = ACHIEVEMENTS.reduce((n, a) => n + (this.game.save.achievements.includes(a.id) ? a.embers ?? 0 : 0), 0);

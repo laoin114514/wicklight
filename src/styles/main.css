@@ -439,6 +439,9 @@ body {
 .node.is-locked, .node.is-poor { opacity: 0.5; }
 
 /* ── Achievements ── */
+.ach-group + .ach-group { margin-top: 16px; }
+.ach-group__title { font-size: 12px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.55); margin-bottom: 8px; }
+.ach-group__title b { color: #ffd24e; }
 .ach-list { display: grid; gap: 8px; }
 .ach { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.06); }
 .ach.is-ok { border-color: rgba(255, 200, 90, 0.4); background: rgba(50, 36, 12, 0.5); }

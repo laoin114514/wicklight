@@ -143,7 +143,11 @@ export interface AchievementDef {
   blurb: string;
   /** 解锁时额外奖励的余烬。 */
   embers?: number;
+  /** 成就面板里的分组（不写归入「其他」） */
+  group?: AchievementGroup;
 }
+
+export type AchievementGroup = '战斗' | '关卡与首领' | '抉择与风险' | '收集与档案';
 
 export interface MetaNodeDef {
   id: string;

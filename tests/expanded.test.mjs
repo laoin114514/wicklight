@@ -177,5 +177,39 @@ test('新敌人 / 词缀 / 夜咒（回响 · 织雾者 · 噬灯魅）', async 
   game.player.curseOilMult = 1;
   assert.ok(decayStarved > decayBase * 1.3, `「枯灯」应加快灯火衰减（${decayBase.toFixed(4)} -> ${decayStarved.toFixed(4)}）`);
 
+  // ── 新成就：回响 / 噬灯魅 / 滞行雾 / 新夜咒，都要真的能解锁 ──
+  const slay = (defId, count) => {
+    for (let i = 0; i < count; i += 1) {
+      const e = game.enemies.spawn(defId, 400, 400, 1, 1);
+      game.enemies.damage(e, 1e9, game.lightCtx(), 0, 0, 0);
+    }
+  };
+  game.save.achievements = game.save.achievements.filter((a) => !['echo_bane', 'siphon_slain', 'mirewalker'].includes(a));
+  slay('echo', 9);
+  assert.ok(!game.save.achievements.includes('echo_bane'), '差一只不该解锁「回声止步」');
+  slay('echo', 1);
+  assert.ok(game.save.achievements.includes('echo_bane'), '击杀 10 只回响应解锁「回声止步」');
+  slay('siphon', 5);
+  assert.ok(game.save.achievements.includes('siphon_slain'), '击杀 5 只噬灯魅应解锁「灯火不可夺」');
+
+  game.mudTime = 0;
+  game.grounds.length = 0;
+  game.grounds.push({ x: game.player.x, y: game.player.y, r: 160, life: 9999, dps: 0, kind: 'mud' });
+  for (let i = 0; i < 1250; i += 1) game.updateTerrain(1 / 60);
+  assert.ok(game.save.achievements.includes('mirewalker'), '在滞行雾里待满 20 秒应解锁「踏雾而行」');
+
+  game.save.achievements = game.save.achievements.filter((a) => a !== 'curse_veteran');
+  game.stageIndex = 1;
+  game.curse = whisper;
+  game.onStageComplete();
+  assert.ok(game.save.achievements.includes('curse_veteran'), '带着「低语」平定一关应解锁「咒中行」');
+
+  // ── 成就面板要按分组渲染，新成就也在里面 ──
+  game.ui.showScreen('achievements');
+  const achHtml = game.ui.screen.innerHTML;
+  for (const frag of ['战斗', '关卡与首领', '抉择与风险', '收集与档案', '一线穿心', '回声止步']) {
+    assert.ok(achHtml.includes(frag), `成就面板应出现「${frag}」`);
+  }
+
   assert.deepEqual(errors, [], `不应有 console.error：${errors.join(' | ')}`);
 });

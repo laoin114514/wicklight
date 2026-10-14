@@ -115,5 +115,30 @@ test('新武器（光矛 / 回旋灯刃）与进化链', async (t) => {
     `弹体应在玩家附近收回（${Math.hypot(lastX - owner2.x, lastY - owner2.y).toFixed(1)}px）`,
   );
 
+  // ── 成就：一次贯穿 5 个敌人 ──
+  game.enemies.clear();
+  game.save.achievements = game.save.achievements.filter((a) => a !== 'pierce_line');
+  for (const d of [100, 160, 220, 280, 340]) game.enemies.spawn('shade', px + d, py, 8, 1);
+  game.fireBeam(px, py, 0, 520, 13, 8, '#fff3c4');
+  assert.ok(game.save.achievements.includes('pierce_line'), '一次光矛贯穿 5 个敌人应解锁「一线穿心」');
+
+  // ── 成就：回旋灯刃回程命中 ──
+  game.enemies.clear();
+  game.projectiles.clear();
+  game.save.achievements = game.save.achievements.filter((a) => a !== 'blade_return');
+  const dummy = game.enemies.spawn('shade', px, py, 9_999, 1);
+  const ret = game.projectiles.spawn({
+    x: dummy.x, y: dummy.y, vx: 60, vy: 0,
+    damage: 1, radius: 12, color: '#8ff0c8', pierce: 99, boomerang: 9, maxLife: 4, weaponId: 'boomerang',
+  });
+  ret.returning = true;
+  for (let i = 0; i < 40 && !game.save.achievements.includes('blade_return'); i += 1) {
+    ret.hitIds.length = 0; // 模拟"回程每经过一次都算一次命中"
+    ret.x = dummy.x;
+    ret.y = dummy.y;
+    game.resolveProjectiles(1 / 60);
+  }
+  assert.ok(game.save.achievements.includes('blade_return'), '回旋灯刃回程命中 25 次应解锁「去而复返」');
+
   assert.deepEqual(errors, [], `不应有 console.error：${errors.join(' | ')}`);
 });

@@ -212,6 +212,12 @@ export class Game {
   bestCombo = 0;
   combo = 0;
   splinterKills = 0;
+  echoKills = 0;
+  siphonKills = 0;
+  /** 单局在滞行雾里待过的时间（秒） */
+  mudTime = 0;
+  /** 单局回旋灯刃"回程"命中的次数 */
+  bladeReturnHits = 0;
   comboTimer = 0;
   bossKills = 0;
   upgradedCount = 0;
@@ -322,6 +328,10 @@ export class Game {
   private resetRunState(): void {
     this.arcs.length = 0;
     this.splinterKills = 0;
+    this.echoKills = 0;
+    this.siphonKills = 0;
+    this.mudTime = 0;
+    this.bladeReturnHits = 0;
     this.comboTier = 0;
     this.screenFade = 0;
     this.flash = 0;
@@ -602,7 +612,7 @@ export class Game {
     this.updateHazards(dt);
     this.updateShrines();
 
-    this.updateTerrain();
+    this.updateTerrain(dt);
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
     const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
@@ -965,6 +975,7 @@ export class Game {
       const cy = y + dy * t;
       if (Math.hypot(e.x - cx, e.y - cy) <= width + e.radius) hits.push(e);
     });
+    if (hits.length >= 5) this.achievements.unlock('pierce_line');
     for (const e of hits) {
       const crit = Math.random() < this.player.stats.critChance;
       this.applyHit(e, damage * (crit ? this.player.stats.critMult : 1), crit, dx, dy, opts.knockback ?? 60, {
@@ -1155,6 +1166,14 @@ export class Game {
       this.splinterKills += 1;
       if (this.splinterKills >= 12) this.achievements.unlock('splinter_slain');
     }
+    if (e.defId === 'echo') {
+      this.echoKills += 1;
+      if (this.echoKills >= 10) this.achievements.unlock('echo_bane');
+    }
+    if (e.defId === 'siphon') {
+      this.siphonKills += 1;
+      if (this.siphonKills >= 5) this.achievements.unlock('siphon_slain');
+    }
     this.particles.burst(e.x, e.y, e.boss ? 60 : e.elite ? 24 : 10, def.color, { speed: e.boss ? 320 : 180, size: e.boss ? 6 : 4, life: e.boss ? 1 : 0.6 });
     this.particles.shockwave(e.x, e.y, def.color, e.radius * 2.5, 0.4);
     this.audio.play('kill');
@@ -1336,6 +1355,10 @@ export class Game {
             const dmg = p.damage * (crit ? this.player.stats.critMult : 1);
             this.applyHit(e, dmg, crit, p.vx, p.vy, p.knockback, { burn: p.burn, slow: p.slow });
             p.hitIds.push(e.id);
+            if (p.returning) {
+              this.bladeReturnHits += 1;
+              if (this.bladeReturnHits >= 25) this.achievements.unlock('blade_return');
+            }
             if (p.explode > 0) {
               this.explode(p);
               p.active = false;
@@ -1384,7 +1407,7 @@ export class Game {
    * 每帧重算并写在玩家身上，由 Player.update 读取（而不是让地面直接改玩家速度，
    * 免得一个技能把玩家的属性改得收不回来）。
    */
-  private updateTerrain(): void {
+  private updateTerrain(dt: number): void {
     let slow = 1;
     for (const g of this.grounds) {
       if (g.kind !== 'mud') continue;
@@ -1393,6 +1416,10 @@ export class Game {
       if (dx * dx + dy * dy <= g.r * g.r) slow = Math.min(slow, 0.6);
     }
     this.player.terrainSlow = slow;
+    if (slow < 1) {
+      this.mudTime += dt;
+      if (this.mudTime >= 20) this.achievements.unlock('mirewalker');
+    }
   }
 
   private resolveGrounds(dt: number): void {
@@ -1480,6 +1507,7 @@ export class Game {
     if (this.stageIndex === 0) this.achievements.unlock('survivor');
     if (this.difficulty === 'nightmare') this.achievements.unlock('nightmare');
     if (this.curse) this.achievements.unlock('curse_bearer');
+    if (this.curse && (this.curse.id === 'whisper' || this.curse.id === 'starve')) this.achievements.unlock('curse_veteran');
     if (this.endless) {
       this.openShop('无尽之夜 · 补给站');
       return;
