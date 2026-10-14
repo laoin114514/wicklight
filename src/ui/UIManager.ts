@@ -2,6 +2,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { META_TREE } from '../data/meta';
 import { PASSIVE_MAP } from '../data/upgrades';
+import { CODEX_SECTIONS } from '../systems/CodexSystem';
 import { RELIC_MAP } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
 import { STAGES } from '../data/stages';
@@ -61,6 +62,7 @@ export class UIManager implements UIHost {
       case 'victory': this.victory(); break;
       case 'dead': this.dead(); break;
       case 'meta': this.meta(); break;
+      case 'codex': this.codex(); break;
       case 'achievements': this.achievements(); break;
       case 'settings': this.settings(); break;
       default: this.screen.innerHTML = ''; this.screen.className = 'screen is-hidden'; break;
@@ -97,6 +99,7 @@ export class UIManager implements UIHost {
           <button class="btn btn--primary" data-act="play">开始冒险</button>
           <button class="btn ${endlessUnlocked ? '' : 'is-locked'}" data-act="endless">无尽之夜${endlessUnlocked ? '' : ' · 通关幽林解锁'}</button>
           <button class="btn" data-act="meta">余烬解锁 <b>${save.embers}</b></button>
+          <button class="btn" data-act="codex">图鉴 <b>${this.game.codex.seenCount()}/${this.game.codex.total()}</b></button>
           <button class="btn" data-act="achievements">成就</button>
           <button class="btn" data-act="settings">设置</button>
         </div>
@@ -105,6 +108,7 @@ export class UIManager implements UIHost {
           <span>余烬 ${save.embers}</span>
           <span>总击杀 ${save.killsTotal}</span>
           <span>无尽最佳 ${save.bestEndlessWave} 波</span>
+          <span>图鉴 ${this.game.codex.seenCount()}/${this.game.codex.total()}</span>
         </div>
       </div>
     `);
@@ -115,6 +119,7 @@ export class UIManager implements UIHost {
       this.openSelect();
     });
     this.on('[data-act="meta"]', () => { this.returnState = 'menu'; this.game.openMenu('meta'); });
+    this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.game.openMenu('codex'); });
     this.on('[data-act="achievements"]', () => { this.returnState = 'menu'; this.game.openMenu('achievements'); });
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
   }
@@ -475,6 +480,42 @@ export class UIManager implements UIHost {
   private backToOrigin(): void {
     if (this.returnState === 'paused') this.game.openMenu('paused');
     else this.game.goMenu();
+  }
+
+  private codex(): void {
+    const cx = this.game.codex;
+    const seen = cx.seenCount();
+    const total = cx.total();
+    const pct = total ? Math.round((seen / total) * 100) : 0;
+    const sections = CODEX_SECTIONS.map((sec) => {
+      const entries = cx.entries.filter((e) => e.kind === sec.kind);
+      if (!entries.length) return '';
+      const cards = entries
+        .map((e) => {
+          if (!cx.has(e.kind, e.id)) {
+            return `<div class="cx is-locked"><div class="cx__dot"></div><div class="cx__name">？？？</div><div class="cx__blurb">尚未发现</div></div>`;
+          }
+          return `<div class="cx" style="--c:${e.color ?? '#8fa7ff'}">
+            <div class="cx__dot">${e.icon ?? '●'}</div>
+            <div class="cx__name">${e.name}${e.tag ? `<i class="cx__tag">${e.tag}</i>` : ''}</div>
+            <div class="cx__blurb">${e.blurb}</div>
+          </div>`;
+        })
+        .join('');
+      return `<section class="cx-sec">
+        <h4>${sec.title} <b>${cx.sectionSeen(sec.kind)}/${entries.length}</b><span>${sec.hint}</span></h4>
+        <div class="cx-grid">${cards}</div>
+      </section>`;
+    }).join('');
+    this.show(`
+      <div class="panel panel--codex">
+        <div class="panel__title">图鉴 · ${seen}/${total}</div>
+        <div class="cx-bar"><i style="width:${pct}%"></i></div>
+        ${sections}
+        <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
+      </div>
+    `);
+    this.on('[data-act="back"]', () => this.backToOrigin());
   }
 
   private achievements(): void {

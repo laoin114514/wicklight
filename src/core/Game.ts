@@ -25,6 +25,7 @@ import { UpgradeSystem } from '../systems/UpgradeSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { MetaSystem } from '../systems/MetaSystem';
 import { AchievementSystem } from '../systems/AchievementSystem';
+import { CodexSystem, type CodexEntry } from '../systems/CodexSystem';
 import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -48,6 +49,7 @@ export type GameState =
   | 'victory'
   | 'dead'
   | 'meta'
+  | 'codex'
   | 'achievements'
   | 'settings';
 
@@ -132,6 +134,11 @@ export class Game {
   save: SaveData;
   meta: MetaSystem;
   achievements: AchievementSystem;
+  codex: CodexSystem;
+  /** 图鉴扫描的节流计时（秒） */
+  private codexTimer = 0;
+  private codexBatching = false;
+  private codexBatchCount = 0;
 
   ui: UIHost | null = null;
   hud: HUDHost | null = null;
@@ -209,6 +216,7 @@ export class Game {
       // 提示里用中文成就名，别把内部 id 甩到玩家脸上
       this.hud?.toast(`🏆 成就解锁 · ${ACHIEVEMENT_MAP[id]?.name ?? id}`);
     });
+    this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
     const startStage = STAGES[0];
     this.level = generateLevel(startStage, 1);
     this.director = new Director(startStage, this.difficulty, this.rng);
@@ -267,6 +275,7 @@ export class Game {
     this.loadStage(stage, endless ? STAGES.length - 1 : 0, true);
     this.screenFade = 1;
     this.achievements.reset();
+    this.syncCodex();
     this.state = 'playing';
     this.audio.ensure();
     this.audio.setMood('battle');
@@ -315,6 +324,9 @@ export class Game {
     this.darknessBoost = 0;
     this.curseDarkness = 0;
     this.currentOffers = [];
+    this.codex.reset();
+    this.codexTimer = 0;
+    this.syncCodex();
   }
 
   private buildStats(): PlayerStats {
@@ -407,6 +419,7 @@ export class Game {
     }
     this.loadStage(STAGES[next], next, false);
     this.state = 'playing';
+    this.syncCodex();
     this.ui?.showScreen('playing');
   }
 
@@ -442,6 +455,11 @@ export class Game {
       return;
     }
     this.runTime += dt;
+    this.codexTimer -= dt;
+    if (this.codexTimer <= 0) {
+      this.codexTimer = 0.75;
+      this.syncCodex();
+    }
     this.light.begin();
     this.particles.update(dt);
     this.updateDecals(dt);
@@ -758,6 +776,7 @@ export class Game {
   }
 
   private applyAffix(e: Enemy, id: string): void {
+    this.codex.discover('affix', id);
     e.affix = id;
     if (id === 'swift') e.speed *= 1.5;
     else if (id === 'giant') {
@@ -935,6 +954,7 @@ export class Game {
       this.audio.play('ui');
     }
     const def = ENEMY_MAP[e.defId];
+    if (def) this.codex.discover('enemy', e.defId);
     if (e.defId === 'splinter') {
       this.splinterKills += 1;
       if (this.splinterKills >= 12) this.achievements.unlock('splinter_slain');
@@ -1012,6 +1032,30 @@ export class Game {
       this.hud?.toast(`宝箱：${offers[0].name}`);
       this.audio.play('evolve');
     }
+  }
+
+  /** 图鉴有新发现时的统一处理：写盘、收集成就、提示。 */
+  private onCodexDiscover(entry: CodexEntry, seen: number, total: number): void {
+    this.storage.save(this.save);
+    // 开局那一下会一次扫出好几条（灯火/关卡/初始武器/被动），这时合并成一条提示，
+    // 免得一进游戏就被四条 toast 糊脸。
+    if (this.codexBatching) {
+      this.codexBatchCount += 1;
+    } else {
+      this.hud?.toast(`📖 图鉴 ${seen}/${total} · ${entry.name}`);
+    }
+    if (seen >= 50) this.achievements.unlock('codex50');
+    if (seen >= total) this.achievements.unlock('codex_all');
+  }
+
+  /** 扫描玩家当前持有的一切（武器/被动/遗物/夜咒/灯火/关卡）并记进图鉴。 */
+  private syncCodex(): void {
+    this.codexBatching = true;
+    this.codexBatchCount = 0;
+    this.codex.syncFromRun(this.player, this.lanternId, this.currentStage().id, this.curse?.id ?? null);
+    this.codexBatching = false;
+    if (this.codexBatchCount >= 2) this.hud?.toast(`📖 图鉴 +${this.codexBatchCount} 条`);
+    this.codexBatchCount = 0;
   }
 
   private gainXp(amount: number): void {
@@ -1424,6 +1468,7 @@ export class Game {
       this.save,
       (id) => this.hud?.toast(`🏆 成就解锁 · ${ACHIEVEMENT_MAP[id]?.name ?? id}`),
     );
+    this.codex = new CodexSystem(this.save, (entry, seen, total) => this.onCodexDiscover(entry, seen, total));
     this.ui?.setMeta(this.meta);
   }
 

@@ -76,7 +76,10 @@ npm run preview
   被动层数、本关夜咒、以及伤害倍率 / 冷却 / 暴击 / 移速 / 灯油耗率等关键属性。
   肉鸽的乐趣在于"我这套牌到底成了什么样"，所以它一直在手边。
 - **三档难度**：放松 / 标准 / 噩梦，影响敌人数量、伤害与资源掉落。
-- **18 项成就 / 统计 / 本地存档**：全部写入 `localStorage`，无后端。
+- **图鉴（编年史）**：100 个条目——15 种敌人（含精英与首领的应对说明）、16 件武器与进化、
+  32 件遗物、14 个被动、7 种夜咒、9 种精英词缀、4 位灯火、3 张关卡。
+  一切"被玩家看见过"的东西都会被记录，没见过的显示为问号；填满图鉴另有两项收集成就。
+- **20 项成就 / 统计 / 本地存档**：全部写入 `localStorage`，无后端。
 
 ## 画面与手感
 
@@ -109,7 +112,7 @@ node tools/render.mjs --scene boss1 --crop 560,240,260,180 --zoom 4
 ## 测试
 
 ```bash
-npm test          # 7 套离线测试（Node + 自研软件光栅化 Canvas）
+npm test          # 8 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 ```
@@ -131,7 +134,7 @@ npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长
 npx playwright install chromium && npx playwright install-deps chromium
 ```
 
-`tests/` 下五个套件都跑在真实构建产物 `dist/app.js` 上：
+`tests/` 下的套件都跑在真实构建产物 `dist/app.js` 上：
 
 - `smoke`：启动 → 刷怪 → 升级 → 通关 → Boss → 局外成长 → 死亡结算 → 无尽。
 - `features`：灯光随灯油变化、精英词缀、连杀奖励、转场淡入、Boss 相位与荆棘地刺、雷弧连锁、
@@ -140,6 +143,8 @@ npx playwright install chromium && npx playwright install-deps chromium
 - `screens`：把 11 个界面逐个渲染出来，扫描 HTML 里是否出现 `undefined` / `NaN` / 空内容。
 - `ui`：静态检查每个按钮钩子都有处理器、每个 class 都有样式。
 - `data`：武器等级曲线单调、进化链闭合、遗物/夜咒字段完整，叠加全部遗物后属性仍然有限可用。
+- `codex`：图鉴条目无重复且条条有名称与说明、分类不为空；击杀敌人后立刻记录、
+  玩家持有的武器/被动/遗物会被扫描进来、发现是幂等的、进度确实写进存档。
 
 ### 性能体检
 

@@ -53,6 +53,8 @@ export interface EnemyDef {
   phases?: number;
   /** 死亡时分裂出的小怪 */
   splits?: { id: string; count: number };
+  /** 图鉴里的一句话说明 */
+  note?: string;
 }
 
 export interface PassiveDef {
@@ -169,6 +171,8 @@ export interface SaveData {
   bestEndlessWave: number;
   runs: number;
   killsTotal: number;
+  /** 图鉴已发现的条目，形如 "enemy:shade"。 */
+  codex: string[];
   settings: SettingsData;
 }
 

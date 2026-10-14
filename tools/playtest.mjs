@@ -196,6 +196,25 @@ async function main() {
   const menuCanvas = await page.evaluate(() => window.__PROBE__.canvasStats());
   expect(menuCanvas && menuCanvas.mean > 6, '菜单画布真的画了东西（不是纯黑）', JSON.stringify(menuCanvas));
 
+  // ── 1b. 图鉴（编年史）──
+  const codexBefore = await page.evaluate(() => window.__WICKLIGHT__.game.codex.seenCount());
+  await page.click('[data-act="codex"]');
+  await sleep(300);
+  const codexLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(codexLayout.issues.length === 0, '图鉴布局正常', codexLayout.issues.join('; '));
+  const codexText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  const codexTitle = await page.evaluate(() => document.querySelector('.panel__title')?.textContent ?? '');
+  expect(codexText.includes('图鉴 ·'), '图鉴显示总进度', codexTitle);
+  const missingSection = ['敌人', '武器', '遗物', '被动', '夜咒', '精英词缀', '灯火', '关卡'].filter((k) => !codexText.includes(k));
+  expect(missingSection.length === 0, '图鉴分区齐全', missingSection.join(','));
+  expect(!/undefined|NaN/.test(codexText), '图鉴没有缺字段', codexText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
+  expect(codexText.includes('尚未发现'), '未发现的条目显示为占位');
+  const codexCards = await page.evaluate(() => document.querySelectorAll('.cx').length);
+  expect(codexCards >= 95, '图鉴列出了全部条目', `${codexCards} 张卡`);
+  await shot('01b-codex');
+  await page.click('[data-act="back"]');
+  await sleep(250);
+
   // ── 2. 选灯火 ──
   await page.click('[data-act="play"]');
   await sleep(220);
@@ -412,6 +431,15 @@ async function main() {
   await shot('12-achievements');
   await page.click('[data-act="back"]');
   await sleep(300);
+
+  // 打了一整局之后，图鉴应该真的长东西了（武器/敌人/遗物都会进来）
+  const codexAfter = await page.evaluate(() => window.__WICKLIGHT__.game.codex.seenCount());
+  expect(codexAfter > codexBefore, '一整局结束后图鉴有新发现', `${codexBefore} → ${codexAfter}`);
+  const codexSaved = await page.evaluate(() => {
+    const h = window.__WICKLIGHT__;
+    return h.game.save.codex.length;
+  });
+  expect(codexSaved === codexAfter, '图鉴进度写进了存档', `save=${codexSaved} vs ${codexAfter}`);
 
   // ── 10. 无尽模式 + 移动端视口 ──
   await page.evaluate(() => {

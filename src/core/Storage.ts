@@ -26,6 +26,7 @@ export function defaultSave(): SaveData {
     bestEndlessWave: 0,
     runs: 0,
     killsTotal: 0,
+    codex: [],
     settings: { ...defaultSettings },
   };
 }
@@ -61,6 +62,7 @@ export class Storage {
           unlockedLanterns: parsed.unlockedLanterns?.length ? parsed.unlockedLanterns : base.unlockedLanterns,
           meta: parsed.meta ?? base.meta,
           achievements: parsed.achievements ?? base.achievements,
+          codex: Array.isArray(parsed.codex) ? parsed.codex : base.codex,
         };
         return this.memory;
       }

@@ -19,6 +19,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'combo30', name: '烽火连天', blurb: '单局连杀达到 30。' },
   { id: 'splinter_slain', name: '碎魂者', blurb: '单局击碎 12 只「碎魂」。' },
   { id: 'endless40', name: '长夜不熄', blurb: '在无尽模式抵达第 40 波。' },
+  { id: 'codex50', name: '博物学者', blurb: '图鉴中记录 50 个条目。' },
+  { id: 'codex_all', name: '无所不窥', blurb: '把图鉴里的条目全部点亮。' },
 ];
 
 export const ACHIEVEMENT_MAP: Record<string, AchievementDef> = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));
