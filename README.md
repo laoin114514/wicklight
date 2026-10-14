@@ -192,7 +192,7 @@ node tools/render.mjs --scene boss1 --crop 560,240,260,180 --zoom 4
 ## 测试
 
 ```bash
-npm test          # 30 套离线测试（Node + 自研软件光栅化 Canvas）
+npm test          # 31 套离线测试（Node + 自研软件光栅化 Canvas）
 npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 ```
@@ -212,6 +212,8 @@ npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长
 - 无尽之夜里额外把第 5 轮的**三首领同台**摆出来，查 HUD 三行血条的名字、宽度与视口内布局；
 - 同时对每一屏做**布局体检**（元素是否零尺寸、是否超出视口、页面是否出现滚动条、
   公告是否折行压住 HUD、触屏摇杆是否遮挡构筑信息）与**画布像素体检**（画面是否真的画出了东西）；
+- 战斗中途把窗口改成 1600×900，断言 canvas 的 CSS 尺寸、**后备缓冲尺寸**与相机视口三者同步——
+  后备缓冲一旦落后于窗口，浏览器就会把旧画面拉伸上去（画面发虚、镜头中心偏移）；
 - 并断言全程没有 `console.error`、未捕获异常与资源加载失败；移动端另跑一遍 390×844 竖屏。
 
 首次运行需要一次浏览器下载：
@@ -332,6 +334,10 @@ npx playwright install chromium && npx playwright install-deps chromium
     先在半分辨率小图上合并再整屏加一次——整屏「读改写」次数直接决定软件光栅化的开销。
   - **光照精灵化**：暗幕挖洞与暖光叠加各烘焙一张 256px 径向光斑，取代每盏灯每帧的
     `createRadialGradient` + 圆弧路径填充。
+  - **分辨率同步**：后备缓冲（`canvas.width/height`）恒等于 CSS 尺寸 × 动态倍率，
+    窗口尺寸变化、画质档位变化、`devicePixelRatio` 变化（换屏 / 改浏览器缩放）都会立刻重贴。
+    这条不能省：倍率恰好没变而缓冲停在旧尺寸时，浏览器会把旧缓冲拉伸到窗口大小，
+    画面整体发虚、镜头中心也会偏（`tests/renderer.test.mjs` 专门盯这条）。
   - 以上改动都用**整帧像素差分**验证过等价性（均值差 ≤ 0.02/255，最大 ≤ 14）。
 
 ## 目录结构
@@ -352,7 +358,7 @@ wicklight/
 │   ├── styles/  main.css
 │   ├── main.ts · types.ts
 ├── scripts/serve.mjs
-└── tests/  dom-stubs.mjs · smoke.test.mjs
+└── tests/  dom-stubs.mjs · smoke.test.mjs · renderer.test.mjs
 ```
 
 ## 测试与自检

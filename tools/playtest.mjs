@@ -281,6 +281,42 @@ async function main() {
   expect(moved > 40, '键盘输入真的驱动了角色移动', `位移 ${moved.toFixed(0)}px`);
   expect(p1.oil < p0.oil, '灯油在战斗中持续燃烧', `${p0.oil} → ${p1.oil}`);
 
+  // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
+  // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
+  // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await sleep(600);
+  const sized = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const r = g.renderer;
+    const c = r.canvas;
+    const rect = c.getBoundingClientRect();
+    const s = g.camera.worldToScreen(g.player.x, g.player.y);
+    return {
+      rect: [Math.round(rect.width), Math.round(rect.height)],
+      style: [c.style.width, c.style.height],
+      buf: [c.width, c.height],
+      expect: [Math.round(r.width * r.dpr), Math.round(r.height * r.dpr)],
+      dpr: r.dpr,
+      center: [Math.round(s.x), Math.round(s.y)],
+      half: [Math.round(r.width / 2), Math.round(r.height / 2)],
+    };
+  });
+  expect(
+    sized.buf[0] === sized.expect[0] && sized.buf[1] === sized.expect[1],
+    '窗口变大后后备缓冲跟着走（不是被 CSS 拉伸）',
+    JSON.stringify(sized),
+  );
+  expect(sized.rect[0] === 1600 && sized.rect[1] === 900, 'canvas 的 CSS 尺寸等于窗口', JSON.stringify(sized));
+  expect(
+    Math.abs(sized.center[0] - sized.half[0]) <= 40 && Math.abs(sized.center[1] - sized.half[1]) <= 40,
+    '窗口变大后角色仍在视野中心',
+    JSON.stringify(sized),
+  );
+  await shot('03b-resize-1600x900');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await sleep(500);
+
   await page.keyboard.press('Space'); // 冲刺
   await sleep(300);
   // 先走完可能已经排队的升级面板：真实击杀会不会刚好升级取决于时序，

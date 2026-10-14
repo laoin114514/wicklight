@@ -15,6 +15,8 @@ export class Renderer {
   private maxDpr = 2;
   private cssW = 1280;
   private cssH = 720;
+  /** 上一次看到的设备像素比：换显示器 / 改缩放时它才会变，用来重新贴一次后备缓冲。 */
+  private deviceRatio = 0;
   private probeLast = 0;
   private probeAcc = 0;
   private probeFrames = 0;
@@ -51,6 +53,10 @@ export class Renderer {
 
   /** 用一段帧时间样本自动升降内部渲染分辨率，把帧率钉在 60fps 附近。 */
   sampleFrame(): void {
+    // 拖到另一块屏 / 改浏览器缩放会改 devicePixelRatio：这时后备缓冲必须重贴一次，
+    // 否则浏览器会把旧缓冲整数倍拉伸，画面整体发虚。（窗口尺寸变化走 resize()）
+    const device = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    if (device !== this.deviceRatio) this.apply();
     const now = typeof performance !== 'undefined' ? performance.now() : 0;
     if (!this.probeLast) {
       this.probeLast = now;
@@ -103,15 +109,22 @@ export class Renderer {
 
   private apply(): void {
     const device = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    this.deviceRatio = device;
     const budget = Math.sqrt(this.pixelBudget / (this.cssW * this.cssH));
     const ceiling = Math.max(0.5, Math.min(this.maxDpr, device, budget));
     const dpr = Math.max(0.4, Math.round(ceiling * this.scale * 20) / 20);
-    if (dpr === this.dpr) return;
     this.dpr = dpr;
-    this.canvas.width = Math.floor(this.width * dpr);
-    this.canvas.height = Math.floor(this.height * dpr);
-    this.canvas.style.width = `${this.width}px`;
-    this.canvas.style.height = `${this.height}px`;
+    // 这里不能因为 dpr 没变就提前返回：窗口尺寸可能变了而倍率恰好不变，
+    // 那样后备缓冲会停在旧尺寸上，被 CSS 拉伸成一团糊（镜头中心也会偏）。
+    // 赋值 canvas.width 会清空并重置上下文状态，所以只在真的变了的时候写。
+    const bw = Math.max(1, Math.floor(this.width * dpr));
+    const bh = Math.max(1, Math.floor(this.height * dpr));
+    if (this.canvas.width !== bw) this.canvas.width = bw;
+    if (this.canvas.height !== bh) this.canvas.height = bh;
+    const cssW = `${this.width}px`;
+    const cssH = `${this.height}px`;
+    if (this.canvas.style.width !== cssW) this.canvas.style.width = cssW;
+    if (this.canvas.style.height !== cssH) this.canvas.style.height = cssH;
   }
 
   begin(): void {
