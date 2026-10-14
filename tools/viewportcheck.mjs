@@ -152,6 +152,40 @@ try {
       await context.close();
     }
   }
+  // 刘海 / 手势条那几条 env(safe-area-inset-*) 在真机之外量不到（测试环境里恒为 0），
+  // 但至少要确认浏览器**认了**这些声明——写错的 calc() 会被整条丢掉，那时 HUD 会掉回默认位置。
+  const styleCheck = await (async () => {
+    const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
+    const found = await page.evaluate(() => {
+      // @media 包着的规则要钻进去数，不然一律命中 0。
+      const cssTexts = [];
+      const walk = (rules) => {
+        for (const rule of Array.from(rules || [])) {
+          if (rule.cssRules && rule.cssRules.length) walk(rule.cssRules);
+          else if (rule.cssText) cssTexts.push(rule.cssText);
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          walk(sheet.cssRules);
+        } catch {
+          /* 跨域表读不到就跳过 */
+        }
+      }
+      const all = cssTexts.join(String.fromCharCode(10));
+      return (all.match(/env\(\s*safe-area-inset-(left|right|top|bottom)/g) || []).length;
+    });
+    await context.close();
+    return found;
+  })();
+  if (styleCheck < 3) {
+    bad += 1;
+    console.log(`✖ 刘海安全区样式没被浏览器接受（命中 ${styleCheck} 条，至少要有 3 条）`);
+  } else {
+    console.log(`✔ 刘海 / 手势条安全区样式已被解析：${styleCheck} 条 env(safe-area-inset-*) 规则`);
+  }
 } finally {
   await browser.close();
   server.close();

@@ -2561,6 +2561,24 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
     gap: 12px;
   }
 }
+/* 刘海 / 挖孔：横屏时它们落在左右两侧，正好压在状态栏和构筑芯片上。
+   桌面与老机器上 env() 全是 0，这几条等于没写。 */
+@media (orientation: landscape) {
+  body.is-touch .hud__topleft {
+    left: calc(18px + env(safe-area-inset-left));
+    top: calc(16px + env(safe-area-inset-top));
+  }
+  body.is-touch .hud__topright {
+    right: calc(18px + env(safe-area-inset-right));
+    top: calc(16px + env(safe-area-inset-top));
+  }
+  body.is-touch .hud__build { left: calc(14px + env(safe-area-inset-left)); }
+  /* 底部那两条（首领血条 / 连杀）要让开手势条 */
+  body.is-touch .hud__boss { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  body.is-touch .hud__combo { bottom: calc(42px + env(safe-area-inset-bottom)); }
+  body.is-touch .toast-root { padding-top: calc(60px + env(safe-area-inset-top)); }
+}
+
 /* 375 上下（iPhone SE 那种矮横屏）：右上那一列先缩一号，两枚芯片只留数字那一行 */
 @media (orientation: landscape) and (max-height: 375px) {
   body.is-touch .hud__topright { gap: 2px; }

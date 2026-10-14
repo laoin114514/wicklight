@@ -210,6 +210,7 @@ npm run playtest  # 真实浏览器实测（Playwright + Chromium）
 npm run perf      # 真实浏览器性能体检（帧率 / 动态分辨率 / 长跑稳定性）
 npm run mobileperf # 手机横屏的帧时间 & 每帧画布命令数（含逐项消融对比）
 npm run viewportcheck # 横屏布局体检：手机/平板横屏尺寸逐个开局，HUD 不许互相压住或出界
+                    # （顺带断言刘海 / 手势条的 env(safe-area-inset-*) 样式被浏览器解析）
 ```
 
 三个脚本都会**先构建再跑**：测试跑的是 `dist/app.js` 这个真实产物，不先构建就会拿旧包验证新代码。
@@ -390,6 +391,11 @@ npx playwright install chromium && npx playwright install-deps chromium
       （留 200px 余量，装得下首领光环与出生弹出）；粒子同理。
     - **横屏闸门**：手机竖屏时盖一块提示牌并**停掉主循环**；装到桌面走 manifest 的
       `orientation: landscape`，已在全屏里时再补一次 `screen.orientation.lock`。
+    - **让开刘海与手势条**：横屏时挖孔屏的刘海落在**左右两侧**，正好压在状态栏和构筑芯片上；
+      iPhone 那种底部手势条会压住连杀条。横屏下 `body.is-touch` 的 HUD 用
+      `env(safe-area-inset-left/right/top/bottom)` 让开（桌面与老机型上这些值恒为 0，等于没写）；
+      `viewportcheck` 会断言这几条 `calc()` 真被浏览器接受——写错的 `calc()` 会被整条丢掉，
+      那时 HUD 会悄悄掉回默认位置。
     - **屏幕常亮（`core/WakeLock`）**：只在掌上设备、且只在真正在玩的时候持有，页面切回前台自动补申请。
     - **HUD 只在值变了才碰 DOM**：血条宽度按 0.1% 取整后比对、时间 / 击杀 / 金币等文本逐项记忆，
       没有首领时那几行不去清 DOM——每帧无脑写 `style` / `textContent` 会让浏览器反复排队样式重算，
