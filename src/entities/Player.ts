@@ -84,9 +84,13 @@ export class Player {
   invuln = 0;
   dashTimer = 0;
   dashCd = 0;
+  /** 冲刺 / 燃爆这一次冷却的总时长：触屏按钮上那个"冷却圈"要按比例画，
+   *  只有剩余时间画不出角度——冲刺的时长随遗物/词缀变化，燃爆随急速变化。 */
+  dashCdMax = 0;
   dashDirX = 0;
   dashDirY = 0;
   novaCd = 0;
+  novaCdMax = 0;
   /** 燃爆流派：由 lanternId 决定，赋予一次燃爆完全不同的解法 */
   novaStyle = 'warden';
   private novaBuffTimer = 0;
@@ -134,7 +138,9 @@ export class Player {
     this.invuln = 0;
     this.dashTimer = 0;
     this.dashCd = 0;
+    this.dashCdMax = 0;
     this.novaCd = 0;
+    this.novaCdMax = 0;
     this.cooldowns.clear();
     this.orbit.hitCooldown.clear();
     this.recomputeStats();
@@ -263,6 +269,15 @@ export class Player {
     return clamp(this.oil / this.oilMax, 0, 1);
   }
 
+  /** 冲刺 / 燃爆还剩多少冷却（1 = 刚放完，0 = 可用）。触屏按钮上的冷却圈按它画。 */
+  get dashCdFrac(): number {
+    return this.dashCdMax > 0 ? clamp(this.dashCd / this.dashCdMax, 0, 1) : 0;
+  }
+
+  get novaCdFrac(): number {
+    return this.novaCdMax > 0 ? clamp(this.novaCd / this.novaCdMax, 0, 1) : 0;
+  }
+
   get damageScale(): number {
     let s = 0.65 + this.oilFrac * 0.7;
     if (this.flags.lowOilDamage > 0 && this.oilFrac < 0.35) s *= 1 + this.flags.lowOilDamage;
@@ -319,6 +334,7 @@ export class Player {
       this.dashDirY = d.y;
       this.dashTimer = 0.18;
       this.dashCd = s.dashCooldown;
+      this.dashCdMax = s.dashCooldown;
       this.invuln = Math.max(this.invuln, 0.32);
       ctx.audio('dash');
       ctx.particles.burst(this.x, this.y, 10, '#7be0ff', { speed: 140, size: 3, life: 0.35 });
@@ -359,6 +375,7 @@ export class Player {
     // Nova (燃爆) consumes oil
     if (input.nova && this.novaCd <= 0) {
       this.novaCd = Math.max(2.4, 6 - this.passiveLevel('haste') * 0.4);
+      this.novaCdMax = this.novaCd;
       this.oil = Math.max(0, this.oil - 0.16);
       this.doNova(ctx);
     }

@@ -413,8 +413,8 @@ try {
   const sum = known.reduce((a, k) => a + (st[k] || 0), 0);
   console.log(`\n帧数 ${out.frames} · 平均 ${out.avg}ms (${out.fps}fps) · p50 ${out.p50} · p95 ${out.p95} · 最慢 ${out.max}`);
   console.log(`画面 ${out.info.canvas} (${out.info.mp}MPx) dpr ${out.info.dpr} scale ${out.info.scale}`);
-  console.log(`[dbg] maxDpr ${out.info.maxDpr} dprEnv ${out.info.dprEnv} killEnv "${out.info.killEnv}"`);
-  console.log(`[dbg] 档位 ${out.info.prof} · 光照贴图 ×${out.info.lightTex} · 帧率上限 ${out.info.cap || '不限'} · 落屏光源 ${out.info.lit}/${out.info.lights}`);
+  console.log(`[环境] maxDpr ${out.info.maxDpr} · 环境 dpr ${out.info.dprEnv} · 消融 "${out.info.killEnv}"`);
+  console.log(`[档位] ${out.info.prof} · 光照贴图 ×${out.info.lightTex} · 帧率上限 ${out.info.cap || '不限'} · 落屏光源 ${out.info.lit}/${out.info.lights}`);
   console.log(`场上：${out.info.enemies} 敌 / ${out.info.particles} 粒子 / ${out.info.lights} 光源 / ${out.info.floaters} 飘字`);
   console.log('\n每帧阶段耗时（ms）：');
   for (const k of known) {

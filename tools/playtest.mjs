@@ -1243,6 +1243,39 @@ async function main() {
   expect(cancelSafe.afterCancel === false, 'touchcancel（来电 / 系统手势）要松开冲刺，不能卡住', JSON.stringify(cancelSafe));
   expect(cancelSafe.afterEnd === false, '抬起冲刺按钮要松开', JSON.stringify(cancelSafe));
 
+  // 触屏按钮的冷却圈：手机上没有键盘，按下去没反应时全靠这一圈说"还在转"。
+  // 真按一下（要让它跑过一帧才真的放出去），看圈出来了、会退、放完自己消失。
+  const cdRing = await mobile.evaluate(async () => {
+    const btn = document.querySelector('[data-action="dash"]');
+    const p = window.__WICKLIGHT__.game.player;
+    const t = new Touch({ identifier: 21, target: btn, clientX: 0, clientY: 0 });
+    const send = (type) =>
+      btn.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [t],
+          targetTouches: type === 'touchend' ? [] : [t],
+          changedTouches: [t],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    send('touchstart');
+    await wait(140);
+    send('touchend');
+    const fired = p.dashCd > 0;
+    const ring = btn.style.getPropertyValue('--cd');
+    const cooling = btn.classList.contains('is-cooling');
+    await wait(420);
+    const later = btn.style.getPropertyValue('--cd');
+    await wait(1800);
+    return { fired, ring, cooling, later, cd: p.dashCd, cdMax: p.dashCdMax, done: btn.style.getPropertyValue('--cd'), doneCooling: btn.classList.contains('is-cooling') };
+  });
+  expect(cdRing.fired === true, '按住冲刺按钮会真的放出去', JSON.stringify(cdRing));
+  expect(cdRing.cooling && Number(cdRing.ring) > 0, '冷却时按钮上要画冷却圈', JSON.stringify(cdRing));
+  expect(Number(cdRing.later) < Number(cdRing.ring), '冷却圈会随时间退回去（不是画着不动）', JSON.stringify(cdRing));
+  expect(cdRing.done === '' && cdRing.doneCooling === false, '转完了圈要消失（没圈 = 能按）', JSON.stringify(cdRing));
+
   // 手机上的暂停入口：键盘的 Esc 在手机上不存在，HUD 得有一个按钮，
   // 而且它不能压住记分栏（它就是挂在记分栏左上角外侧的那一枚）
   const pauseBtn = await mobile.evaluate(() => {

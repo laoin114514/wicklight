@@ -652,6 +652,7 @@ body {
 }
 .touch-buttons { position: absolute; right: 30px; bottom: 40px; display: grid; gap: 14px; pointer-events: auto; }
 .touch-btn {
+  position: relative;
   width: 76px;
   height: 76px;
   border-radius: 50%;
@@ -660,8 +661,45 @@ body {
   color: var(--text);
   font: inherit;
   font-size: 14px;
+  transition: filter 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 .touch-btn--nova { background: rgba(70, 36, 10, 0.7); border-color: var(--amber); }
+/* 冷却圈：只在按钮最外那一圈上画（中间挖空，不糊住"冲刺 / 燃爆"两个字），
+   进度由 HUD 每帧写进 `--cd`（0 = 可用，1 = 刚放完）。
+   两半是分开画的：亮的那半是"已经转回来了"，暗的那半是"还差多少"。
+   为什么不做成整块暗扇面：按钮底色本来就接近全黑，一层 0.66 的黑盖上去等于没画，
+   量过截图才看出来（右上角那圈亮边才是有用的那半）。
+   ⚠ 两个坑都是截图量出来的：conic 的 0deg 就在正上方、顺时针为正，不要写
+   `from -90deg` 去"扶正"（那样从 9 点钟开始转）；两半的角度也得是**互补**的
+   （亮的是 `1-cd`，暗的那半要从 `1-cd` 起画到 360），照着 cd 各画一半的话
+   它们会重叠在同一侧，等于只有半圈边。 */
+.touch-btn::after,
+.touch-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  -webkit-mask: radial-gradient(closest-side, rgba(0, 0, 0, 0) 72%, #000 78%);
+  mask: radial-gradient(closest-side, rgba(0, 0, 0, 0) 72%, #000 78%);
+}
+.touch-btn::before { background: conic-gradient(rgba(255, 206, 130, 0.62) calc((1 - var(--cd, 0)) * 360deg), rgba(0, 0, 0, 0) 0); }
+.touch-btn::after { background: conic-gradient(rgba(0, 0, 0, 0) calc((1 - var(--cd, 0)) * 360deg), rgba(6, 5, 8, 0.92) 0); }
+/* 转好了就不画圈：没圈 = 随时能按，比留一圈"满格"更干净 */
+.touch-btn::before,
+.touch-btn::after { transition: opacity 0.18s ease; }
+.touch-btn:not(.is-cooling)::before,
+.touch-btn:not(.is-cooling)::after { opacity: 0; }
+.touch-btn.is-cooling {
+  filter: saturate(0.5) brightness(0.72);
+  color: rgba(232, 220, 198, 0.55);
+}
+/* 冲刺中：这 0.3 秒有伤害无效帧，手机上看不见，用边光说一声 */
+.touch-btn.is-firing {
+  filter: none;
+  border-color: #7be0ff;
+  box-shadow: 0 0 18px rgba(123, 224, 255, 0.55), inset 0 0 14px rgba(123, 224, 255, 0.25);
+}
 
 /* 暂停键：只给触屏（桌面有 Esc/P，HUD 不必多一个按钮）。
    挂在右上角记分栏的左上角外侧——那一块在横屏下是空的，而且它绝对定位，不参与 grid 排版，

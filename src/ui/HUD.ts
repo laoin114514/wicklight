@@ -1,5 +1,6 @@
 import type { Game } from '../core/Game';
 import type { HUDHost } from '../core/Game';
+import { isTouchDevice } from '../core/Perf';
 import { WEAPON_MAP } from '../data/weapons';
 import { PASSIVE_MAP } from '../data/upgrades';
 import { RELIC_MAP, TRIBES } from '../data/relics';
@@ -43,11 +44,21 @@ export class HUD implements HUDHost {
   /** 上一次真正写进 DOM 的值：每帧无脑写 style / textContent 会让浏览器反复排队样式重算。 */
   private lastText = new WeakMap<HTMLElement, string>();
   private lastWidth = new WeakMap<HTMLElement, string>();
+  /** 触屏的冲刺 / 燃爆按钮（桌面为 null）：冷却圈的角度按 1/32 档记忆，别每帧写 style。 */
+  private dashBtn: HTMLElement | null = null;
+  private novaBtn: HTMLElement | null = null;
+  private lastCd = new WeakMap<HTMLElement, string>();
+  private dashFiring = false;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
     this.toastRoot = document.getElementById('toast-root') as HTMLElement;
     this.build();
+    // 触屏按钮写在 index.html 里（#touch-root），桌面上整块 display:none，这里也就是 null。
+    if (isTouchDevice()) {
+      this.dashBtn = document.querySelector('.touch-btn--dash');
+      this.novaBtn = document.querySelector('.touch-btn--nova');
+    }
   }
 
   private build(): void {
@@ -358,6 +369,7 @@ export class HUD implements HUDHost {
     this.updateCurse();
     this.updateBounty();
     this.updatePyreChip();
+    this.updateTouchButtons();
 
     const comboOn = g.combo >= 3;
     if (comboOn !== this.comboEl.classList.contains('is-on')) this.comboEl.classList.toggle('is-on', comboOn);
@@ -374,5 +386,40 @@ export class HUD implements HUDHost {
       this.announceTimer -= dt;
       if (this.announceTimer <= 0) this.announceEl.className = 'announce';
     }
+  }
+
+  /**
+   * 触屏的冲刺 / 燃爆按钮要自己说明"现在能不能按"。
+   * 键盘上这两个键在提示条里写着，按下去没反应玩家也知道是冷却；手机上只有一个圆按钮——
+   * 冷却圈（`--cd` 驱动的一圈暗色扇面）就是那句"还差多久"，冲刺中再给一下闪光，
+   * 告诉玩家"这 0.3 秒你打不到我"（无敌帧在手机上本来是看不见的）。
+   * 分档写 style：60fps 下每帧写会让浏览器反复排队样式重算，1/32 档在小圆上看不出来。
+   */
+  private updateTouchButtons(): void {
+    if (!this.dashBtn && !this.novaBtn) return;
+    const p = this.game.player;
+    if (this.dashBtn) {
+      this.cdRing(this.dashBtn, p.dashCdFrac);
+      const firing = p.dashTimer > 0;
+      if (firing !== this.dashFiring) {
+        this.dashFiring = firing;
+        this.dashBtn.classList.toggle('is-firing', firing);
+      }
+    }
+    if (this.novaBtn) this.cdRing(this.novaBtn, p.novaCdFrac);
+  }
+
+  private cdRing(btn: HTMLElement, frac: number): void {
+    const step = Math.round(Math.max(0, Math.min(1, frac)) * 32) / 32;
+    const key = String(step);
+    if (this.lastCd.get(btn) === key) return;
+    this.lastCd.set(btn, key);
+    if (step <= 0) {
+      btn.classList.remove('is-cooling');
+      btn.style.removeProperty('--cd');
+      return;
+    }
+    btn.classList.add('is-cooling');
+    btn.style.setProperty('--cd', key);
   }
 }
