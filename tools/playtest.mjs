@@ -212,6 +212,11 @@ async function main() {
   const codexCards = await page.evaluate(() => document.querySelectorAll('.cx').length);
   expect(codexCards >= 95, '图鉴列出了全部条目', `${codexCards} 张卡`);
   await shot('01b-codex');
+
+  // 刚开局一条都还没发现，所以这时候不该有任何可点开的条目
+  const freshCards = await page.evaluate(() => document.querySelectorAll('[data-cx]').length);
+  expect(freshCards === 0, '全新存档下没有可点开的条目', `${freshCards} 条`);
+
   await page.click('[data-act="back"]');
   await sleep(250);
 
@@ -345,6 +350,8 @@ async function main() {
   expect(sheetLayout.issues.length === 0, '构筑总览布局正常', sheetLayout.issues.join('; '));
   const sheetText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
   expect(sheetText.includes('构筑总览') && sheetText.includes('武器'), '构筑总览列出了武器区', sheetText.slice(0, 60));
+  expect(sheetText.includes('进化路线'), '构筑总览列出了进化路线');
+  expect(/武器 \d+\/\d+/.test(sheetText), '进化路线写明了武器等级进度');
   expect(!/undefined|NaN/.test(sheetText), '构筑总览没有缺字段', sheetText.match(/undefined|NaN/g)?.slice(0, 3).join(',') ?? '');
   await shot('05b-loadout');
   await page.keyboard.press('Tab');
@@ -510,6 +517,32 @@ async function main() {
   const recRuns = await page.evaluate(() => document.querySelectorAll('.rec-run').length);
   expect(recRuns >= 1, '最近对局里有条目', `${recRuns} 条`);
   await shot('12b-records');
+  await page.click('[data-act="back"]');
+  await sleep(300);
+
+  // 打完一局后图鉴里有真东西了 —— 这时候才该点得开、查得到数值
+  await page.click('[data-act="codex"]');
+  await sleep(300);
+  const openCards = await page.evaluate(() => document.querySelectorAll('[data-cx]').length);
+  expect(openCards >= 3, '开局扫描 + 一局之后图鉴里出现了可点开的条目', `${openCards} 条`);
+  const opened = await page.evaluate(() => {
+    const el = document.querySelector('[data-cx]');
+    el.click();
+    return el.dataset.cx;
+  });
+  await sleep(280);
+  const detailLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(detailLayout.issues.length === 0, '图鉴详情布局正常', detailLayout.issues.join('; '));
+  const detailText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  expect(detailText.includes('返回图鉴'), '图鉴详情有返回入口');
+  expect(!/undefined|NaN/.test(detailText), '图鉴详情没有缺字段', detailText.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
+  const detailRows = await page.evaluate(() => document.querySelectorAll('.cx-rows > div').length);
+  expect(detailRows >= 1, '图鉴详情列出了数值', `${opened} → ${detailRows} 行`);
+  await shot('01d-codex-detail');
+  await page.click('[data-act="detail-back"]');
+  await sleep(260);
+  const backToCodex = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
+  expect(backToCodex.includes('图鉴 ·') && backToCodex.includes('尚未发现'), '从详情返回后回到图鉴目录');
   await page.click('[data-act="back"]');
   await sleep(300);
 

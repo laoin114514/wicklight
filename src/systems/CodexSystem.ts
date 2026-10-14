@@ -6,13 +6,15 @@
  * 只要它在数据表里，就会被自动纳入图鉴。
  */
 import { AFFIXES } from '../data/affixes';
+import { ENEMY_MAP } from '../data/enemies';
 import { CURSES } from '../data/curses';
 import { ENEMIES } from '../data/enemies';
 import { LANTERNS } from '../data/lanterns';
 import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
-import { PASSIVES } from '../data/upgrades';
+import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
+import { WEAPON_MAP } from '../data/weapons';
 import type { Player } from '../entities/Player';
 import type { SaveData } from '../types';
 
@@ -27,7 +29,37 @@ export interface CodexEntry {
   tag?: string;
   color?: string;
   icon?: string;
+  /** 详情页的数值行（名称 → 数值），让图鉴不只是收藏，还能当手册查 */
+  rows?: [string, string][];
+  /** 详情页的补充说明（进化链、应对要点之类） */
+  extra?: string;
 }
+
+/** 敌人行为的玩家向说法。 */
+const BEHAVIOR_LABEL: Record<string, string> = {
+  chase: '直线追击',
+  dash: '短距突进',
+  ranged: '保持距离射击',
+  dive: '高速俯冲',
+  tank: '厚甲慢行',
+  drain: '偷取灯油',
+  bomber: '贴身自爆',
+  charge: '蓄力直线突进',
+  beacon: '速度光环',
+};
+
+/** 关卡险境的玩家向说法。 */
+const HAZARD_LABEL: Record<string, string> = {
+  fog: '浓雾',
+  meteor: '陨石雨',
+  collapse: '塌方',
+  wispstorm: '相位风暴',
+  eruption: '熔岩喷发',
+  oilvoid: '灯油枯竭',
+};
+
+const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;
+const r1 = (v: number): string => `${Math.round(v * 10) / 10}`;
 
 export interface CodexSection {
   kind: CodexKind;
@@ -57,6 +89,15 @@ export function codexCatalog(): CodexEntry[] {
       blurb: e.note ?? '',
       tag: e.boss ? '首领' : e.elite ? '精英' : undefined,
       color: e.color,
+      rows: [
+        ['生命', `${e.hp}`],
+        ['接触伤害', `${e.damage}`],
+        ['移动速度', `${e.speed}`],
+        ['经验 / 灯油', `${e.xp} / ${e.oil}`],
+        ['行为', BEHAVIOR_LABEL[e.behavior] ?? e.behavior],
+        ['登场', e.minWave && e.minWave > 1 ? `第 ${e.minWave} 波及之后` : '第一波起'],
+      ],
+      extra: e.splits ? `死亡时分裂出 ${e.splits.count} 只同类小怪。` : undefined,
     });
   }
   for (const w of WEAPONS) {
@@ -67,6 +108,19 @@ export function codexCatalog(): CodexEntry[] {
       blurb: w.blurb,
       tag: w.evolved ? '进化' : undefined,
       color: w.color,
+      rows: (() => {
+        const a = w.levels[0];
+        const b = w.levels[w.levels.length - 1];
+        const rows: [string, string][] = [
+          ['伤害 Lv1 → 满级', `${r1(a.damage)} → ${r1(b.damage)}`],
+          ['攻击间隔', a.cooldown > 0 ? `${a.cooldown.toFixed(2)}s → ${b.cooldown.toFixed(2)}s` : '常驻环绕'],
+          ['弹数', a.count === b.count ? `${a.count}` : `${a.count} → ${b.count}`],
+          ['射程', `${Math.round(b.range)}`],
+          ['等级上限', `${w.levels.length}`],
+        ];
+        return rows;
+      })(),
+      extra: w.evolve ? `进化：本武器满级 + 「${PASSIVE_MAP[w.evolve.passive]?.name ?? w.evolve.passive}」Lv${PASSIVE_MAP[w.evolve.passive]?.maxLevel ?? '?'} → ${WEAPON_MAP[w.evolve.into]?.name ?? w.evolve.into}` : undefined,
     });
   }
   for (const r of RELICS) {
@@ -78,22 +132,72 @@ export function codexCatalog(): CodexEntry[] {
       tag: r.rarity === 'epic' ? '史诗' : r.rarity === 'rare' ? '稀有' : undefined,
       color: r.color,
       icon: r.icon,
+      rows: [['稀有度', r.rarity === 'epic' ? '史诗' : r.rarity === 'rare' ? '稀有' : '普通']],
     });
   }
   for (const p of PASSIVES) {
-    out.push({ kind: 'passive', id: p.id, name: p.name, blurb: p.blurb, tag: `上限 ${p.maxLevel}`, color: p.color, icon: p.icon });
+    out.push({
+      kind: 'passive',
+      id: p.id,
+      name: p.name,
+      blurb: p.blurb,
+      tag: `上限 ${p.maxLevel}`,
+      color: p.color,
+      icon: p.icon,
+      rows: [
+        ['每级效果', p.blurb],
+        ['等级上限', `Lv ${p.maxLevel}`],
+      ],
+    });
   }
   for (const c of CURSES) {
-    out.push({ kind: 'curse', id: c.id, name: c.name, blurb: c.blurb, color: '#ff6b81', icon: c.icon });
+    out.push({
+      kind: 'curse',
+      id: c.id,
+      name: c.name,
+      blurb: c.blurb,
+      color: '#ff6b81',
+      icon: c.icon,
+      rows: [
+        ['金币回报', pct(c.goldMult)],
+        ...(c.mods.countMult ? ([['敌人数量', pct(c.mods.countMult)]] as [string, string][]) : []),
+        ...(c.mods.hpMult ? ([['敌人生命', pct(c.mods.hpMult)]] as [string, string][]) : []),
+        ...(c.mods.dmgMult ? ([['敌人伤害', pct(c.mods.dmgMult)]] as [string, string][]) : []),
+        ...(c.mods.extraWaves ? ([['额外波次', `+${c.mods.extraWaves}`]] as [string, string][]) : []),
+        ...(c.mods.darkness ? ([['黑暗加深', `+${c.mods.darkness}`]] as [string, string][]) : []),
+      ],
+    });
   }
   for (const a of AFFIXES) {
     out.push({ kind: 'affix', id: a.id, name: a.name, blurb: a.blurb, color: a.color });
   }
   for (const l of LANTERNS) {
-    out.push({ kind: 'lantern', id: l.id, name: l.name, blurb: `${l.title} · ${l.blurb}`, color: l.color });
+    out.push({
+      kind: 'lantern',
+      id: l.id,
+      name: l.name,
+      blurb: `${l.title} · ${l.blurb}`,
+      color: l.color,
+      rows: [
+        ['初始武器', WEAPON_MAP[l.weapon]?.name ?? l.weapon],
+        ['初始被动', `${PASSIVE_MAP[l.passive]?.name ?? l.passive}（${PASSIVE_MAP[l.passive]?.blurb ?? ''}）`],
+      ],
+    });
   }
   for (const s of STAGES) {
-    out.push({ kind: 'stage', id: s.id, name: s.theme.name, blurb: s.theme.subtitle, color: s.theme.accent });
+    out.push({
+      kind: 'stage',
+      id: s.id,
+      name: s.theme.name,
+      blurb: s.theme.subtitle,
+      color: s.theme.accent,
+      rows: [
+        ['波次', `${s.waves}`],
+        ['首领', s.boss ? `${ENEMY_MAP[s.boss]?.name ?? s.boss}` : '无'],
+        ['精英', s.elites.map((e) => ENEMY_MAP[e]?.name ?? e).join('、') || '无'],
+        ['险境', s.hazards.map((h) => HAZARD_LABEL[h] ?? h).join('、') || '无'],
+      ],
+    });
   }
   return out;
 }
@@ -120,6 +224,11 @@ export class CodexSystem {
 
   seenCount(): number {
     return this.known.size;
+  }
+
+  /** 按 `kind:id` 取条目（详情页用）。 */
+  entry(key: string): CodexEntry | undefined {
+    return this.lookup.get(key);
   }
 
   has(kind: CodexKind, id: string): boolean {

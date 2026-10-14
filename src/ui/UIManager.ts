@@ -20,6 +20,8 @@ export class UIManager implements UIHost {
   private selectedDifficulty: Difficulty = 'normal';
   private endless = false;
   private returnState: GameState = 'menu';
+  /** 图鉴里正在查看详情的条目（`kind:id`），为空时显示目录。 */
+  codexFocus: string | null = null;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -122,7 +124,7 @@ export class UIManager implements UIHost {
       this.openSelect();
     });
     this.on('[data-act="meta"]', () => { this.returnState = 'menu'; this.game.openMenu('meta'); });
-    this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.game.openMenu('codex'); });
+    this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.codexFocus = null; this.game.openMenu('codex'); });
     this.on('[data-act="records"]', () => { this.returnState = 'menu'; this.game.openMenu('records'); });
     this.on('[data-act="achievements"]', () => { this.returnState = 'menu'; this.game.openMenu('achievements'); });
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
@@ -179,6 +181,35 @@ export class UIManager implements UIHost {
     this.on('[data-act="start"]', () => this.game.newRun(this.selectedLantern, this.selectedDifficulty, this.endless));
   }
 
+  /** 这张卡是否会把某件武器推过进化门槛（满级武器 + 被动点满）。 */
+  private evolutionHint(o: UpgradeOffer): string {
+    const p = this.game.player;
+    if (o.kind === 'passive') {
+      const passive = PASSIVE_MAP[o.id];
+      if (!passive || o.level < passive.maxLevel) return '';
+      const targets = [...p.weapons.entries()]
+        .filter(([id, lvl]) => {
+          const def = WEAPON_MAP[id];
+          return def?.evolve?.passive === o.id && lvl >= def.levels.length;
+        })
+        .map(([id]) => WEAPON_MAP[id]);
+      if (!targets.length) return '';
+      return `<div class="card__hint">🌟 点满即可进化：${targets.map((d) => WEAPON_MAP[d.evolve!.into]?.name ?? '').filter(Boolean).join('、')}</div>`;
+    }
+    if (o.kind === 'weapon' && o.tag === 'level') {
+      const def = WEAPON_MAP[o.id];
+      if (!def?.evolve) return '';
+      if (o.level < def.levels.length) return '';
+      const need = PASSIVE_MAP[def.evolve.passive]?.maxLevel ?? 0;
+      const have = p.passiveLevel(def.evolve.passive);
+      return have >= need
+        ? `<div class="card__hint">🌟 满足进化条件，下一张卡即可进化</div>`
+        : `<div class="card__hint">满级后再点满「${PASSIVE_MAP[def.evolve.passive]?.name ?? def.evolve.passive}」（${have}/${need}）即可进化</div>`;
+    }
+    if (o.tag === 'evolve') return `<div class="card__hint">🌟 满级武器 + 满级被动 = 进化</div>`;
+    return '';
+  }
+
   private offerCard(o: UpgradeOffer): string {
     const tagLabel = o.tag === 'evolve' ? '进化' : o.tag === 'new' ? '新' : '升级';
     return `<button class="card" data-offer="${o.kind}:${o.id}" style="--accent:${o.color}">
@@ -186,6 +217,7 @@ export class UIManager implements UIHost {
       <div class="card__tag">${tagLabel} · ${o.level}/${o.maxLevel}</div>
       <div class="card__name">${o.name}</div>
       <div class="card__blurb">${o.blurb}</div>
+      ${this.evolutionHint(o)}
     </button>`;
   }
 
@@ -278,6 +310,26 @@ export class UIManager implements UIHost {
       })
       .join('');
 
+    // 进化路线：把"离进化还差什么"直接写出来，肉鸽里最该给玩家的就是这种确定信息
+    const evoRows = [...p.weapons.entries()]
+      .map(([id, lvl]) => {
+        const def = WEAPON_MAP[id];
+        if (!def || !def.evolve) return '';
+        const max = def.levels.length;
+        const passive = PASSIVE_MAP[def.evolve.passive];
+        const need = passive?.maxLevel ?? 0;
+        const have = p.passiveLevel(def.evolve.passive);
+        const into = WEAPON_MAP[def.evolve.into];
+        const ready = lvl >= max && have >= need;
+        return `<div class="lo-evo ${ready ? 'is-ready' : ''}" style="--c:${def.color}">
+          <div class="lo-evo__head"><b>${def.name}</b><span>→ ${into?.name ?? def.evolve.into}</span></div>
+          <div class="lo-evo__need">
+            武器 ${lvl}/${max} ${lvl >= max ? '✓' : ''} · ${passive?.name ?? def.evolve.passive} ${have}/${need} ${have >= need ? '✓' : ''}
+          </div>
+        </div>`;
+      })
+      .join('') || '<div class="lo-empty">当前武器还没有可走的进化路线</div>';
+
     const st = p.stats;
     const attrs = [
       ['伤害倍率', `×${st.damageMult.toFixed(2)}`],
@@ -325,6 +377,8 @@ export class UIManager implements UIHost {
             ${weapons || '<div class="lo-empty">还没有武器</div>'}
             <h4>被动 <b>${p.passives.size}</b></h4>
             ${passives || '<div class="lo-empty">还没有被动</div>'}
+            <h4>进化路线</h4>
+            ${evoRows}
           </section>
           <section class="lo-col">
             <h4>遗物 <b>${p.relics.size}</b></h4>
@@ -500,7 +554,45 @@ export class UIManager implements UIHost {
     else this.game.goMenu();
   }
 
+
+  /** 图鉴条目详情：不只是收藏，也是一本可以查数值的手册。 */
+  private codexDetailView(): void {
+    const entry = this.game.codex.entry(this.codexFocus ?? '');
+    if (!entry) {
+      this.codexFocus = null;
+      this.codex();
+      return;
+    }
+    const section = CODEX_SECTIONS.find((s) => s.kind === entry.kind);
+    const rows = (entry.rows ?? [])
+      .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`)
+      .join('');
+    this.show(`
+      <div class="panel panel--detail" style="--c:${entry.color ?? '#8fa7ff'}">
+        <div class="cx-head">
+          <div class="cx-head__icon">${entry.icon ?? '●'}</div>
+          <div>
+            <div class="cx-head__name">${entry.name}${entry.tag ? `<i class="cx__tag">${entry.tag}</i>` : ''}</div>
+            <div class="cx-head__kind">${section?.title ?? ''}</div>
+          </div>
+        </div>
+        <p class="cx-blurb">${entry.blurb}</p>
+        ${rows ? `<div class="cx-rows">${rows}</div>` : ''}
+        ${entry.extra ? `<p class="cx-extra">${entry.extra}</p>` : ''}
+        <div class="row-actions"><button class="btn btn--primary" data-act="detail-back">返回图鉴</button></div>
+      </div>
+    `);
+    this.on('[data-act="detail-back"]', () => {
+      this.codexFocus = null;
+      this.codex();
+    });
+  }
+
   private codex(): void {
+    if (this.codexFocus) {
+      this.codexDetailView();
+      return;
+    }
     const cx = this.game.codex;
     const seen = cx.seenCount();
     const total = cx.total();
@@ -513,11 +605,12 @@ export class UIManager implements UIHost {
           if (!cx.has(e.kind, e.id)) {
             return `<div class="cx is-locked"><div class="cx__dot"></div><div class="cx__name">？？？</div><div class="cx__blurb">尚未发现</div></div>`;
           }
-          return `<div class="cx" style="--c:${e.color ?? '#8fa7ff'}">
+          return `<button class="cx is-open" data-cx="${e.kind}:${e.id}" style="--c:${e.color ?? '#8fa7ff'}">
             <div class="cx__dot">${e.icon ?? '●'}</div>
             <div class="cx__name">${e.name}${e.tag ? `<i class="cx__tag">${e.tag}</i>` : ''}</div>
             <div class="cx__blurb">${e.blurb}</div>
-          </div>`;
+            <div class="cx__more">查看数值 ›</div>
+          </button>`;
         })
         .join('');
       return `<section class="cx-sec">
@@ -534,6 +627,10 @@ export class UIManager implements UIHost {
       </div>
     `);
     this.on('[data-act="back"]', () => this.backToOrigin());
+    this.onAll('[data-cx]', (el) => {
+      this.codexFocus = el.dataset.cx as string;
+      this.codex();
+    });
   }
 
   /** 结算界面上的"新纪录"徽章。 */
