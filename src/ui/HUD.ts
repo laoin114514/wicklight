@@ -7,6 +7,9 @@ import { RELIC_MAP, TRIBES } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { POUR } from '../data/pour';
 
+/** 卡片车道：掌上横屏的一条横带上一张提示卡 + 一张短公告就是上限（见 postCard）。 */
+type CardLane = 'tip' | 'toast';
+
 export class HUD implements HUDHost {
   private root: HTMLElement;
   private hpFill!: HTMLElement;
@@ -42,6 +45,12 @@ export class HUD implements HUDHost {
   private toastRoot: HTMLElement;
   private hudEl!: HTMLElement;
   private announceTimer = 0;
+  /** 公告淡出那 0.3 秒也继续占着横带：不然卡片会在它还没淡完时就挤上来（两坨字叠在一起）。 */
+  private announceLinger = 0;
+  /** 排队中的卡片（掌上横屏用，见 postCard）：元素已经造好，只等横带上腾出位置。 */
+  private waiting: { el: HTMLElement; key: string; lane: CardLane; hold: number; life: number }[] = [];
+  /** 卡片自己的停留 / 淡出计时，由 update(dt) 推着走——不靠 setTimeout（理由见 updateCards）。 */
+  private cardTimers = new WeakMap<HTMLElement, { hold: number; life: number; out: boolean }>();
   /** 上一次真正写进 DOM 的值：每帧无脑写 style / textContent 会让浏览器反复排队样式重算。 */
   private lastText = new WeakMap<HTMLElement, string>();
   private lastWidth = new WeakMap<HTMLElement, string>();
@@ -209,16 +218,19 @@ export class HUD implements HUDHost {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
-    this.pushCard(el, text, 1800, 2600);
+    this.postCard(el, text, 'toast', 1.8, 2.6);
   }
 
-  /** 首次遭遇的提示卡：比 toast 多一行说明，停得也久一些（7 秒）。 */
+  /**
+   * 首次遭遇的提示卡：比 toast 多一行说明，停得也久一些。
+   * 掌上横屏上收短一点（4.6 秒）：那里是一次只讲一条的队列，一条占太久会把后面几条拖成陈年旧事。
+   */
   tip(title: string, text: string): void {
     if (this.hasCard(title)) return;
     const el = document.createElement('div');
     el.className = 'toast toast--tip';
     el.innerHTML = `<b>${title}</b><span>${text}</span>`;
-    this.pushCard(el, title, 6400, 7200);
+    this.postCard(el, title, 'tip', this.tipHold(), this.tipLife());
   }
 
   /**
@@ -227,20 +239,186 @@ export class HUD implements HUDHost {
    * 抠文本既多绕一圈，也在无头桩件里抠不出来。
    */
   private hasCard(key: string): boolean {
-    for (const el of Array.from(this.toastRoot.children as HTMLCollectionOf<HTMLElement>)) {
+    for (const el of this.liveCards()) {
       if (el.classList.contains('is-out')) continue;
       if (el.dataset.cardKey === key) return true;
     }
-    return false;
+    // 还排着队的那几条也算"已经在讲"：不然同一句话会在队列里攒成三四条。
+    return this.waiting.some((w) => w.key === key);
   }
 
-  /** 上屏 + 定时淡出。 */
-  private pushCard(el: HTMLElement, key: string, holdMs: number, lifeMs: number): void {
+  /** 屏幕上挂着的卡片（含正在淡出的：淡出中的那条还占着横带的位置）。 */
+  private liveCards(): HTMLElement[] {
+    return Array.from(this.toastRoot.children as HTMLCollectionOf<HTMLElement>);
+  }
+
+  /** 这张卡走的是哪条车道。 */
+  private laneOf(el: HTMLElement): CardLane {
+    return el.classList.contains('toast--tip') ? 'tip' : 'toast';
+  }
+
+  /**
+   * 这条车道上还挂着卡片吗。
+   * ⚠ 320~380 高的横屏（SE 那种）只有一条车道：整条横带只放得下一张卡片，
+   * 所以短公告与提示卡共用同一个位置——那时它们只能一张一张地来。
+   */
+  private laneBusy(lane: CardLane): boolean {
+    // 横带上的公告正亮着（含正在淡出的那 0.3 秒）：这一整条横带现在归它
+    if (this.holdBand()) return true;
+    return this.liveCards().some((el) => this.oneLane() || this.laneOf(el) === lane);
+  }
+
+  /** 掌上横屏上"公告正占着那条横带"（亮着 + 淡出中）。 */
+  private holdBand(): boolean {
+    return this.feedMode() && (this.announceTimer > 0 || this.announceLinger > 0);
+  }
+
+  /** 掌上提示卡的停留时长（秒），和 tip() 里那两档共用一份，别写出第二个真值。 */
+  private tipHold(): number {
+    return this.feedMode() ? 4.6 : 6.4;
+  }
+
+  private tipLife(): number {
+    return this.feedMode() ? 5.4 : 7.2;
+  }
+
+  /**
+   * 掌上横屏（feedMode）：屏幕矮，能放卡片的横带只有顶上那一条
+   * （左上是生命/灯油那一列，右上是记分那一列，屏幕正中是**你自己**）。
+   * 一条横带放得下一张提示卡 + 一张短公告，于是这里按车道排队：
+   * 同一条车道上前一张讲完并摘掉，才轮到下一张。宁可讲得慢一点，也不糊住战场。
+   * 桌面照旧——那里的屏幕高度不是稀缺资源，堆叠反而能一眼看到上下文。
+   */
+  private postCard(el: HTMLElement, key: string, lane: CardLane, hold: number, life: number): void {
     el.dataset.cardKey = key;
+    if (this.feedMode() && this.laneBusy(lane)) {
+      this.enqueue({ el, key, lane, hold, life });
+      return;
+    }
+    this.showCard(el, hold, life);
+    if (lane === 'toast') this.trimCards();
+  }
+
+  private showCard(el: HTMLElement, hold: number, life: number): void {
     this.toastRoot.appendChild(el);
-    if (!el.classList.contains('toast--tip')) this.trimCards();
-    window.setTimeout(() => el.classList.add('is-out'), holdMs);
-    window.setTimeout(() => el.remove(), lifeMs);
+    this.cardTimers.set(el, { hold, life, out: false });
+  }
+
+  /** 排队等着上屏（队伍的长短由 trimWaiting 管）。 */
+  private enqueue(item: { el: HTMLElement; key: string; lane: CardLane; hold: number; life: number }): void {
+    if (this.hasCard(item.key)) return;
+    this.waiting.push(item);
+    this.trimWaiting();
+  }
+
+  /**
+   * 排队也不能排成一条长龙。
+   * ⚠ 这里**只丢短公告**（超过 3 条就从最旧的开始丢）：公告说的是"此刻发生的事"，
+   * 拖到十几秒后再讲等于没讲。提示卡一条都不丢——它是"讲一次就够"的教学，
+   * 而 Game.showTip 早把它记进存档了，丢掉就是这一局永远学不到（屏幕不够就慢慢讲，
+   * 反正提示卡的总数是有限的，一次只讲一张自然会把队排完）。
+   */
+  private trimWaiting(): void {
+    const cap = 3;
+    for (const w of [...this.waiting]) {
+      if (this.waiting.filter((x) => x.lane === 'toast').length <= cap) break;
+      if (w.lane === 'toast') this.waiting.splice(this.waiting.indexOf(w), 1);
+    }
+  }
+
+  /** 还有几条排着队（调试 / 测试用）。 */
+  get queued(): number {
+    return this.waiting.length;
+  }
+
+  /**
+   * 把屏幕上的卡片和排着队的消息一起清掉。
+   * 新开一局时必须清（Game.newRun 里调的就是它）：上一局的"图鉴 +2 条"和它身后
+   * 那一串排队的话，不该飘进这一局的开场——尤其是"关卡 · xxx"那张教学卡，
+   * 那是新一关开局第一句话。⚠ 得在 loadStage 之前清，那张卡就是 loadStage 里弹的。
+   */
+  clearCards(): void {
+    for (const el of this.liveCards()) this.toastRoot.removeChild(el);
+    this.waiting.length = 0;
+    this.announceEl.className = 'announce';
+    this.announceTimer = 0;
+    this.announceLinger = 0;
+  }
+
+  /**
+   * 掌上横屏：横过来的触屏，屏幕矮到堆不下几张卡片。
+   * ⚠ 门槛是 700 而不是 CSS 那一档的 560：1024×700 的平板横屏照样只有一条能放卡片的横带，
+   * 六张卡一起堆下来同样会盖住屏幕正中的自己（实测 v59 在 1024×700 上正是如此）。
+   */
+  private feedMode(): boolean {
+    return isTouchDevice() && window.innerWidth > window.innerHeight && window.innerHeight <= 700;
+  }
+
+  /** 只有一条横带的那种矮屏（320~380）：连"一张提示卡 + 一张短公告"都放不下。 */
+  private oneLane(): boolean {
+    return isTouchDevice() && window.innerHeight <= 380;
+  }
+
+  /**
+   * 空出来的车道上把下一条端上去。
+   * 只有一条车道的矮屏（320~380）一次只端一张，而且严格按先来后到——
+   * 两条车道都能上屏时才各补各的。队列本身就是按入队顺序排的，取队头就是"先来的先讲"。
+   */
+  private pumpFeed(): void {
+    if (!this.feedMode() || this.waiting.length === 0) return;
+    if (this.holdBand()) return; // 公告正占着横带，卡片等它讲完
+    if (this.oneLane()) {
+      if (this.liveCards().length > 0) return;
+      const [pick] = this.waiting.splice(0, 1);
+      this.showCard(pick.el, pick.hold, pick.life);
+      return;
+    }
+    for (const lane of ['tip', 'toast'] as CardLane[]) {
+      if (this.laneBusy(lane)) continue;
+      const i = this.waiting.findIndex((w) => w.lane === lane);
+      if (i < 0) continue;
+      const [pick] = this.waiting.splice(i, 1);
+      this.showCard(pick.el, pick.hold, pick.life);
+    }
+  }
+
+  /**
+   * 卡片的停留与淡出、公告的停留与淡出，全靠这里推（dt 是秒）。
+   *
+   * 主循环里**每一帧**都会调它，不只是战斗里（见 main.ts）：暂停面板上那条
+   * "按了返回键 · 已暂停"也是排队上屏的，只在战斗里推就永远等不到它。
+   * 也别改回 setTimeout：桩件里的定时器只入队不执行，旧写法在无头测试里卡片从没淡出过
+   * （"淡出中"那条分支只能靠手动加 class 才测得到）；而浏览器切后台时 rAF 本来就会停，
+   * 用帧时间推，卡片就和游戏一起停、一起走，切回来不会一次冒出五条旧消息。
+   */
+  updateCards(dt: number): void {
+    if (this.announceTimer > 0) {
+      this.announceTimer -= dt;
+      if (this.announceTimer <= 0) {
+        this.announceEl.className = 'announce';
+        this.announceLinger = 0.32; // 淡出 0.3s 的 transition：这段时间横带还归它
+      }
+    } else if (this.announceLinger > 0) {
+      this.announceLinger -= dt;
+    }
+    for (const el of this.liveCards()) {
+      const t = this.cardTimers.get(el);
+      if (!t) continue;
+      t.hold -= dt;
+      t.life -= dt;
+      if (t.life <= 0) {
+        // 走 removeChild 而不是 el.remove()：浏览器里两者等价，
+        // 但无头桩件只实现了 removeChild，不这么写这一条就测不到。
+        this.toastRoot.removeChild(el);
+        this.cardTimers.delete(el);
+        continue;
+      }
+      if (t.hold <= 0 && !t.out) {
+        t.out = true;
+        el.classList.add('is-out');
+      }
+    }
+    this.pumpFeed();
   }
 
   /**
@@ -250,6 +428,7 @@ export class HUD implements HUDHost {
    *
    * 只数短公告，不数提示卡：提示卡是"讲一次就够"的教学（精英 / 首领 / 险境），
    * 被顶掉等于教学白讲；而会成串冒出来的本来就是短公告。
+   * 掌上横屏那条横带现在由 postCard 的车道排队兜着，这里主要管桌面的堆叠。
    */
   private trimCards(): void {
     const cap = isTouchDevice() ? 3 : 5;
@@ -265,10 +444,31 @@ export class HUD implements HUDHost {
     }
   }
 
+  /**
+   * 公告（关卡名 / 第 N 波 / 首领与精英登场）。
+   * 掌上横屏上它和卡片共用那条横带——公告亮着的时候卡片不上屏，而正讲着的卡片先让位：
+   * 提示卡退回队头（那句话还得讲完），短公告也退回去（等它讲完公告再讲）。
+   * ⚠ 不退让的话就是"公告 + 两张卡片"一起堆下来，正好糊在屏幕正中的自己身上。
+   */
   announce(text: string, big = false): void {
     this.announceEl.textContent = text;
     this.announceEl.className = `announce is-show${big ? ' is-big' : ''}`;
     this.announceTimer = big ? 2.4 : 1.6;
+    this.announceLinger = 0;
+    if (!this.feedMode()) return;
+    for (const el of this.liveCards()) {
+      const lane = this.laneOf(el);
+      const key = el.dataset.cardKey ?? '';
+      this.toastRoot.removeChild(el);
+      this.cardTimers.delete(el);
+      // 让位的提示卡排到队头：它比队里那些还等着的东西更该先讲。
+      // 短公告排到队尾之后（讲的就是"此刻"，先让公告把话说完）。
+      el.classList.remove('is-out'); // 半透明地"让位"回来的时候要恢复原样
+      const item = { el, key, lane, hold: lane === 'tip' ? this.tipHold() : 1.8, life: lane === 'tip' ? this.tipLife() : 2.6 };
+      if (this.oneLane() || lane === 'tip') this.waiting.unshift(item);
+      else this.waiting.push(item);
+    }
+    this.trimWaiting();
   }
 
   private updateBuild(): void {
@@ -396,6 +596,7 @@ export class HUD implements HUDHost {
 
   update(dt: number): void {
     const g = this.game;
+    this.updateCards(dt);
     this.width(this.hpFill, g.player.hp / g.player.stats.maxHp);
     this.width(this.oilFill, g.player.oilFrac);
     this.width(this.xpFill, g.xpFrac);
@@ -439,10 +640,6 @@ export class HUD implements HUDHost {
       if (hasPour) oilBar.style.setProperty('--pour-floor', `${(POUR.minOil * 100).toFixed(1)}%`);
     }
 
-    if (this.announceTimer > 0) {
-      this.announceTimer -= dt;
-      if (this.announceTimer <= 0) this.announceEl.className = 'announce';
-    }
   }
 
   /**

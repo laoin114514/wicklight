@@ -2807,54 +2807,77 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   /* 一排三张卡上，数值对照留两条就够（排序时最有分量的那两条排在最前） */
   .card__delta .dl:nth-child(n+3) { display: none; }
 }
-/* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘 ─────────────────────────
-   两点都是手机上才有的问题：
+/* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘、别贴脸 ───────────────────
+   三条都是手机上才有的问题：
    · 触屏没有键盘，`Tab` 键帽与"空格 / Q"的字样只会让人对着屏幕找按键；
-   · 横屏 HUD 是左右两列，而提示卡默认在屏幕正中——320~390 高的横屏里
-     它会压在生命/灯油/经验条上（量过：844×390 下压掉经验条右半截）。
-   改法：键帽在触屏上直接不显示；公告与提示卡都搬到"两列之间"的那条中带上，
-   而且是**公告在上、提示卡在下**——两者本来会在开局同时出现（关卡提示卡 + 关卡名公告），
-   一上一下就不会互相盖住，也不必去猜提示卡堆了多高。
-   ⚠ 位置是量出来的，别想当然：公告 132px 是"左上那一列的下沿（102px）再让 5px"，
-   提示卡 168px 是"公告的下沿（157px）再让 5px"；两列 HUD 的高度在 320~520 高的横屏里
-   是定值（左上 16..102、左下构筑芯片到 151、右侧记分列 16..146），所以能用固定 px。 */
+   · 横屏 HUD 是左右两列，而卡片默认落在屏幕正中——**那正是玩家自己**；
+   · 320~560 高的横屏里，除了顶上那一条横带，其余地方不是 HUD 就是战场。
+   ⚠ 数字是量出来的，别想当然：左上那一列右沿恒为 258（血条 240 + 边距 18），
+   右上那一列宽 ~106、贴右 18，暂停键在它左边（左沿 844 上是 671）；
+   屏幕正中偏下是**玩家自己**（844×390 上是 y 179..207）。于是只剩这一条横带：
+   左 266 到 vw-130，上沿 58（= 右上那一列的下沿 57 再让 1px）——也就是"公告与卡片的家"。
+   ⚠ 公告与卡片**共用**这条横带，而且是轮流用：公告亮着的时候卡片不上屏
+   （见 HUD.announce / laneBusy）。两行的公告（~93px）+ 两张卡片叠在一起照样会压到人身上。
+   ⚠ 也得有 HUD 那边的配合：一次只讲一条（见 HUD.postCard 的车道队列）。
+   光靠 CSS 兜不住——justify-content: flex-start 会让第 4 张卡片直接掉到屏幕外（v59 就这样）。 */
 body.is-touch .key { display: none; }
-@media (orientation: landscape) and (max-height: 520px) {
-  /* 公告：别在 42%（正好压在提示卡上），抬到两列之间的上沿；顺带收一号字，
-     长公告（"精英来袭：xxx · 词缀"）在窄横屏上才不会钻到左右两列底下。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 公告：别在 42%（那里正是卡片的落点），搬进那条横带、竖着居中。
+     长公告（"精英来袭：xxx · 词缀"）在这里折行，不再横着冲出两列。
+     两行封顶、竖着停在横带偏下一点（106）：公告两行时盒子高 93、往上顶 46，
+     于是上沿停在 60 = 暂停键的下沿 57 以下——不管它多宽都压不到暂停键。 */
   body.is-touch .announce {
-    top: calc(132px + env(safe-area-inset-top));
-    font-size: clamp(14px, 1.9vw, 20px);
+    left: calc(50% + 68px);
+    top: calc(106px + env(safe-area-inset-top));
+    max-width: calc(100vw - 396px);
+    padding: 4px 10px;
+    font-size: clamp(14px, 2.4vw, 22px);
+    letter-spacing: 1px;
+    white-space: normal;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
   }
-  body.is-touch .announce.is-big { font-size: clamp(17px, 2.3vw, 26px); }
-  /* 提示卡：左右内边距就是两列的宽度（左 224 / 右 224 对称，卡片正好居中），
-     下沿让它自己往下堆——最下面那几张就算碰到摇杆/按钮也是半透明的旧消息。 */
+  body.is-touch .announce.is-big { font-size: clamp(16px, 2.8vw, 26px); }
+  /* 卡片：左内边距就是那条横带的左沿（左列右沿 + 8），右内边距是右列的宽度 + 边距。
+     卡片左对齐、从上往下堆，整条横带 58..170——屏幕正中偏下的人和脚下的战场都露在外面。 */
   body.is-touch .toast-root {
-    padding: calc(168px + env(safe-area-inset-top)) 224px 0 224px;
+    padding: calc(58px + env(safe-area-inset-top)) calc(130px + env(safe-area-inset-right)) 0
+      calc(266px + env(safe-area-inset-left));
+    align-items: flex-start;
+    gap: 5px;
+    overflow: hidden;
   }
-  body.is-touch .toast--tip { max-width: 100%; }
-  .toast--tip { padding: 8px 14px 9px; }
-  .toast--tip b { font-size: 12.5px; }
-  .toast--tip span { font-size: 11px; line-height: 1.35; }
+  body.is-touch .toast,
+  body.is-touch .toast--tip { max-width: min(100%, 360px); }
+  /* 淡出别再往上飘 8px：上沿那一带是公告与暂停键的地盘，卡片老老实实停在原地 */
+  body.is-touch .toast.is-out { transform: none; }
+  body.is-touch .toast--tip { padding: 7px 13px 8px; }
+  body.is-touch .toast--tip b { font-size: 12.5px; }
+  body.is-touch .toast--tip span { font-size: 11px; line-height: 1.4; }
 }
-/* 568~720（小手机横屏）：右侧那一列只有 150px 宽、左下又多一块构筑芯片，
-   224px 的对称内边距会把提示卡挤成一条细缝；改成"左让 104、右让 176"，
-   卡片落在 104..392 这条缝里，两边都留得下。 */
-@media (orientation: landscape) and (max-height: 520px) and (max-width: 720px) {
-  body.is-touch .toast-root {
-    padding-right: calc(176px + env(safe-area-inset-right));
-    padding-left: calc(104px + env(safe-area-inset-left));
-  }
-}
-/* 320 上下：公告与提示卡各再收一点，别挡住半个战场 */
+/* 320~380（SE 那种矮横屏）：公告与卡片各再收一点，横带也只放得下一张（HUD 那边同一档）。
+   ⚠ 上沿不再往上抬：58px 是"右上那列（含暂停键）的下沿 + 1"，抬上去卡片会压住暂停键
+   （量过：667×375 抬到 50px 就压上去了）。 */
 @media (orientation: landscape) and (max-height: 380px) {
-  body.is-touch .announce { top: calc(130px + env(safe-area-inset-top)); }
-  body.is-touch .toast-root {
-    padding-top: calc(158px + env(safe-area-inset-top));
-    gap: 4px;
+  /* 公告在同一档矮屏上再往下一点点，两行盒子（~54px）也还停在横带里 */
+  body.is-touch .announce { top: calc(102px + env(safe-area-inset-top)); }
+  body.is-touch .toast-root { gap: 4px; }
+  body.is-touch .toast { font-size: 12px; }
+  body.is-touch .toast--tip { padding: 6px 12px 7px; }
+  body.is-touch .toast--tip span { font-size: 10.5px; line-height: 1.35; }
+}
+/* 320 上下（最小的横屏）：那条横带的净空只有 ~80px，提示卡最多三行——多出来的用省略号收住。
+   宁可少讲一句，也别让卡片一路堆到屏幕正中的自己身上（也不许压住右下的悬赏/灯台芯片）。 */
+@media (orientation: landscape) and (max-height: 340px) {
+  body.is-touch .toast--tip span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
   }
-  .toast--tip { padding: 6px 12px 7px; }
-  .toast--tip span { font-size: 10.5px; }
 }
 
 /* 320~380（最小的横屏窗口，iPhone SE 竖屏高度那种）：只求五行按钮 / 三张卡都在屏幕里 */

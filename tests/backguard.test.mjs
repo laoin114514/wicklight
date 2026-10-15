@@ -26,7 +26,7 @@ test('手机上：战斗里装返回守卫，按返回只暂停不退出；离�
 
   await import(`${ENTRY.href}?v=${Date.now()}`);
   env.frame();
-  const { game, loop, backGuard } = globalThis.window.__WICKLIGHT__;
+  const { game, loop, backGuard, hud } = globalThis.window.__WICKLIGHT__;
   t.after(() => {
     loop?.stop?.();
     game.audio.dispose();
@@ -54,8 +54,15 @@ test('手机上：战斗里装返回守卫，按返回只暂停不退出；离�
   assert.equal(game.state, 'paused', '按返回要先停在暂停面板上，不能直接丢一局');
   assert.equal(backGuard.armed, false, '接住之后就松开了：历史里我们塞的那条已经被弹掉');
   assert.ok(screenText(env).includes('is-visible'), '暂停面板得真的出来');
-  const toasts = env.getElement('toast-root').children.map((c) => c.textContent).join('|');
-  assert.ok(toasts.includes('暂停'), `要告诉玩家发生了什么（toast="${toasts}"）`);
+  // 掌上横屏那条横带是"公告与卡片轮流用"：开局那张关卡公告（2.4s）和它身后排队的
+  // 短公告还占着它，这句"已暂停"得排队等着——多走几帧（主循环每帧都在推卡片与公告的计时），
+  // 看它有没有真的讲出来。屏幕不够时"慢一点讲"，但不能"永远不讲"。
+  const told = new Set();
+  for (let i = 0; i < 900; i += 1) {
+    hud.updateCards(1 / 60); // 主循环里那一句（不跑 env.frame：那会连返回守卫一起推）
+    for (const c of env.getElement('toast-root').children) told.add(String(c.textContent));
+  }
+  assert.ok([...told].some((t) => t.includes('暂停')), `要告诉玩家发生了什么（讲过的：${[...told].join('|') || '（空）'}）`);
 
   // 已经是暂停态了，同一帧的 sync 不该再装守卫（装了就变成"返回键点不动"）
   backGuard.sync(false);
@@ -82,7 +89,7 @@ test('桌面上：整段空转，键盘玩家不该被塞进两条历史', async
   const env = installDomStubs(); // maxTouchPoints: 0 / 1280×720 → 桌面档
   await import(`${ENTRY.href}?v=desk-${Date.now()}`);
   env.frame();
-  const { game, loop, backGuard } = globalThis.window.__WICKLIGHT__;
+  const { game, loop, backGuard, hud } = globalThis.window.__WICKLIGHT__;
   t.after(() => {
     loop?.stop?.();
     game.audio.dispose();

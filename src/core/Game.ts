@@ -260,6 +260,8 @@ export interface HUDHost {
   /** 首次遭遇的提示卡（标题 + 一行说明）。 */
   tip(title: string, text: string): void;
   announce(text: string, big?: boolean): void;
+  /** 清掉屏幕上挂着的卡片与排队待讲的（新开一局时用）。 */
+  clearCards(): void;
 }
 
 export class Game {
@@ -536,6 +538,10 @@ export class Game {
     this.player.novaStyle = lantern.id;
     this.applyMetaToPlayer();
 
+    // 上一局挂着的卡片（和它身后排队的那些话）不进这一局。
+    // ⚠ 必须在 loadStage 之前清：那一关的"关卡 · xxx"提示卡就是 loadStage 里弹的，
+    // 清晚了会把这一局的第一张教学卡一起抹掉（实测：关卡卡从来没讲过）。
+    this.hud?.clearCards();
     // 无尽之夜：战场从「幽林」开始，一轮换一片（难度档位不跟着走，见 endlessArena）
     this.endlessArena = 0;
     const stage = STAGES[endless ? 0 : this.stageIndex];

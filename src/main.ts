@@ -97,7 +97,10 @@ function boot(): void {
       }
       if (st.sheet) game.toggleSheet();
       game.update(dt);
+      // 战斗里 HUD 整块跟着走；其他界面（暂停 / 结算 / 菜单）也要推卡片与公告的计时，
+      // 不然"按了返回键 · 已暂停"这种排队上屏的消息会一直等在那里
       if (game.state === 'playing') hud.update(dt);
+      else hud.updateCards(dt);
       // 打的时候别让手机自己息屏：战斗里手会离开屏幕，一暗屏就等于被打断
       wake.set(game.state === 'playing');
       hud.setVisible(

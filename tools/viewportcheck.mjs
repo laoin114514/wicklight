@@ -62,7 +62,11 @@ function startServer() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port })));
 }
 
-/** 参与体检的元素：HUD 的每一块 + 两个触摸控件 + 公告。 */
+/**
+ * 参与体检的元素：HUD 的每一块 + 两个触摸控件 + 公告 + 卡片。
+ * 卡片是 v60 加的：844×390 上"开局那几张说明卡"曾经一路堆到 y=413（屏幕才 390 高），
+ * 覆盖 21% 的屏幕、正好压在站在正中的玩家身上——这条只有自动量才拦得住。
+ */
 const SELS = [
   '.hud__topleft',
   '.hud__topright',
@@ -78,7 +82,28 @@ const SELS = [
   '.touch-buttons',
   '.announce',
   '.hud__pause',
+  // ⚠ 提示卡的 class 是 `toast toast--tip`：写 `.toast` 会把同一张卡量两遍，
+  // 于是"自己和自己压住"——必须用 :not() 把两种卡片分开。
+  '.toast:not(.toast--tip)',
+  '.toast--tip',
 ];
+
+/**
+ * 第二遍量什么：把开局那几秒真实会连着冒出来的东西一次全推出来。
+ * 先走 6 秒的卡片计时（掌上横屏上公告与卡片轮流用那条横带，得让它先讲完），
+ * 再推三条短公告 + 关卡卡 + 武器卡 + 精英卡——v59 的翻车现场就是这一串。
+ */
+const BURST = () => {
+  const g = window.__WICKLIGHT__.game;
+  const h = g.hud;
+  for (let i = 0; i < 60; i += 1) h.updateCards(0.1);
+  h.toast('📖 图鉴 +2 条');
+  h.toast('🎯 悬赏 · 燃爆 · 三次清场（本关）');
+  h.toast('☄ 陨石雨');
+  h.tip('关卡 · 幽林', '光照不见的树影。险境：浓雾 / 陨石雨 / 荆棘回廊；首领：荆棘领主。');
+  g.showTip('weapon:fireball', '武器 · 爆裂火球', '落地炸开一圈。给火球加范围就是给一整片人加伤害。');
+  g.showTip('enemy:shade', '精英 · 影蛭', '贴着你走，靠数量耗你的油。别站着不动。');
+};
 
 const WS = (process.env.WS || '568,640,740,844,915,1024').split(',').map(Number);
 const HS = (process.env.HS || '320,340,360,375,390,412,470,560,600,700').split(',').map(Number);
@@ -112,40 +137,49 @@ try {
         await sleep(200);
         await page.click('[data-act="start"]');
         await sleep(1500);
-        const out = await page.evaluate((sels) => {
-          const box = (sel) => {
-            const el = document.querySelector(sel);
-            if (!el) return null;
-            const b = el.getBoundingClientRect();
-            if (b.width < 1 || b.height < 1) return null;
-            const cs = getComputedStyle(el);
-            if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return null;
-            return { l: b.left, t: b.top, r: b.right, b: b.bottom, s: sel };
-          };
-          const list = sels.map(box).filter(Boolean);
-          const clashes = [];
-          for (let i = 0; i < list.length; i += 1) {
-            for (let j = i + 1; j < list.length; j += 1) {
-              const a = list[i];
-              const c = list[j];
-              const ox = Math.min(a.r, c.r) - Math.max(a.l, c.l);
-              const oy = Math.min(a.b, c.b) - Math.max(a.t, c.t);
-              if (ox > 2 && oy > 2) clashes.push(`${a.s} ∩ ${c.s}（${Math.round(ox)}×${Math.round(oy)}px）`);
+        const measure = () =>
+          page.evaluate((sels) => {
+            const box = (sel) => {
+              const el = document.querySelector(sel);
+              if (!el) return null;
+              const b = el.getBoundingClientRect();
+              if (b.width < 1 || b.height < 1) return null;
+              const cs = getComputedStyle(el);
+              if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return null;
+              return { l: b.left, t: b.top, r: b.right, b: b.bottom, s: sel };
+            };
+            const list = sels.map(box).filter(Boolean);
+            const clashes = [];
+            for (let i = 0; i < list.length; i += 1) {
+              for (let j = i + 1; j < list.length; j += 1) {
+                const a = list[i];
+                const c = list[j];
+                const ox = Math.min(a.r, c.r) - Math.max(a.l, c.l);
+                const oy = Math.min(a.b, c.b) - Math.max(a.t, c.t);
+                if (ox > 2 && oy > 2) clashes.push(`${a.s} ∩ ${c.s}（${Math.round(ox)}×${Math.round(oy)}px）`);
+              }
             }
-          }
-          const outside = list.filter((x) => x.l < -1 || x.t < -1 || x.r > innerWidth + 1 || x.b > innerHeight + 1).map((x) => x.s);
-          return { clashes, outside, visible: list.length };
-        }, SELS);
-        const ok = out.clashes.length === 0 && out.outside.length === 0 && errors.length === 0;
+            const outside = list.filter((x) => x.l < -1 || x.t < -1 || x.r > innerWidth + 1 || x.b > innerHeight + 1).map((x) => x.s);
+            return { clashes, outside, visible: list.length };
+          }, SELS);
+        const problems = [];
+        // 第一遍：开局那一秒（公告 + 关卡卡）
+        const first = await measure();
+        // 第二遍：把开局那几秒真实会连着冒出来的卡片一次全推出来
+        await page.evaluate(BURST);
+        await sleep(300);
+        const burst = await measure();
+        for (const [tag, out] of [['开局', first], ['卡片', burst]]) {
+          if (out.clashes.length) problems.push(`${tag}压住：${out.clashes.join(' · ')}`);
+          if (out.outside.length) problems.push(`${tag}出界：${out.outside.join(',')}`);
+        }
+        if (errors.length) problems.push(`报错：${errors.join('|')}`);
+        const ok = problems.length === 0;
         if (!ok) bad += 1;
-        const note = [
-          out.clashes.join(' · '),
-          out.outside.length ? `出界：${out.outside.join(',')}` : '',
-          errors.length ? `报错：${errors.join('|')}` : '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        console.log(`${String(w).padStart(4)}×${String(h).padEnd(4)} ${ok ? '✔' : '✖'} ${out.visible} 件${note ? ' ' + note : ''}`);
+        console.log(
+          `${String(w).padStart(4)}×${String(h).padEnd(4)} ${ok ? '✔' : '✖'} ${first.visible} 件` +
+            `${burst.visible} 件（卡片）${problems.length ? ' ' + problems.join(' · ') : ''}`,
+        );
       } catch (err) {
         bad += 1;
         console.log(`${String(w).padStart(4)}×${String(h).padEnd(4)} ✖ 异常 ${String(err).slice(0, 120)}`);
