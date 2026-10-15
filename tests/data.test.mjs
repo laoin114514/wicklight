@@ -22,7 +22,7 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -104,6 +104,24 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(pour.igniteStacks >= 1, '每次续层至少要给一层');
   assert.ok(pour.douse >= 4, '「火上浇油」的门槛不该再倒一瓢顺手就够（要真是"往火里再浇"）');
   assert.ok(pour.costHint > 0 && pour.costHint < pour.minOil, '一瓢的油不该贵到超过倒油门槛本身');
+
+  // ── 爆灯的调参表：这一张表管着"燃爆值不值得把灯打空"，比前几张更难回头改 ──
+  const nova = data.nova;
+  assert.ok(nova, '构建产物应导出爆灯调参表');
+  for (const [k, v] of Object.entries(nova)) {
+    assert.equal(typeof v, 'number', `nova.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `nova.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(nova.overburnAt > 0.3 && nova.overburnAt < 0.8, '爆灯的门槛该卡在"大半桶"上，不该随时能爆、也不该满油才爆');
+  assert.ok(nova.overburnCost > nova.cost, '爆灯要真的多烧一口油（不然"烧油换爆发"这句话就只剩爆发）');
+  assert.ok(nova.overburnAt - nova.overburnCost > 0.1, '爆完还得剩下一口：这条线不该把人直接推到油尽');
+  // 和倾灯的关系：爆灯的门槛要**低于**倒油的门槛，这样"先倒一瓢再爆"才连得起来；
+  // 两条线一样高的话，一桶油上那两个动词就只剩二选一，看不到连招。
+  assert.ok(pour.minOil > nova.overburnAt, '倒油的门槛该高过爆灯：先倒后爆这条连法要立得住');
+  assert.ok(nova.overburnDamage >= 0.5, '爆灯至少要把伤害提五成，不然多烧那一口不值');
+  assert.ok(nova.overburnArea > 0 && nova.overburnArea < 1, '半径也要长，但不该长到"整屏清场"');
+  assert.ok(nova.overburnBurn >= 1, '爆灯的火要留下灼烧，不然它就只是一发更大的爆炸');
+  assert.ok(nova.refundSpan > 0 && nova.afterglowSpan > 0 && nova.ashSpan > 0, '这条线那三个窗口都要有时长');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

@@ -114,6 +114,16 @@ const BURST = () => {
 const LONG = () => {
   const h = window.__WICKLIGHT__.game.hud;
   h.clearCards();
+  // ⚠ 悬赏牌是随机出现的、灯台牌只有带灯台的关卡才有：不点亮它们，这一遍十次里有九次
+  // 量不到"卡片压在悬赏牌上"那条边（v62 就是靠一次偶然出现才逮到那条 4px 的缝）。
+  // 直接往两块牌子里灌一份内容并挂上 is-on：HUD 那两处签名没变就不会回来覆盖它，
+  // 量到的几何和它们真亮着的时候一模一样。
+  const chip = document.querySelector('.hud__bounty');
+  chip.innerHTML = '<b>🎯 悬赏 · 燃爆 · 三次清场</b><span>1/3</span><i><u style="width:33%"></u></i>';
+  chip.classList.add('is-on');
+  const pyre = document.querySelector('.hud__pyre');
+  pyre.innerHTML = '<b>🏮 灯台 1/3</b><span>靠近并停留片刻点亮 · 长明一处</span>';
+  pyre.classList.add('is-on');
   h.tip(
     '掠影 · 擦着危险走过去',
     '贴着敌人或弹幕走（脚边那圈符文会长）就攒热度，还会回一点灯油：离得越近、走得越快，涨得越快；' +
@@ -184,7 +194,7 @@ try {
             // 因为玩家不是 HUD 元素——那口气留 2px（卡片自己已经让了 6px）。
             const playerTop = innerHeight / 2 - 16;
             const overPlayer = list.filter((x) => x.s.includes('toast') && x.b > playerTop).map((x) => `${x.s} 下沿 ${Math.round(x.b)}`);
-            return { clashes, outside, overPlayer, visible: list.length };
+            return { clashes, outside, overPlayer, visible: list.length, seen: list.map((x) => x.s) };
           }, SELS);
         const problems = [];
         // 第一遍：开局那一秒（公告 + 关卡卡）
@@ -199,6 +209,11 @@ try {
         await page.evaluate(LONG);
         await sleep(300);
         const long = await measure();
+        // ⚠ 长卡这一遍是"这套判据到底量到了什么"的底线：长卡与悬赏牌少一块，
+        //   上面那几条"没压住"就全是空过（悬赏是随机出现的，正是这么漏过一次）。
+        for (const need of ['.toast--tip', '.hud__bounty', '.hud__pyre']) {
+          if (!long.seen.includes(need)) problems.push(`长卡这一遍没量到 ${need}`);
+        }
         for (const [tag, out] of [['开局', first], ['卡片', burst], ['长卡', long]]) {
           if (out.clashes.length) problems.push(`${tag}压住：${out.clashes.join(' · ')}`);
           if (out.outside.length) problems.push(`${tag}出界：${out.outside.join(',')}`);

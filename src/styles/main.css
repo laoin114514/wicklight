@@ -2731,21 +2731,22 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   body.is-touch .toast-root { padding-top: calc(60px + env(safe-area-inset-top)); }
 }
 
-/* 375 上下（iPhone SE 那种矮横屏）：右上那一列先缩一号，两枚芯片只留数字那一行 */
+/* 375 上下（iPhone SE 那种矮横屏）：右上那一列先缩一号（两枚芯片的说明那一行
+   由 ≤560 那档统一摘掉，那一档在文件里更靠后）。 */
 @media (orientation: landscape) and (max-height: 375px) {
   body.is-touch .hud__topright { gap: 2px; }
   body.is-touch .hud__topright .hud__stat { font-size: 11px; }
-  body.is-touch .hud__bounty span,
-  body.is-touch .hud__pyre span { display: none; }
-  body.is-touch .hud__bounty { bottom: calc(168px + env(safe-area-inset-bottom)); }
+  /* 说明那一行与悬赏牌的落点由上一档（≤560）统一管，这里只管灯台自己那 4px */
   body.is-touch .hud__pyre { bottom: calc(98px + env(safe-area-inset-bottom)); }
 }
-/* 340 上下（最小的横屏）：芯片再收一号字，右上那一列也要让出高度 */
+/* 340 上下（最小的横屏）：芯片再收一号字，右上那一列也要让出高度。
+   ⚠ 悬赏牌的落点这里**不写**：它由 ≤560 那一档管，而那一档在文件里更靠后、必然盖过这里
+   （写两份就是两个真值，改了一处另一处不会跟着动）。146px 在 320 高的屏上也够：
+   悬赏牌上沿落在 146，提示卡那条横带的下沿是 140，两边还各让得开。 */
 @media (orientation: landscape) and (max-height: 340px) {
   body.is-touch .hud__topright .hud__stat { font-size: 10px; }
   body.is-touch .hud__bounty,
   body.is-touch .hud__pyre { font-size: 10.5px; padding: 4px 8px; }
-  body.is-touch .hud__bounty { bottom: calc(150px + env(safe-area-inset-bottom)); }
   body.is-touch .hud__pyre { bottom: calc(90px + env(safe-area-inset-bottom)); }
 }
 /* 手机上屏幕更矮（390 上下），摇杆与按钮再收一号，别占掉三分之一屏 */
@@ -2758,6 +2759,19 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   }
   .touch-stick__knob { width: 46px; height: 46px; }
   .touch-btn { width: 64px; height: 64px; font-size: 12.5px; letter-spacing: 1px; }
+  /* 悬赏 / 灯台：矮横屏上这两块牌子横着**必然**压在提示卡那条横带的右端
+     （横带的右沿只留 130px，光悬赏牌自己就 200px 宽），所以它们的落点必须停在横带下沿之下。
+     ⚠ 这 28px 不是审美，是量出来的：740×390 上悬赏牌上沿 173、横带下沿 175，
+     而"掠影"那种长提示卡（5 行）停在 162——正好从牌子上压过去 4px。
+     但有地方放不等于放得下：两块牌子连说明一起叠起来 110~121px，而 376 高的屏上
+     从横带下沿到两个按钮之间只有 112px——所以这一档起把说明那一行摘掉
+     （只留名字与进度，高度立刻回到 77px）。灯台那句"靠近并停留片刻点亮"
+     开局第 11 秒有一条专门的提示（见 Game 里那条 11s 的 toast），摘了不算丢。
+     摘掉之后 740×390 上是：悬赏 201..244、灯台 254..288，横带下沿 175，
+     三者两两各留 10px 以上（这块牌子跟着屏宽变矮：568 宽那档 37/28）。 */
+  body.is-touch .hud__bounty span,
+  body.is-touch .hud__pyre span { display: none; }
+  body.is-touch .hud__bounty { bottom: calc(146px + env(safe-area-inset-bottom)); }
 }
 
 /* ── 15. 手机横屏矮屏：面板本身也要塞得下 ─────────────────────────────
@@ -3182,4 +3196,13 @@ body.is-touch .key { display: none; }
 .touch-btn.is-empty {
   filter: saturate(0.3) brightness(0.55);
   color: rgba(210, 202, 190, 0.45);
+}
+/* 「爆灯」蓄满：灯火过了那条线，这一枚自己烧起来——按下它，烧掉的是一大口油。
+   ⚠ 只在**冷却转完**时才亮（`overburnReady` 里带着这一条）：圈还在转的时候亮起来，
+   玩家会以为"按下去就能爆"，按了却只吃到一个冷却音——那是最没用的那种提示。
+   和 `.is-empty` 是一对：一个是"按不动"，一个是"按下去会不一样"。 */
+.touch-btn--nova.is-charged {
+  border-color: #ffd49a;
+  color: #fff3dd;
+  box-shadow: 0 0 20px rgba(255, 178, 76, 0.5), inset 0 0 16px rgba(255, 150, 60, 0.28);
 }

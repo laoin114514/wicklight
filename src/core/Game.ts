@@ -442,6 +442,11 @@ export class Game {
   lampCount = 0;
   /** 还没教过「分灯」时，开局安静下来之后弹那张说明卡（秒，<0 = 不用弹） */
   private lampTipIn = -1;
+  /**
+   * 还没教过「爆灯」时，开局安静下来之后弹那张说明卡（秒，<0 = 不用弹）。
+   * 比分灯那张再晚八秒：一局里第一次同时冒出来的"新东西"不该挤在同一个十秒里。
+   */
+  private novaTipIn = -1;
   private pyreChannel: Pyre | null = null;
   hitStop = 0;
   slowmo = 0;
@@ -609,6 +614,7 @@ export class Game {
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
+    this.novaTipIn = this.save.tips?.includes('verb:nova') ? -1 : 22;
     this.kills = 0;
     this.xp = 0;
     this.xpToNext = 8;
@@ -964,6 +970,19 @@ export class Game {
           '分灯 · 把黑暗引开',
           '按 E（手机上点右下角的「分灯」）在原地点一盏小灯：它照亮一小圈，并把附近的黑暗引过去。' +
             '油就是光，所以这是拿自己的亮换几秒喘息；凑上来的怪会把它吃掉。',
+        );
+      }
+    }
+    if (this.novaTipIn > 0) {
+      this.novaTipIn -= dt;
+      if (this.novaTipIn <= 0) {
+        this.novaTipIn = -1;
+        this.showTip(
+          'verb:nova',
+          '燃爆 · 灯火旺的时候会「爆灯」',
+          '灯火过半时按燃爆（手机上右下角那枚）会「爆灯」：这一发自己烧掉两倍的灯油，' +
+            '换一圈更大、更狠、还带灼烧的火。代价是接下来那十几秒你会明显变暗——' +
+            '烧掉的是视野，不只是伤害。想稳一点就等它转回冷却，想拼一下就把灯灌满再按。',
         );
       }
     }
@@ -1816,7 +1835,8 @@ export class Game {
     if (this.player.invuln > 0 || this.player.dashTimer > 0) return;
     // 「影缝」：焰烧着的时候更难被打灭——贴着脸打总归要挨几下，这是那几下里的折扣。
     // 只在烧着的时候生效：它不是一件无条件的护甲，而是"贴着打"这套牌的兜底。
-    const guard = this.player.blazing ? 1 - this.player.flags.blazeGuard : 1;
+    // 「炭衣」同理，但它那几秒是"你自己点出来的"：爆出去的火挡在身前（ashGuard 是 1 或减伤后的倍率）。
+    const guard = (this.player.blazing ? 1 - this.player.flags.blazeGuard : 1) * this.player.ashGuard;
     const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult * guard;
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;

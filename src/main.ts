@@ -20,6 +20,7 @@ import { GRAZE as graze } from './data/graze';
 import { MINE as mines } from './data/mines';
 import { VORTEX as vortex } from './data/vortex';
 import { POUR as pour } from './data/pour';
+import { NOVA as nova } from './data/nova';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -55,9 +56,10 @@ function boot(): void {
     backGuard,
     wake,
     // 供测试/调试读取的静态数据表（无副作用）
-    // graze / mines / vortex / pour 也放进来：掠影、伏灯、旋灯、倾灯那几串调参值（带子宽度、引信、吸力、油价……）
+    // graze / mines / vortex / pour / nova 也放进来：掠影、伏灯、旋灯、倾灯、爆灯那几串调参值
+    // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
-    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour },
+    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

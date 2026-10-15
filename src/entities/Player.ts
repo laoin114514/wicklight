@@ -7,6 +7,7 @@ import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
 import { GRAZE } from '../data/graze';
 import { POUR } from '../data/pour';
+import { NOVA } from '../data/nova';
 
 export interface PlayerContext {
   enemies: EnemySystem;
@@ -70,6 +71,14 @@ export interface PlayerFlags {
   blazeTime: number;
   /** 「灯焰高涨」期间的减伤（影缝：0.3 = 少挨三成） */
   blazeGuard: number;
+  /** 「爆灯」之后的短时伤害加成（猛火：0.35 = 那四秒里 +35%） */
+  overburnDamage: number;
+  /** 「爆灯」烧掉的油有多少会烧回来（引线：0.5 = 一半） */
+  overburnRefund: number;
+  /** 「爆灯」的灯火门槛降低（火盆：0.25 = 从 55% 降到 30%） */
+  overburnEase: number;
+  /** 「爆灯」之后的短时减伤（炭衣：0.45 = 少挨四成五） */
+  overburnGuard: number;
 }
 
 interface OrbitState {
@@ -90,7 +99,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -116,6 +125,13 @@ export class Player {
   /** 燃爆流派：由 lanternId 决定，赋予一次燃爆完全不同的解法 */
   novaStyle = 'warden';
   private novaBuffTimer = 0;
+  /** 「爆灯」之后那四秒（猛火）：这是一段伤害加成，不是一层火 */
+  private overburnGlow = 0;
+  /** 「爆灯」之后那三秒（炭衣）：烧出去的火挡在身前 */
+  private ashTimer = 0;
+  /** 还有多少油要从敌人身上烧回来（引线），以及每秒烧回来多少 */
+  private refundLeft = 0;
+  private refundRate = 0;
   moving = false;
   private cooldowns = new Map<string, number>();
   private orbit: OrbitState = { angle: 0, hitCooldown: new Map() };
@@ -166,7 +182,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -191,6 +207,10 @@ export class Player {
     this.dashCdMax = 0;
     this.novaCd = 0;
     this.novaCdMax = 0;
+    this.overburnGlow = 0;
+    this.ashTimer = 0;
+    this.refundLeft = 0;
+    this.refundRate = 0;
     this.cooldowns.clear();
     this.orbit.hitCooldown.clear();
     this.recomputeStats();
@@ -255,7 +275,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -322,6 +342,11 @@ export class Player {
     flags.grazeOil += m.grazeOil ?? 0;
     flags.blazeTime += m.blazeTime ?? 0;
     if (m.blazeGuard) flags.blazeGuard = Math.max(flags.blazeGuard, m.blazeGuard);
+    // 「爆灯」这条线：门槛是往下减、回油与减伤取大、余温是往上加（见 data/nova.ts）
+    flags.overburnDamage += m.overburnDamage ?? 0;
+    flags.overburnRefund += m.overburnRefund ?? 0;
+    flags.overburnEase += m.overburnEase ?? 0;
+    if (m.overburnGuard) flags.overburnGuard = Math.max(flags.overburnGuard, m.overburnGuard);
   }
 
   /** 当前持有某一族遗物的数量。 */
@@ -365,6 +390,7 @@ export class Player {
     let s = 0.65 + this.oilFrac * 0.7;
     if (this.flags.lowOilDamage > 0 && this.oilFrac < 0.35) s *= 1 + this.flags.lowOilDamage;
     if (this.novaBuffTimer > 0) s *= 1 + this.flags.novaBuff;
+    if (this.overburnGlow > 0) s *= 1 + this.flags.overburnDamage;
     if (this.blazeTimer > 0) s *= 1 + GRAZE.blazeDamage;
     return s;
   }
@@ -444,6 +470,15 @@ export class Player {
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.dashCd > 0) this.dashCd -= dt;
     if (this.novaCd > 0) this.novaCd -= dt;
+    if (this.overburnGlow > 0) this.overburnGlow -= dt;
+    if (this.ashTimer > 0) this.ashTimer -= dt;
+    // 「引线」：那一口烧出去的油，按秒从火里烧回来（速率在放招时就算好，和帧率无关）
+    if (this.refundLeft > 0) {
+      const give = Math.min(this.refundLeft, this.refundRate * dt);
+      this.refundLeft -= give;
+      this.oil = Math.min(this.oilMax, this.oil + give);
+      if (this.refundLeft <= 0) this.refundRate = 0;
+    }
     if (this.novaBuffTimer > 0) this.novaBuffTimer -= dt;
     if (this.grazePulse > 0) this.grazePulse = Math.max(0, this.grazePulse - dt * 3.2);
     if (this.blazeTimer > 0) {
@@ -545,12 +580,17 @@ export class Player {
     if (s.regen > 0) this.hp = Math.min(s.maxHp, this.hp + s.regen * dt);
     if (s.healOnLight > 0 && this.oilFrac > 0.1) this.hp = Math.min(s.maxHp, this.hp + s.healOnLight * dt);
 
-    // Nova (燃爆) consumes oil
+    // Nova (燃爆) consumes oil —— 灯火旺过那条线就是「爆灯」：烧掉两倍的油，换一发更大的。
+    // ⚠ 这一发的伤害按**烧之前**的亮度算（damageScale 在这里先记下来）：
+    //   油同时是"火力"和"弹药"，不先记下来的话，越舍得烧的那一发反而打得越轻——
+    //   代价写在油上就够了，不该在同一发里扣两遍（这个反直觉的账是 v62 顺手修掉的）。
     if (input.nova && this.novaCd <= 0) {
       this.novaCd = Math.max(2.4, 6 - this.passiveLevel('haste') * 0.4);
       this.novaCdMax = this.novaCd;
-      this.oil = Math.max(0, this.oil - 0.16);
-      this.doNova(ctx);
+      const castScale = this.damageScale;
+      const overburn = this.oilFrac >= this.overburnAt;
+      this.oil = Math.max(0, this.oil - (overburn ? NOVA.overburnCost : NOVA.cost));
+      this.doNova(ctx, overburn, castScale);
     }
 
     this.updateWeapons(dt, ctx, target);
@@ -569,7 +609,13 @@ export class Player {
     });
   }
 
-  private doNova(ctx: PlayerContext): void {
+  /**
+   * 燃爆真正放出去的那一下。
+   *
+   * `overburn` 是「爆灯」（灯火过线，这一发烧了两倍的油），`castScale` 是**按下按钮时**
+   * 那盏灯的亮度——见 update 里为什么不能现算（烧完的油会把这一发自己打轻）。
+   */
+  private doNova(ctx: PlayerContext, overburn: boolean, castScale: number): void {
     const style = this.novaStyle;
     let radius = 180 * this.stats.areaMult;
     let power = 1;
@@ -583,12 +629,22 @@ export class Player {
     } else if (style === 'warden') {
       knock = 760;
     }
+    if (overburn) {
+      // 爆灯：一圈更大、更狠、还带灼烧的火。半径与威力写在 data/nova.ts 里。
+      radius *= 1 + NOVA.overburnArea;
+      power *= 1 + NOVA.overburnDamage;
+    }
     const color = style === 'lamplighter' ? '#7be0ff' : style === 'shadewalker' ? '#ff4d6d' : '#ffb14e';
     ctx.onNova();
     ctx.audio('nova');
-    ctx.shake(0.5);
+    ctx.shake(overburn ? NOVA.overburnShake : 0.5);
     ctx.particles.shockwave(this.x, this.y, color, radius, 0.5);
-    ctx.particles.burst(this.x, this.y, 34, '#ffd24e', { speed: 320, size: 4, life: 0.7 });
+    ctx.particles.burst(this.x, this.y, overburn ? 52 : 34, '#ffd24e', { speed: overburn ? 400 : 320, size: 4, life: 0.7 });
+    if (overburn) {
+      // 第二圈是"这一发比平时大"的读数：一眼就能看出刚才那一下不是普通燃爆
+      ctx.particles.shockwave(this.x, this.y, '#fff2d8', radius * 0.55, 0.32);
+      ctx.addLight(this.x, this.y, radius * 1.6, 1);
+    }
 
     // 每个流派的燃爆有各自的"性格"
     if (style === 'warden') {
@@ -610,13 +666,15 @@ export class Player {
     ctx.enemies.forEach((e) => {
       const d = Math.hypot(e.x - this.x, e.y - this.y);
       if (d <= radius + e.radius) {
-        const dmg = 34 * this.stats.damageMult * this.damageScale * power;
+        const dmg = 34 * this.stats.damageMult * castScale * power;
         const crit = Math.random() < this.stats.critChance;
         const applied = crit ? dmg * this.stats.critMult : dmg;
         const opts: { burn?: number; slow?: number } = {};
         if (style === 'emberkin') opts.burn = 3;
         else if (style === 'lamplighter') opts.burn = 1;
         else if (style === 'shadewalker') opts.slow = 2.5;
+        // 爆灯的火是"烧出去的一口油"：不管哪个流派都带灼烧，层数再叠一层
+        if (overburn) opts.burn = (opts.burn ?? 0) + NOVA.overburnBurn;
         ctx.hit(e, applied, crit, e.x - this.x, e.y - this.y, knock, opts);
       }
     });
@@ -626,6 +684,36 @@ export class Player {
       this.novaBuffTimer = 3;
       this.oil = Math.min(this.oilMax, this.oil + 0.08);
     }
+    // ── 「爆灯」这条线的三件事，都从"这一发烧掉多少"长出来 ──
+    if (overburn) {
+      const burned = NOVA.overburnCost;
+      if (this.flags.overburnDamage > 0) this.overburnGlow = NOVA.afterglowSpan;
+      if (this.flags.overburnGuard > 0) this.ashTimer = NOVA.ashSpan;
+      if (this.flags.overburnRefund > 0) {
+        this.refundLeft += burned * this.flags.overburnRefund;
+        this.refundRate = (burned * this.flags.overburnRefund) / NOVA.refundSpan;
+      }
+    }
+  }
+
+  /** 灯火旺过这条线，燃爆才会「爆灯」（火盆把这把尺子往下挪）。 */
+  get overburnAt(): number {
+    return Math.max(0.15, NOVA.overburnAt - this.flags.overburnEase);
+  }
+
+  /** 爆灯的那四秒（猛火在加成）。HUD 的按钮上那个"亮着"的状态也看它。 */
+  get overburning(): boolean {
+    return this.overburnGlow > 0;
+  }
+
+  /** 这一发能不能爆灯（灯火够、冷却也转完了）。 */
+  get overburnReady(): boolean {
+    return this.oilFrac >= this.overburnAt && this.novaCd <= 0;
+  }
+
+  /** 炭衣：爆灯之后那几秒的减伤倍率（1 = 没减）。 */
+  get ashGuard(): number {
+    return this.ashTimer > 0 ? 1 - this.flags.overburnGuard : 1;
   }
 
   private updateWeapons(dt: number, ctx: PlayerContext, target: Enemy | null): void {

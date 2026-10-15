@@ -39,6 +39,14 @@ export interface RelicMods {
   blazeTime?: number;
   /** 「灯焰高涨」期间的减伤（0.3 = 少挨三成） */
   blazeGuard?: number;
+  /** 「爆灯」之后的短时伤害加成（0.35 = 那 4 秒里伤害 +35%） */
+  overburnDamage?: number;
+  /** 「爆灯」烧掉的油有多大比例会烧回来（0.5 = 一半） */
+  overburnRefund?: number;
+  /** 「爆灯」的灯火门槛降低（0.25 = 从 55% 降到 30%） */
+  overburnEase?: number;
+  /** 「爆灯」之后的短时减伤（0.45 = 少挨四成五） */
+  overburnGuard?: number;
 }
 
 export interface RelicDef {
@@ -120,6 +128,17 @@ export const RELICS: RelicDef[] = [
   { id: 'longwind', tribe: 'lamp', name: '长风', blurb: '「灯焰高涨」持续 +50%（六秒变九秒）。', icon: '🌬️', color: '#7be0ff', rarity: 'rare', price: 70, mods: { blazeTime: 0.5 } },
   { id: 'wickpick', tribe: 'oil', name: '撩芯', blurb: '每次「掠影」回的那口灯油翻倍。', icon: '🪔', color: '#ffd24e', rarity: 'common', price: 45, mods: { grazeOil: 1 } },
   { id: 'shadowstitch', tribe: 'shade', name: '影缝', blurb: '「灯焰高涨」期间受到伤害 -30%。', icon: '🧵', color: '#c9a3ff', rarity: 'epic', price: 95, mods: { blazeGuard: 0.3 } },
+
+  // ── 「爆灯」这条线：把"一口气烧掉一大口油"变成一套牌 ──
+  // 上一版把燃爆改成了"灯火过半就烧两倍的油、换一发更大的"（见 data/nova.ts），
+  // 于是这条线有了四种问法：**烧得起吗**（火盆把门槛砍下去）、**烧完怎么办**（引线把油烧回来）、
+  // **烧出去的那一下算不算数**（猛火把那四秒接上）、**烧的时候会不会被打死**（炭衣）。
+  // 四件各补一族，凑到 11 件；数值都不大，因为四件叠的是同一件事——都围着"按下去那一发"转，
+  // 单独一件改不了节奏，四件一起才成为一排"十几秒来一次"的爆发。
+  { id: 'flareup', tribe: 'flame', name: '猛火', blurb: '「爆灯」之后 4 秒内伤害 +35%——火打出去了，人还在火里。', icon: '🔥', color: '#ff7a2f', rarity: 'epic', price: 100, mods: { overburnDamage: 0.35 } },
+  { id: 'fuse', tribe: 'oil', name: '引线', blurb: '「爆灯」烧掉的油，一半会在 4 秒里从敌人身上烧回来。', icon: '🧨', color: '#ffd24e', rarity: 'epic', price: 105, mods: { overburnRefund: 0.5 } },
+  { id: 'brazier', tribe: 'lamp', name: '火盆', blurb: '「爆灯」的门槛从 55% 灯火降到 30%——半桶就能点着。', icon: '🏺', color: '#ffe27a', rarity: 'epic', price: 95, mods: { overburnEase: 0.25 } },
+  { id: 'charcoat', tribe: 'shade', name: '炭衣', blurb: '「爆灯」之后 3 秒内受到伤害 -45%。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 80, mods: { overburnGuard: 0.45 } },
 ];
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));

@@ -38,6 +38,8 @@ export class HUD implements HUDHost {
   private bountySig = '~';
   private pyreEl!: HTMLElement;
   private pyreSig = '~';
+  /** 上一次量到的"右上那一列"上沿（Infinity = 那一列没占着横带）：见 refitCards。 */
+  private chipTopSig = Infinity;
   private waveSig = '~';
   private buildSig = '';
   private bossWrap!: HTMLElement;
@@ -71,6 +73,7 @@ export class HUD implements HUDHost {
   private lastCd = new WeakMap<HTMLElement, string>();
   private dashFiring = false;
   private lampEmpty = false;
+  private novaCharged = false;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -333,7 +336,55 @@ export class HUD implements HUDHost {
    * 桌面档返回 Infinity：那里的高度不是稀缺资源，卡片堆着看反而有上下文（见 trimCards）。
    */
   private bandLimit(): number {
-    return this.feedMode() ? window.innerHeight / 2 - 20 : Infinity;
+    if (!this.feedMode()) return Infinity;
+    // 两个下沿取小的那个：屏幕正中偏上是**自己**，右侧那一列（悬赏 / 灯台）横着也压在
+    // 这条横带上——卡片铺满横带的整个宽度，所以只要那一列亮着，卡片的下沿就得停在它之前。
+    // 悬赏在 740×390 上量出来上沿 173，而"自己"那条线算下来是 175：长提示卡（5 行）
+    // 停在 162，正好从悬赏牌上压过去（viewportcheck 逮到的就是这个）。
+    // 那一档的落点已经在 CSS 里让开了（见 `.hud__bounty` 的 bottom）；
+    // 这里量出来再卡一道，管的是 CSS 够不着的那几种：屏宽/字号变了把牌子撑高、
+    // 牌子在卡片挂着的时候才亮起来、以及以后有人改那张牌子的内容。
+    return Math.min(window.innerHeight / 2 - 20, this.chipTop() - 6);
+  }
+
+  /**
+   * 右上那一列（悬赏 / 灯台）现在最高压到哪儿——没亮就是 Infinity。
+   * ⚠ 只认 `.is-on`：那两个元素一直在 DOM 里（没悬赏时文本清空、class 摘掉），
+   * 光看"盒子有没有高度"会把清空后剩下的 17px 内边距当成一块牌子量进来。
+   * 量不出来就当它不存在（没亮 / 没有 getComputedStyle，也就是无头桩件）——宁可少裁一句，
+   * 也不能靠假数据裁（和 cardBox 同一条规矩）。
+   */
+  private chipTop(): number {
+    let top = Infinity;
+    for (const el of [this.bountyEl, this.pyreEl]) {
+      if (!el || typeof el.classList?.contains !== 'function') continue;
+      if (!el.classList.contains('is-on')) continue;
+      // 和 cardBox 同一把尺子：桩件里 getBoundingClientRect 给的是恒定的 1280×720，
+      // 拿它当真去量，右上那一列就永远"上沿 0"——横带会被压成一行。
+      // 有没有 getComputedStyle 正好分得开"真排过版的浏览器"和"只会记数的桩件"。
+      if (typeof getComputedStyle !== 'function') continue;
+      if (typeof el.getBoundingClientRect !== 'function') continue;
+      const r = el.getBoundingClientRect();
+      if (!r || !(r.height > 0) || !Number.isFinite(r.top)) continue;
+      top = Math.min(top, r.top);
+    }
+    return top;
+  }
+
+  /**
+   * 右上那一列内容变了（悬赏刷新 / 灯台点亮 / 那一列本来就是刚亮起来的）之后，
+   * 把屏幕上挂着的卡片重新量一次。
+   * ⚠ 不这么做就有一条缝：fitCard 只在卡片**上屏那一刻**量一次，而悬赏是随机、随时出现的——
+   * 一张 5 行的长提示卡挂在那儿，悬赏牌忽然亮起来，两者就压在一起了（正是 viewportcheck 报的那个）。
+   * 量出来没变就什么都不做：端上去再量要强制重排（见 feedCooldown 那条注释），
+   * 而悬赏的签名里带着进度，每隔一会儿就会变一次。
+   */
+  private refitCards(): void {
+    if (!this.feedMode()) return;
+    const top = this.chipTop();
+    if (top === this.chipTopSig) return;
+    this.chipTopSig = top;
+    for (const el of this.liveCards()) this.fitCard(el);
   }
 
   /**
@@ -663,6 +714,7 @@ export class HUD implements HUDHost {
     if (!b) {
       this.bountyEl.textContent = '';
       this.bountyEl.classList.remove('is-on');
+      this.refitCards(); // 牌子摘了：卡片能把刚才让出去的那两行拿回来
       return;
     }
     const frac = this.game.bounties.frac;
@@ -673,6 +725,7 @@ export class HUD implements HUDHost {
     this.bountyEl.style.setProperty('--c', b.def.color);
     this.bountyEl.classList.toggle('is-done', b.done);
     this.bountyEl.classList.add('is-on');
+    this.refitCards();
   }
 
   /** 关卡进度条：填到哪就是打到第几波，最后一段是首领波。 */
@@ -711,6 +764,7 @@ export class HUD implements HUDHost {
     if (total <= 0) {
       this.pyreEl.textContent = '';
       this.pyreEl.classList.remove('is-on');
+      this.refitCards();
       return;
     }
     const left = total - lit;
@@ -719,6 +773,7 @@ export class HUD implements HUDHost {
       `<span>${left > 0 ? '靠近并停留片刻点亮 · 长明一处' : '✓ 此夜长明'}</span>`;
     this.pyreEl.classList.toggle('is-done', left === 0);
     this.pyreEl.classList.add('is-on');
+    this.refitCards();
   }
 
   update(dt: number): void {
@@ -796,7 +851,16 @@ export class HUD implements HUDHost {
         this.dashBtn.classList.toggle('is-firing', firing);
       }
     }
-    if (this.novaBtn) this.cdRing(this.novaBtn, p.novaCdFrac);
+    if (this.novaBtn) {
+      this.cdRing(this.novaBtn, p.novaCdFrac);
+      // 灯火过线时这一枚会亮起来：按下去不是普通燃爆，是「爆灯」（烧两倍的油换一发更大的）。
+      // 和 `is-empty`（按了也没用）正好是一对——一个是"按不动"，一个是"按下去会不一样"。
+      const charged = p.overburnReady;
+      if (charged !== this.novaCharged) {
+        this.novaCharged = charged;
+        this.novaBtn.classList.toggle('is-charged', charged);
+      }
+    }
   }
 
   private cdRing(btn: HTMLElement, frac: number): void {
