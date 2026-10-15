@@ -10,6 +10,9 @@ import { POUR } from '../data/pour';
 /** 卡片车道：掌上横屏的一条横带上一张提示卡 + 一张短公告就是上限（见 postCard）。 */
 type CardLane = 'tip' | 'toast';
 
+/** 被"横带放不下"退回来之后，隔多久再试一次（秒）：见 HUD.feedCooldown 里那笔重排的账。 */
+const FEED_RETRY = 0.2;
+
 export class HUD implements HUDHost {
   private root: HTMLElement;
   private hpFill!: HTMLElement;
@@ -51,6 +54,13 @@ export class HUD implements HUDHost {
   private waiting: { el: HTMLElement; key: string; lane: CardLane; hold: number; life: number }[] = [];
   /** 卡片自己的停留 / 淡出计时，由 update(dt) 推着走——不靠 setTimeout（理由见 updateCards）。 */
   private cardTimers = new WeakMap<HTMLElement, { hold: number; life: number; out: boolean }>();
+  /**
+   * 上一张卡片被"横带放不下"退回来之后，隔多久再试一次（秒）。
+   * ⚠ 不是为了好看：端上去再量是要**强制重排**的，每帧试一次在 4x 降频的手机上
+   * 是 0.94ms/帧（量过），一张长提示卡挂着 4.6 秒就是 260ms 白烧在重排上。
+   * 0.2 秒够把这张卡片的下一条端上屏（卡片一挂就是几秒），手感上完全看不出来。
+   */
+  private feedCooldown = 0;
   /** 上一次真正写进 DOM 的值：每帧无脑写 style / textContent 会让浏览器反复排队样式重算。 */
   private lastText = new WeakMap<HTMLElement, string>();
   private lastWidth = new WeakMap<HTMLElement, string>();
@@ -291,17 +301,125 @@ export class HUD implements HUDHost {
    */
   private postCard(el: HTMLElement, key: string, lane: CardLane, hold: number, life: number): void {
     el.dataset.cardKey = key;
+    const queued = { el, key, lane, hold, life };
+    // 车道占着（或者端上去会伸到玩家头上：fitCard 里量出来的）就排队等着
     if (this.feedMode() && this.laneBusy(lane)) {
-      this.enqueue({ el, key, lane, hold, life });
+      this.enqueue(queued);
       return;
     }
-    this.showCard(el, hold, life);
+    if (!this.showCard(el, hold, life)) {
+      this.enqueue(queued);
+      return;
+    }
     if (lane === 'toast') this.trimCards();
   }
 
-  private showCard(el: HTMLElement, hold: number, life: number): void {
+  /** 端一张卡片上屏。返回 false = "这张现在不该上屏"（横带上还挂着别人，端上去就压到人了）。 */
+  private showCard(el: HTMLElement, hold: number, life: number): boolean {
     this.toastRoot.appendChild(el);
+    // 端上屏之后量一次：掌上横屏里卡片不许伸到屏幕正中的自己头上（见 fitCard）。
+    // 量不过来就整张摘下来（连计时也不留），交给调用方退回队列、下一轮再端。
+    if (!this.fitCard(el)) {
+      this.toastRoot.removeChild(el);
+      return false;
+    }
     this.cardTimers.set(el, { hold, life, out: false });
+    return true;
+  }
+
+  /**
+   * 那条横带的下沿：掌上横屏上卡片到这儿就得停（再往下就是站在屏幕正中的自己）。
+   * 玩家精灵的半径是 14，再让 6px 的活口——卡片擦着头顶也算遮视野，停早一点不吃亏。
+   * 桌面档返回 Infinity：那里的高度不是稀缺资源，卡片堆着看反而有上下文（见 trimCards）。
+   */
+  private bandLimit(): number {
+    return this.feedMode() ? window.innerHeight / 2 - 20 : Infinity;
+  }
+
+  /**
+   * 把卡片裁进那条横带里。
+   *
+   * ⚠ 行数是**量出来**的，不是猜的：提示卡的正文长短差着四倍（"分灯"两行讲完，
+   * "掠影"要六行），而那条横带的净空在 390 高的横屏上只有 ~117px、320 高时只剩 ~82px。
+   * 早先按屏幕高度在 CSS 里写死"最多三行"，结果最大的一档手机（844×390）没人管：
+   * 两张卡片叠起来照样压到人身上（实测卡片下沿 190，玩家头顶 181）。
+   * 现在端上屏之后量一次，超了就按**真实行高**把正文砍到刚好停在下沿——
+   * 行高从计算样式里问，不自己写一个和 CSS 对不上的数。量不出来就当它放得下：
+   * 别拿假数据去裁一句话（见 cardBox）。
+   *
+   * 返回 false = "这张现在别上屏"：端上去会伸到玩家头上，而且横带上**还挂着别人**。
+   * 调用方把它退回队列，等横带空出来再讲（独占横带时只会裁，不会退——见下面那两行注释）。
+   */
+  private fitCard(el: HTMLElement): boolean {
+    const limit = this.bandLimit();
+    if (!Number.isFinite(limit)) return true;
+    const body = this.bodyOf(el);
+    // 上一轮当"第二张"时裁过：先还原再重新量（现在可能轮到自己独占整条横带了）
+    if (body) this.unclamp(body);
+    const box = this.cardBox(el);
+    if (!box) return true;
+    const room = limit - box.top; // 从这张卡片自己的上沿算起还能占多高
+    if (box.height <= room) return true;
+    // ⚠ 裁是"独占整条横带"时才有的待遇：横带上还挂着别人就整张退回去，等它空出来。
+    //   不这么分的话，一条 35px 的短公告挂在上面，就会把下面那张教学卡挤掉两行——
+    //   为了尽早报一句"图鉴 +2 条"而去砍"掠影"讲了一半的规矩，这笔账怎么算都亏。
+    if (this.liveCards().length > 1) return false;
+    // 短公告本来就只有一两行：不裁它（裁了就是半句话），独占横带时也照讲
+    if (!body) return true;
+    const line = this.lineHeight(body);
+    if (line <= 0) return true;
+    const chrome = box.height - this.heightOf(body); // 标题 + 内边距 + 那 2px 的行距
+    // 最少留一行：横带空着还讲不出来 = 这句话永远讲不到（showTip 已经把它记进存档了）
+    this.clamp(body, Math.max(1, Math.floor((room - chrome - 2) / line)));
+    return true;
+  }
+
+  /** 卡片正文那一段（提示卡是 <b>标题</b> + <span>正文</span>，短公告没有 span）。 */
+  private bodyOf(el: HTMLElement): HTMLElement | null {
+    if (typeof el.querySelector !== 'function') return null;
+    return el.querySelector('span') as HTMLElement | null;
+  }
+
+  /**
+   * 卡片量出来的盒（量不到返回 null）。
+   * ⚠ 无头桩件里没有 getComputedStyle，getBoundingClientRect 给的又只是个恒定的大矩形
+   * （0,0,1280,720）：拿它当真去量，测试里每一张卡片都会被裁成一行。
+   * 有没有 getComputedStyle 正好分得开"真排过版的浏览器"和"只会记数的桩件"，
+   * 量不出来就当它放得下——宁可少裁一句，也不能靠假数据裁。
+   */
+  private cardBox(el: HTMLElement): { top: number; height: number } | null {
+    if (typeof getComputedStyle !== 'function') return null;
+    if (typeof el.getBoundingClientRect !== 'function') return null;
+    const r = el.getBoundingClientRect();
+    if (!r || !(r.height > 0) || !Number.isFinite(r.top)) return null;
+    return { top: r.top, height: r.height };
+  }
+
+  private heightOf(el: HTMLElement): number {
+    if (typeof el.getBoundingClientRect !== 'function') return 0;
+    const r = el.getBoundingClientRect();
+    return r && Number.isFinite(r.height) ? r.height : 0;
+  }
+
+  /** 正文的真实行高（px）。 */
+  private lineHeight(el: HTMLElement): number {
+    const cs = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+    const n = cs ? parseFloat(cs.lineHeight) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  /** 砍到第 lines 行——和 CSS 那几档用的是同一套写法，别在这儿另发明一种裁剪。 */
+  private clamp(el: HTMLElement, lines: number): void {
+    el.style.setProperty('display', '-webkit-box');
+    el.style.setProperty('-webkit-box-orient', 'vertical');
+    el.style.setProperty('-webkit-line-clamp', String(lines));
+    el.style.setProperty('overflow', 'hidden');
+  }
+
+  private unclamp(el: HTMLElement): void {
+    for (const k of ['display', '-webkit-box-orient', '-webkit-line-clamp', 'overflow']) {
+      el.style.removeProperty(k);
+    }
   }
 
   /** 排队等着上屏（队伍的长短由 trimWaiting 管）。 */
@@ -367,10 +485,14 @@ export class HUD implements HUDHost {
   private pumpFeed(): void {
     if (!this.feedMode() || this.waiting.length === 0) return;
     if (this.holdBand()) return; // 公告正占着横带，卡片等它讲完
+    if (this.feedCooldown > 0) return; // 刚被"放不下"退回来过，别每帧都去量一遍（见 feedCooldown）
     if (this.oneLane()) {
       if (this.liveCards().length > 0) return;
       const [pick] = this.waiting.splice(0, 1);
-      this.showCard(pick.el, pick.hold, pick.life);
+      if (!this.showCard(pick.el, pick.hold, pick.life)) {
+        this.waiting.unshift(pick);
+        this.feedCooldown = FEED_RETRY;
+      }
       return;
     }
     for (const lane of ['tip', 'toast'] as CardLane[]) {
@@ -378,7 +500,11 @@ export class HUD implements HUDHost {
       const i = this.waiting.findIndex((w) => w.lane === lane);
       if (i < 0) continue;
       const [pick] = this.waiting.splice(i, 1);
-      this.showCard(pick.el, pick.hold, pick.life);
+      // 端上去会伸到玩家头上（横带净空就这点）：放回原来的位置，等横带空出来再讲
+      if (!this.showCard(pick.el, pick.hold, pick.life)) {
+        this.waiting.splice(i, 0, pick);
+        this.feedCooldown = FEED_RETRY;
+      }
     }
   }
 
@@ -392,6 +518,7 @@ export class HUD implements HUDHost {
    * 用帧时间推，卡片就和游戏一起停、一起走，切回来不会一次冒出五条旧消息。
    */
   updateCards(dt: number): void {
+    if (this.feedCooldown > 0) this.feedCooldown = Math.max(0, this.feedCooldown - dt);
     if (this.announceTimer > 0) {
       this.announceTimer -= dt;
       if (this.announceTimer <= 0) {

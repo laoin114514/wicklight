@@ -105,6 +105,25 @@ const BURST = () => {
   g.showTip('enemy:shade', '精英 · 影蛭', '贴着你走，靠数量耗你的油。别站着不动。');
 };
 
+/**
+ * 第三遍量什么：全游戏最长的那张提示卡，外加两条短公告。
+ * 卡片长短差着四倍（"分灯"两行讲完、"掠影"六行），按屏幕高度在 CSS 里写死"最多几行"
+ * 必然有一档会漏——844×390 就漏过（两张卡片叠到下沿 y=190，玩家头顶 181）。
+ * 现在超出去的那几行由 HUD.fitCard 按真实行高砍掉，这条用例就是去量它砍得准不准。
+ */
+const LONG = () => {
+  const h = window.__WICKLIGHT__.game.hud;
+  h.clearCards();
+  h.tip(
+    '掠影 · 擦着危险走过去',
+    '贴着敌人或弹幕走（脚边那圈符文会长）就攒热度，还会回一点灯油：离得越近、走得越快，涨得越快；' +
+      '站着不动不算。攒满会点着一阵「灯焰高涨」——照得更远、伤害 +25%、走得更快、' +
+      '代价是火大油也烧得凶（+30%），但焰里每杀一只怪都会给它续一点时间。冲刺里从弹幕正中穿过，那一下是双倍。',
+  );
+  h.toast('📖 图鉴 6/144 · 阴影回廊');
+  h.toast('🏆 成就解锁 · 第一簇火 +10 余烬');
+};
+
 const WS = (process.env.WS || '568,640,740,844,915,1024').split(',').map(Number);
 const HS = (process.env.HS || '320,340,360,375,390,412,470,560,600,700').split(',').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -160,7 +179,12 @@ try {
               }
             }
             const outside = list.filter((x) => x.l < -1 || x.t < -1 || x.r > innerWidth + 1 || x.b > innerHeight + 1).map((x) => x.s);
-            return { clashes, outside, visible: list.length };
+            // 屏幕正中偏上那一坨是**玩家自己**（半径 14 的精灵，相机就把他钉在正中）：
+            // 卡片压到它，玩家就看不见自己，等于直接挨打。上面那套"两两互相压住"管不到它，
+            // 因为玩家不是 HUD 元素——那口气留 2px（卡片自己已经让了 6px）。
+            const playerTop = innerHeight / 2 - 16;
+            const overPlayer = list.filter((x) => x.s.includes('toast') && x.b > playerTop).map((x) => `${x.s} 下沿 ${Math.round(x.b)}`);
+            return { clashes, outside, overPlayer, visible: list.length };
           }, SELS);
         const problems = [];
         // 第一遍：开局那一秒（公告 + 关卡卡）
@@ -169,9 +193,16 @@ try {
         await page.evaluate(BURST);
         await sleep(300);
         const burst = await measure();
-        for (const [tag, out] of [['开局', first], ['卡片', burst]]) {
+        // 第三遍：全游戏最长的那张卡（"掠影"有 160 个字，844 宽的横带上要六行）。
+        // 它一个人就得占满整条横带——这里量的正是 fitCard 那把尺子：
+        // 卡片的正文要么整句讲完，要么按真实行高砍到刚好停在玩家头顶，两条路都不许过线。
+        await page.evaluate(LONG);
+        await sleep(300);
+        const long = await measure();
+        for (const [tag, out] of [['开局', first], ['卡片', burst], ['长卡', long]]) {
           if (out.clashes.length) problems.push(`${tag}压住：${out.clashes.join(' · ')}`);
           if (out.outside.length) problems.push(`${tag}出界：${out.outside.join(',')}`);
+          if (out.overPlayer.length) problems.push(`${tag}压住玩家：${out.overPlayer.join(' · ')}`);
         }
         if (errors.length) problems.push(`报错：${errors.join('|')}`);
         const ok = problems.length === 0;

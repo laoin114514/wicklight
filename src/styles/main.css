@@ -2818,9 +2818,36 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
    左 266 到 vw-130，上沿 58（= 右上那一列的下沿 57 再让 1px）——也就是"公告与卡片的家"。
    ⚠ 公告与卡片**共用**这条横带，而且是轮流用：公告亮着的时候卡片不上屏
    （见 HUD.announce / laneBusy）。两行的公告（~93px）+ 两张卡片叠在一起照样会压到人身上。
-   ⚠ 也得有 HUD 那边的配合：一次只讲一条（见 HUD.postCard 的车道队列）。
+   ⚠ 也得有 HUD 那边的配合，而且是两件事：
+     · 一次只讲一条（见 HUD.postCard 的车道队列），多余的上屏前排着队；
+     · 端上屏之后**量一次**、超了就把正文砍到刚好停在玩家头顶（见 HUD.fitCard）——
+       横带净空在 390 高的横屏上只有 ~117px、320 高时只剩 ~82px，
+       而提示卡的正文长短差着四倍（"分灯"两行，"掠影"六行），
+       按屏幕高度在 CSS 里写死"最多几行"永远会漏掉一档：844×390 就漏了。
    光靠 CSS 兜不住——justify-content: flex-start 会让第 4 张卡片直接掉到屏幕外（v59 就这样）。 */
 body.is-touch .key { display: none; }
+/* 卡片落在**哪条**横带里：这一档的边界必须和 HUD.feedMode（触屏 + 横屏 + 高度 ≤700）对齐。
+   ⚠ 别只写到 560：561~700 那一档（平板横屏）HUD 那边照样在排队、照样只留一条横带，
+   而 CSS 这边要是没跟上，卡片就还留在屏幕正中——1024×700 实测正好压住左上那一列（6×42px），
+   844×700 更狠（96×42px，"掠影"那张 520px 宽的卡横着压过整条血条）。
+   左内边距就是横带的左沿（左列右沿 258 + 8），右内边距是右列的宽度 + 边距。 */
+@media (orientation: landscape) and (max-height: 700px) {
+  body.is-touch .toast-root {
+    padding: calc(58px + env(safe-area-inset-top)) calc(130px + env(safe-area-inset-right)) 0
+      calc(266px + env(safe-area-inset-left));
+    align-items: flex-start;
+    gap: 5px;
+    overflow: hidden;
+  }
+  /* 卡片左对齐、从上往下堆，整条横带 58..170——屏幕正中偏下的人和脚下的战场都露在外面。
+     宽度也跟着横带收（`100%` 就是横带的净宽）：844×700 上量出来 448px，正好停在右上那一列
+     的左沿 720 之前；900 宽往上的平板才轮得到 520px 那个上限。
+     （弹性盒子本来就会把它压在横带里，这一条是把它写成明话，别让落点靠一条隐式规则兜着。） */
+  body.is-touch .toast,
+  body.is-touch .toast--tip { max-width: min(100%, 520px); }
+  /* 淡出别再往上飘 8px：上沿那一带是公告与暂停键的地盘，卡片老老实实停在原地 */
+  body.is-touch .toast.is-out { transform: none; }
+}
 @media (orientation: landscape) and (max-height: 560px) {
   /* 公告：别在 42%（那里正是卡片的落点），搬进那条横带、竖着居中。
      长公告（"精英来袭：xxx · 词缀"）在这里折行，不再横着冲出两列。
@@ -2841,19 +2868,10 @@ body.is-touch .key { display: none; }
     overflow: hidden;
   }
   body.is-touch .announce.is-big { font-size: clamp(16px, 2.8vw, 26px); }
-  /* 卡片：左内边距就是那条横带的左沿（左列右沿 + 8），右内边距是右列的宽度 + 边距。
-     卡片左对齐、从上往下堆，整条横带 58..170——屏幕正中偏下的人和脚下的战场都露在外面。 */
-  body.is-touch .toast-root {
-    padding: calc(58px + env(safe-area-inset-top)) calc(130px + env(safe-area-inset-right)) 0
-      calc(266px + env(safe-area-inset-left));
-    align-items: flex-start;
-    gap: 5px;
-    overflow: hidden;
-  }
+  /* 卡片的落点在上一档（≤700）已经设好；这一档只收尺寸：横带净空只有 ~117px，
+     360px 宽的一句话折行更少，也就更矮。 */
   body.is-touch .toast,
   body.is-touch .toast--tip { max-width: min(100%, 360px); }
-  /* 淡出别再往上飘 8px：上沿那一带是公告与暂停键的地盘，卡片老老实实停在原地 */
-  body.is-touch .toast.is-out { transform: none; }
   body.is-touch .toast--tip { padding: 7px 13px 8px; }
   body.is-touch .toast--tip b { font-size: 12.5px; }
   body.is-touch .toast--tip span { font-size: 11px; line-height: 1.4; }
@@ -2869,16 +2887,10 @@ body.is-touch .key { display: none; }
   body.is-touch .toast--tip { padding: 6px 12px 7px; }
   body.is-touch .toast--tip span { font-size: 10.5px; line-height: 1.35; }
 }
-/* 320 上下（最小的横屏）：那条横带的净空只有 ~80px，提示卡最多三行——多出来的用省略号收住。
-   宁可少讲一句，也别让卡片一路堆到屏幕正中的自己身上（也不许压住右下的悬赏/灯台芯片）。 */
-@media (orientation: landscape) and (max-height: 340px) {
-  body.is-touch .toast--tip span {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    overflow: hidden;
-  }
-}
+/* 320 上下（最小的横屏）：这条横带的净空只剩 ~80px，一张提示卡最多三行。
+   ⚠ 这里**没有**"最多几行"这一档，是故意的：同样一句话在 844 宽的横带上六行、
+   在 568 宽的横带上要十一行，按屏幕高度猜必然有一档会漏（844×390 就漏过）。
+   行数改由 HUD.fitCard 端上屏之后按真实行高量出来，宁可等到那时候再砍。 */
 
 /* 320~380（最小的横屏窗口，iPhone SE 竖屏高度那种）：只求五行按钮 / 三张卡都在屏幕里 */
 @media (orientation: landscape) and (max-height: 380px) {
