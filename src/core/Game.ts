@@ -42,6 +42,7 @@ import { STAGES, STAGE_MAP } from '../data/stages';
 import { GRAZE } from '../data/graze';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
+import { POUR } from '../data/pour';
 import { ENEMY_MAP } from '../data/enemies';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
@@ -160,6 +161,19 @@ interface Ground {
   life: number;
   dps: number;
   kind?: 'fire' | 'poison' | 'mud' | 'frost';
+  /**
+   * 「倾灯」倒出来的那片油火：**只烧它们，不烧你**。
+   *
+   * 别的火（爆裂菇的词缀、连珠伏灯留下的那层）都是 `dps` 打玩家，这一片反过来——
+   * 踩在里面的怪会被一遍遍点上灼烧（走怪自己那套 burn）。为什么自己的火不烧自己：
+   * 倾灯是**自动开火**的，罚一件玩家没有主动按下扳机的东西不叫代价，叫冤枉；
+   * 它的代价写在油上（倒一瓢，你的灯就暗一阵）。
+   */
+  ignites?: boolean;
+  /** 上一次给火里的怪续灼烧的计时（秒），把点火节流到 `POUR.igniteEvery` */
+  igniteIn?: number;
+  /** 画这片火用的一点随机相位：每片火的火舌抖法错开，同一片火前后连贯 */
+  phase?: number;
 }
 
 /**
@@ -417,6 +431,9 @@ export class Game {
   vortexCaught = 0;
   /** 那一网打出的最高伤害（基础 + 每收到一只的奖励；结算里跟在「最狠的一网 n 只」后面） */
   vortexPayoff = 0;
+  /** 本局倒了几瓢「倾灯」、累计倒掉多少桶油（结算用） */
+  pourCount = 0;
+  pourSpent = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -581,6 +598,8 @@ export class Game {
     this.vortexBest = 0;
     this.vortexCaught = 0;
     this.vortexPayoff = 0;
+    this.pourCount = 0;
+    this.pourSpent = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -1455,6 +1474,10 @@ export class Game {
       },
       mine: (x, y, damage, radius, trigger, fire) => this.placeMine(x, y, damage, radius, trigger, fire),
       vortex: (x, y, damage, radius, burn, drag) => this.placeVortex(x, y, damage, radius, burn, drag),
+      pour: (cost) => {
+        this.pourCount += 1;
+        this.pourSpent += cost;
+      },
     };
   }
 
@@ -2097,7 +2120,8 @@ export class Game {
   }
 
   private explode(p: Projectile): void {
-    const radius = p.explode * (1 + (this.player.stats.areaMult - 1) * 0.5);
+    const spread = 1 + (this.player.stats.areaMult - 1) * 0.5;
+    const radius = p.explode * spread;
     this.blast(p.x, p.y, radius, p.damage, {
       knockback: p.knockback,
       burn: p.burn,
@@ -2105,6 +2129,35 @@ export class Game {
       spark: '#ff9d2e',
       sparkCount: 18,
     });
+    // 「倾灯」落地：炸完之后在地上留一片**自己烧的火**（别的武器没有这一项，`poolRadius` 是 0）
+    if (p.poolRadius > 0) this.pourPool(p.x, p.y, p.poolRadius * spread, p.poolLife);
+  }
+
+  /**
+   * 倒出去的那一瓢落在地上：留一片油火，并顺手看看这一瓢够不够「火上浇油」。
+   *
+   * 「火上浇油」的判据刻意是"**已经**有几只正站在你的火里"——先数、再放这片新火
+   * （顺序反过来，新火自己就会把它们算进去，那这条成就就变成"随便往人堆里倒"了）。
+   * 而且要求那只怪脚下那片火是**自己的**（`ignites`）：连珠伏灯留下的那层火不算，
+   * 那层火本来就在烧玩家，不是倒出来的油。
+   */
+  private pourPool(x: number, y: number, r: number, life: number): void {
+    let doused = 0;
+    this.enemies.forEach((e) => {
+      if ((e.x - x) ** 2 + (e.y - y) ** 2 > r * r) return;
+      for (const g of this.grounds) {
+        if (!g.ignites) continue;
+        if ((e.x - g.x) ** 2 + (e.y - g.y) ** 2 <= g.r * g.r) {
+          doused += 1;
+          return;
+        }
+      }
+    });
+    this.addGround(x, y, r, life, 0, 'fire', true);
+    // 第一瓢落地就把图鉴「机制」那一章的条目记上（和伏灯 / 旋灯一样：条目里的数是现取的）
+    this.codex.discover('mechanic', 'pour');
+    if (doused >= POUR.douse) this.achievements.unlock('pour_douse');
+    this.audio.play('pour_splash');
   }
 
   /**
@@ -2497,8 +2550,9 @@ export class Game {
     life: number,
     dps: number,
     kind: 'fire' | 'poison' | 'mud' | 'frost' = 'fire',
+    ignites = false,
   ): void {
-    this.grounds.push({ x, y, r, life, dps, kind });
+    this.grounds.push({ x, y, r, life, dps, kind, ignites, igniteIn: 0, phase: ignites ? this.rng.next() * 6.283 : 0 });
     const tint = kind === 'mud' ? '#9fb7c9' : kind === 'frost' ? '#bfe6ff' : '#ff7a2f';
     this.particles.shockwave(x, y, tint, r, life);
   }
@@ -2553,6 +2607,28 @@ export class Game {
         continue;
       }
       if (g.kind === 'mud' || g.kind === 'frost') continue;
+      if (g.ignites) {
+        // 「倾灯」的那片油火：给火里的怪一遍遍续上灼烧（走的是怪自己那套 burn，
+        // 所以它吃「燎原」的加成、也不用每帧刷伤害数字），**不烧玩家**。
+        g.igniteIn = (g.igniteIn ?? 0) - dt;
+        if (g.igniteIn <= 0) {
+          g.igniteIn = POUR.igniteEvery;
+          this.enemies.forEach((e) => {
+            if ((e.x - g.x) ** 2 + (e.y - g.y) ** 2 > (g.r + e.radius) ** 2) return;
+            this.enemies.applyBurn(e, POUR.igniteStacks);
+          });
+        }
+        // 它也是一片光：油烧起来比别的火亮，暗幕里那圈火自己就是路标
+        this.light.addGlow(g.x, g.y, g.r * 1.45, 0.55);
+        // 火星子往上飘：这是这个游戏里"有东西在烧"一直都在用的那句话（灯台、余烬也是它）。
+        // 静静的火苗在暗幕里太像一张贴图了，飘起来的几点火星才让它像在烧。
+        if (this.rng.next() < dt * 11) {
+          const ea = this.rng.next() * 6.283;
+          const ed = g.r * Math.sqrt(this.rng.next()) * 0.78;
+          this.particles.ember(g.x + Math.cos(ea) * ed, g.y + Math.sin(ea) * ed, '#ffc46b');
+        }
+        continue;
+      }
       const dx = this.player.x - g.x;
       const dy = this.player.y - g.y;
       if (dx * dx + dy * dy <= g.r * g.r) this.damagePlayer(g.dps * dt, g.x, g.y, 0, g.kind);
@@ -2965,7 +3041,13 @@ export class Game {
     const evo = def.evolve
       ? ` 满级 + ${PASSIVE_MAP[def.evolve.passive]?.name ?? def.evolve.passive} 满级即可进化成「${WEAPON_MAP[def.evolve.into]?.name ?? def.evolve.into}」。`
       : ' 这件没有进化线，但每一级都会更强。';
-    this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${evo}`);
+    // 「倾灯」得额外讲一句"它有时候为什么不响"：一件会自己停下来的武器，
+    // 不把规矩说清楚就只会被当成坏了。
+    const rule =
+      def.kind === 'pour'
+        ? ` 它只在灯火 ≥ ${Math.round(POUR.minOil * 100)}% 时才倒——不满就整发不出手，所以它响不响看的是你补油快不快（擦身、击杀掉落、灯台都算）。倒下的地方会留一片火，往同一片火上再倒一瓢，火会一层层叠上去。`
+        : '';
+    this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${rule}${evo}`);
   }
 
   /** 升级 / 商店拿到武器或完成进化时，按第一次讲一次。 */
@@ -3729,6 +3811,10 @@ export class Game {
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
     this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
+    // 倾灯倒出来的火舌画在敌人**上面**、玩家**下面**：一瓢落点永远是人群里，
+    // 火苗本来就该从他们身上窜起来（不然最该被看见的一团火只露出一圈边）；
+    // 而玩家得始终看得见自己站在哪儿，所以人还在火苗之上。
+    this.drawGroundTops(ctx);
     this.player.draw(ctx, this.time);
     this.drawArcs(ctx);
     this.drawBeams(ctx);
@@ -4239,6 +4325,11 @@ export class Game {
 
   private drawGrounds(ctx: CanvasRenderingContext2D): void {
     ctx.save();
+    // 「倾灯」倒出来的那片油火自成一格：别的火是"一团径向渐变"，铺满这么一大片会读成
+    // "地上放了一盏灯"。它是这一版的招牌，得读成"地上真有一摊正在烧的油"（见 drawOilFire）。
+    for (const g of this.grounds) {
+      if (g.ignites) this.drawOilFire(ctx, g);
+    }
     for (const g of this.grounds) {
       if (g.kind !== 'mud' && g.kind !== 'frost') continue;
       // 滞行雾与霜冻都是"压暗"而不是"发光"：用普通混合盖一层，再用虚线勾出边界，
@@ -4272,7 +4363,7 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
     for (const g of this.grounds) {
-      if (g.kind === 'mud') continue;
+      if (g.kind === 'mud' || g.ignites) continue;
       const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
       if (g.kind === 'frost') {
         // 给霜冻一点冷光：它藏在黑暗里的话，玩家根本没机会躲
@@ -4291,6 +4382,125 @@ export class Game {
       ctx.fill();
     }
     ctx.restore();
+  }
+
+  /**
+   * 「倾灯」倒出来的那片油火（**垫底那一半**：油渍 + 火体柔光）。
+   *
+   * 分两层画，是因为它和别的地面不一样——别的火只是"地上一块会发光的地皮"，
+   * 这一片是**烧在敌人脚下**的：一瓢永远锁着最前那只怪落下去，所以火心必然被那一群怪盖住。
+   * 全画在实体底下的话，最该被看见的一团火永远只露出一圈边。所以拆成两半：
+   *   - 这一半（油渍 + 三团柔光）跟别的地面一起画在实体**下面**；
+   *   - 火舌那一半画在敌人**上面**（见 drawGroundTops）——火苗本来就是从它们身上窜起来的，
+   *     这样哪怕一群人正站在火里，也看得见他们在烧。
+   *
+   * ① 油渍（正常混合）：几团圆不规则地摊开，把地面压暗——油是吸光的，不是发光的。
+   * ③ 火体：三团圆叠在一起，一团比一团小、一团比一团白。
+   */
+  private drawOilFire(ctx: CanvasRenderingContext2D, g: Ground): void {
+    const fade = clamp(g.life / 1.1, 0, 1); // 烧到最后一点慢慢收，不是"啪"一下没了
+    const ph = g.phase ?? 0;
+    const t = this.time;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < 7; i += 1) {
+      const a = ph + i * 0.8976; // 一片撒得不规则的油渍（等分的话会读成一个正圆）
+      const d = g.r * (0.2 + 0.13 * ((i * 3) % 3));
+      const rr = g.r * (0.44 + 0.12 * ((i * 5) % 3));
+      ctx.globalAlpha = (0.17 + 0.07 * ((i * 3) % 3)) * fade;
+      ctx.fillStyle = '#150c07';
+      ctx.beginPath();
+      ctx.arc(g.x + Math.cos(a) * d, g.y + Math.sin(a) * d, rr, 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    const breath = 0.86 + 0.14 * Math.sin(t * 3.4 + ph * 2);
+    const body = (ox: number, oy: number, rr: number, al: number, c0: string, c1: string): void => {
+      const grd = ctx.createRadialGradient(g.x + ox, g.y + oy, 0, g.x + ox, g.y + oy, rr);
+      grd.addColorStop(0, c0);
+      grd.addColorStop(1, c1);
+      ctx.globalAlpha = al * breath * fade;
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(g.x + ox, g.y + oy, rr, 0, 6.2832);
+      ctx.fill();
+    };
+    body(0, 0, g.r, 0.34, 'rgba(255,120,44,0.8)', 'rgba(255,70,16,0)');
+    body(g.r * 0.07, -g.r * 0.05, g.r * 0.62, 0.38, 'rgba(255,170,72,0.8)', 'rgba(255,110,30,0)');
+    body(-g.r * 0.05, -g.r * 0.1, g.r * 0.3, 0.42, 'rgba(255,234,172,0.9)', 'rgba(255,150,60,0)');
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * 「倾灯」那片火的**上面那一半**：火舌 + 一圈热边。画在敌人之后、玩家之前。
+   *
+   * 火舌按**面积**撒（半径取 √u）。撒在半径上的话火会自己排成一圈、中间留个洞——
+   * 那是"一圈灯"，不是"一片火"。外焰一朵 + 内焰一朵 = 一条会抖的舌头，每朵还罩一点柔光，
+   * 因为它们是描出来的形状（边是硬的），罩一层雾边才化得开。
+   */
+  private drawGroundTops(ctx: CanvasRenderingContext2D): void {
+    let any = false;
+    for (const g of this.grounds) {
+      if (!g.ignites) continue;
+      if (!any) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        any = true;
+      }
+      const fade = clamp(g.life / 1.1, 0, 1);
+      const ph = g.phase ?? 0;
+      const t = this.time;
+      // 每一朵的"身高 / 胖瘦 / 抖得多快"都由一个只跟序号和相位有关的散列给：
+      // 几朵一个样的话，一眼就是"摆了一排"，而不是"在烧"。
+      const hash = (k: number): number => {
+        const s2 = Math.sin(k * 12.9898 + ph * 78.233) * 43758.5453;
+        return s2 - Math.floor(s2);
+      };
+      const n = Math.round(clamp(g.r / 6.5, 10, 20));
+      for (let i = 0; i < n; i += 1) {
+        const a = ph + i * 2.39996; // 黄金角：撒得匀又不成行
+        const d = g.r * 0.68 * Math.sqrt((i + 0.5) / n);
+        const r1 = hash(i);
+        const r2 = hash(i + 53);
+        const wob = 0.5 + 0.5 * Math.sin(t * (5 + r1 * 3) + i * 1.7 + ph * 3);
+        const bx = g.x + Math.cos(a) * d;
+        const by = g.y + Math.sin(a) * d;
+        const core = 1 - clamp(d / g.r, 0, 1);
+        // 高的一朵拔得很高、矮的一朵只有一小截：参差才像火
+        const h = g.r * (0.14 + 0.72 * r1) * (0.7 + 0.45 * core) * (0.8 + 0.35 * wob);
+        const w = g.r * (0.045 + 0.075 * r2);
+        const tip = bx + Math.sin(t * 4.4 + i * 2.3 + ph) * w * 0.6; // 火尖自己也会飘
+        ctx.globalAlpha = (0.16 + 0.22 * wob) * (0.7 + 0.5 * r2) * fade;
+        ctx.fillStyle = core > 0.45 ? '#ff9a34' : '#ff6a1e';
+        ctx.beginPath();
+        ctx.moveTo(bx - w, by);
+        ctx.quadraticCurveTo(bx - w * 1.2, by - h * 0.5, tip, by - h);
+        ctx.quadraticCurveTo(bx + w * 1.2, by - h * 0.5, bx + w, by);
+        ctx.fill();
+        // 内焰只给中间那几朵（边上也白的话，整片会糊成一团奶白）
+        if (core > 0.2) {
+          ctx.globalAlpha = (0.14 + 0.26 * wob) * core * fade;
+          ctx.fillStyle = core > 0.55 ? '#fff0c0' : '#ffbc5c';
+          ctx.beginPath();
+          ctx.moveTo(bx - w * 0.44, by);
+          ctx.quadraticCurveTo(bx - w * 0.5, by - h * 0.3, tip, by - h * (0.5 + 0.25 * core));
+          ctx.quadraticCurveTo(bx + w * 0.5, by - h * 0.3, bx + w * 0.44, by);
+          ctx.fill();
+        }
+      }
+      // 边：一圈低伏的虚线热边（"这片火烧到哪儿"要看得见边，不然玩家分不清自己站没站进去）
+      ctx.globalAlpha = (0.2 + 0.1 * Math.sin(t * 2.6 + ph * 2)) * fade;
+      ctx.strokeStyle = '#ff7a2f';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r * 0.96, 0, 6.2832);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    if (any) ctx.restore();
   }
 
   private drawHazards(ctx: CanvasRenderingContext2D): void {

@@ -571,6 +571,7 @@ export class UIManager implements UIHost {
         ${g.vortexCount > 0 ? `<div><span>旋灯</span><b>${g.vortexCount} 盏</b></div>` : ''}
         ${g.vortexBest > 1 ? `<div><span>一次拽住</span><b>${g.vortexBest} 只</b></div>` : ''}
         ${g.vortexCaught >= 3 ? `<div><span>最狠的一网</span><b>${g.vortexCaught} 只 · ${g.vortexPayoff}</b></div>` : ''}
+        ${g.pourCount > 0 ? `<div><span>倾灯</span><b>${g.pourCount} 瓢 · ${g.pourSpent.toFixed(1)} 桶油</b></div>` : ''}
         ${g.mineSnuffed > 0 ? `<div><span>被吹灭</span><b>${g.mineSnuffed} 颗</b></div>` : ''}
         ${g.grazeCount > 0 ? `<div><span>掠影</span><b>${g.grazeCount} 次</b></div>` : ''}
         ${g.player.blazeCount > 0 ? `<div><span>灯焰高涨</span><b>${g.player.blazeCount} 次</b></div>` : ''}
@@ -1241,6 +1242,13 @@ function formatStat(row: (typeof PASSIVE_STAT_ROWS)[number], v: number): string 
 /** 卡面上印得出数值的那些项。`drag` 那种"是/否"的开关不在里面（它不属于"改了多少"）。 */
 type WeaponRowKey = Exclude<keyof WeaponStats, 'drag'>;
 
+/**
+ * 取一项数值。可选的那些（现在只有「倾灯」的 `pour`）也印在卡上——
+ * "升级之后同一瓢更省油"正是这把武器最该看见的一件事，所以不把它踢出去，
+ * 只是取的时候认一下"这件武器有没有这一项"。
+ */
+const rowNum = (st: WeaponStats, k: WeaponRowKey): number => st[k] ?? 0;
+
 /** 武器卡的那几行：`before` 为空 = 这是把新武器，写它的身板而不是变化量。 */
 function weaponRows(
   before: WeaponStats | null,
@@ -1256,6 +1264,7 @@ function weaponRows(
     if (after.cooldown > 0) rows.push({ k: '间隔', to: sec(after.cooldown) });
     if (after.count > 1) rows.push({ k: '数量', to: int(after.count) });
     if (after.pierce > 0) rows.push({ k: '穿透', to: pierce(after.pierce) });
+    if (after.pour) rows.push({ k: '一瓢的油', to: `${Math.round(after.pour * 100)}%` });
     return rows;
   }
   const fields: { key: WeaponRowKey; label: string; fmt: (v: number) => string }[] = [
@@ -1269,9 +1278,10 @@ function weaponRows(
     { key: 'knockback', label: '击退', fmt: int },
     { key: 'burn', label: '灼烧', fmt: sec },
     { key: 'slow', label: '减速', fmt: (v) => `${Math.round(v * 100)}%` },
+    { key: 'pour', label: '一瓢的油', fmt: (v) => `${Math.round(v * 100)}%` },
   ];
   const listed = order ? order.map((k) => fields.find((f) => f.key === k)!).filter(Boolean) : fields;
   return listed
-    .filter((f) => changed(before[f.key], after[f.key]))
-    .map((f) => ({ k: f.label, from: f.fmt(before[f.key]), to: f.fmt(after[f.key]) }));
+    .filter((f) => changed(rowNum(before, f.key), rowNum(after, f.key)))
+    .map((f) => ({ k: f.label, from: f.fmt(rowNum(before, f.key)), to: f.fmt(rowNum(after, f.key)) }));
 }

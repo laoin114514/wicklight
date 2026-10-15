@@ -22,7 +22,7 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -89,6 +89,21 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
     `「收网」的门槛要是比「一网打尽」更高的整只数（实际 ${vortex.haul}）`,
   );
   assert.ok(vortex.spin > 1, '旋臂转得起来才像"在吸"，不该是慢慢挪');
+
+  // ── 倾灯的调参表：同样是"改了不报错，只会让手感变味"的那一类 ──
+  const pour = data.pour;
+  assert.ok(pour, '构建产物应导出倾灯调参表');
+  for (const [k, v] of Object.entries(pour)) {
+    assert.equal(typeof v, 'number', `pour.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `pour.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(pour.minOil > 0.5 && pour.minOil < 1, '倒油的门槛要卡在"大半桶"上，不该满油才发、也不该随时能倒');
+  assert.ok(pour.fireLife > 1 && pour.fireLife < 10, '一片火要烧够几秒才叫"留下来烧"，又不该像永久地形');
+  assert.ok(pour.fireSpread > 1, '火海要比爆炸大一圈，不然锁在最前那只脸上的瓢盖不住后面那一片人');
+  assert.ok(pour.igniteEvery > 0 && pour.igniteEvery < 1.5, '续层的间隔要密到看得出"一层层叠上去"，又不该一帧顶满');
+  assert.ok(pour.igniteStacks >= 1, '每次续层至少要给一层');
+  assert.ok(pour.douse >= 4, '「火上浇油」的门槛不该再倒一瓢顺手就够（要真是"往火里再浇"）');
+  assert.ok(pour.costHint > 0 && pour.costHint < pour.minOil, '一瓢的油不该贵到超过倒油门槛本身');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

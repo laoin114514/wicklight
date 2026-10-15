@@ -31,6 +31,9 @@ export interface Projectile {
   ownerId: string;
   /** 这颗子弹是不是已经被算过一次「掠影」了（同一颗只认一次：弹幕流里站着蹭不该刷热度） */
   grazed: boolean;
+  /** > 0 表示落地之后要在地上留一片**自己的火**（倾灯）：多大一片、烧多久 */
+  poolRadius: number;
+  poolLife: number;
 }
 
 export class ProjectileSystem {
@@ -62,6 +65,8 @@ export class ProjectileSystem {
     returning: false,
     ownerId: '',
     grazed: false,
+    poolRadius: 0,
+    poolLife: 0,
   }), 512);
 
   spawn(cfg: Partial<Projectile> & { x: number; y: number; vx: number; vy: number; damage: number }): Projectile {
@@ -93,6 +98,8 @@ export class ProjectileSystem {
     p.returning = false;
     p.ownerId = cfg.ownerId ?? '';
     p.grazed = false;
+    p.poolRadius = cfg.poolRadius ?? 0;
+    p.poolLife = cfg.poolLife ?? 0;
     return p;
   }
 

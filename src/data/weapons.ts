@@ -159,6 +159,22 @@ export const WEAPONS: WeaponDef[] = [
     evolve: { passive: 'magnet', into: 'vortex_maelstrom' },
   },
 
+  // 「倾灯」：这一局里第一件**花油**的武器。到 v58 为止，灯油只是一条"捡得越多越亮"的曲线；
+  // 它把这条曲线变成弹药——倒出去一瓢就是一片火海，代价是你接下来会明显暗一阵。
+  // 于是"灯火"从一件只能攒的东西，变成一件要决定什么时候花的东西。
+  {
+    id: 'pour',
+    name: '倾灯',
+    kind: 'pour',
+    color: '#f0a13c',
+    blurb: '把灯火本身倒出去：一瓢砸出一片火海，倒完自己也暗一阵。',
+    levels: scale(
+      { ...base, damage: 58, cooldown: 2.5, count: 1, speed: 200, range: 300, radius: 88, pierce: 0, spread: 0, knockback: 150, burn: 2, pour: 0.15 },
+      { damage: 17, cooldown: 0.9, radius: 7, range: 14, burn: 1, pour: -0.012 },
+    ),
+    evolve: { passive: 'oilrain', into: 'pour_tide' },
+  },
+
   // ── Evolved forms (unlocked via UpgradeSystem) ──
   {
     id: 'ring_corona',
@@ -254,6 +270,18 @@ export const WEAPONS: WeaponDef[] = [
     ),
   },
   {
+    id: 'pour_tide',
+    name: '灯潮',
+    kind: 'pour',
+    color: '#ffd08a',
+    blurb: '一瓢变三瓢：扇形泼出去，一片接着一片地烧，还是那一瓢的价钱。',
+    evolved: true,
+    levels: scale(
+      { ...base, damage: 132, cooldown: 2.2, count: 3, speed: 210, range: 330, radius: 104, pierce: 0, spread: 0.62, knockback: 170, burn: 3, pour: 0.15 },
+      { damage: 20, cooldown: 0.93, radius: 5, range: 12, burn: 1 },
+    ),
+  },
+  {
     id: 'mine_chain',
     name: '连珠伏灯',
     kind: 'mine',
@@ -285,4 +313,4 @@ export function weaponAt(id: string, level: number): WeaponStats {
 }
 
 export const STARTER_WEAPONS = ['ring', 'wisp', 'fireball', 'whip', 'shard', 'spray'] as const;
-export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang', 'mine'] as const;
+export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang', 'mine', 'pour'] as const;

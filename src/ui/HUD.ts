@@ -5,6 +5,7 @@ import { WEAPON_MAP } from '../data/weapons';
 import { PASSIVE_MAP } from '../data/upgrades';
 import { RELIC_MAP, TRIBES } from '../data/relics';
 import { STAGES } from '../data/stages';
+import { POUR } from '../data/pour';
 
 export class HUD implements HUDHost {
   private root: HTMLElement;
@@ -427,7 +428,16 @@ export class HUD implements HUDHost {
     }
 
     const dim = g.player.oilFrac < 0.25;
-    this.oilFill.parentElement?.classList.toggle('is-low', dim);
+    const oilBar = this.oilFill.parentElement;
+    oilBar?.classList.toggle('is-low', dim);
+    // 手里有「倾灯」的时候，油条上刻一道线：那是它"够不够倒"的门槛。
+    // 这件武器会自己停下来（灯火不足就整发不出手），光靠观察很难学会这条规矩——
+    // 一条刻痕比一句说明管用。没有这件武器就不画（别给别的构筑添噪音）。
+    if (oilBar) {
+      const hasPour = g.player.weapons.has('pour') || g.player.weapons.has('pour_tide');
+      if (hasPour !== oilBar.classList.contains('has-pour')) oilBar.classList.toggle('has-pour', hasPour);
+      if (hasPour) oilBar.style.setProperty('--pour-floor', `${(POUR.minOil * 100).toFixed(1)}%`);
+    }
 
     if (this.announceTimer > 0) {
       this.announceTimer -= dt;

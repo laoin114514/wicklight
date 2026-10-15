@@ -962,6 +962,172 @@ async function main() {
   });
   await sleep(200);
 
+  // ── 3a9. 倾灯：把灯火本身倒出去 ──
+  // 到 v58 为止灯油只是一条"捡得越多越亮"的曲线（它同时是火力、视野、亮度）。
+  // 倾灯是这一局里第一件**花油**的武器：倒出去一瓢，地上留下一片刻意烧给敌人看的火，
+  // 代价是自己接下来暗一阵。离线单测钉住了数，这里要在真帧里看住四件事：
+  //   ① 一瓢真的从灯的油桶里扣（不是凭空泼出一团火）；
+  //   ② 地上真的多了一片**自己烧的**火，而且火里的怪被一层层续上灼烧；
+  //   ③ 站在自己倒的火里**不掉血**（自动开火的武器不该罚玩家没按扳机）；
+  //   ④ 往自家火上再倒一瓢，解「火上浇油」。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    window.__SAVED_WEAPONS3__ = [...p.weapons];
+    p.weapons.clear();
+    p.addWeapon('pour');
+    p.recomputeStats();
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.oil = p.oilMax;
+    p.stats.maxHp = 1e6;
+    p.hp = 1e6;
+    g.xpToNext = 1e9; // 打死的怪会给经验 → 升级面板一弹整局就暂停了
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.mines.length = 0;
+    g.grounds.length = 0; // 场上只留这一瓢留下的火
+    g.pourCount = 0;
+    g.pourSpent = 0;
+    // 这一波还在刷怪，新刷出来的一只走过来就会踩进火里、把"火里的怪"这个数搅乱——挂起导演
+    const d = g.director;
+    window.__DIRP__ = { phase: d.phase, intro: d.introTimer, spawn: d.spawnTimer, spawned: d.spawned, wave: d.wave, hazard: d.hazardTimer };
+    d.phase = 'intro';
+    d.introTimer = 1e9;
+    d.hazardTimer = 1e9;
+    // 一小撮站桩的怪挤在人右前方 75px 处：一瓢锁着最近那只落下，火心离人不到 50px——
+    // 于是"人站在自己的火里"这件事在真帧里也成立，下面才量得出"不掉血"。
+    const foes = [];
+    for (const [x, y] of [[75, 0], [75, -9], [75, 9], [67, -5], [83, 5], [75, 17]]) {
+      const e = g.enemies.spawn('bulwark', x, y, 1, 0);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.speed = 0;
+      e.spawnTimer = 0;
+      foes.push(e);
+    }
+    const st = (window.__POUR__ = { foes, log: [], shot: null, oil0: p.oilFrac, hp0: p.hp, frames: 0 });
+    const step = () => {
+      const gg = window.__WICKLIGHT__.game;
+      const fires = gg.grounds.filter((gr) => gr.ignites);
+      const burn = Math.max(0, ...st.foes.map((e) => e.burn));
+      st.log.push({
+        pours: gg.pourCount,
+        spent: gg.pourSpent,
+        oil: gg.player.oilFrac,
+        fires: fires.length,
+        burn, // 火里那几只身上最多续到几层（"一层层叠上去"看的就是这个数在涨）
+        hp: gg.player.hp,
+        fx: fires.length ? Math.round(fires[0].x) : 0,
+        fy: fires.length ? Math.round(fires[0].y) : 0,
+        px: Math.round(gg.player.x),
+        py: Math.round(gg.player.y),
+      });
+      // 火正烧着、怪也点着了的那一帧存下来：地上那片火 + 火里那几只头上的灼烧层数。
+      // 特意等火落地半秒之后再截——刚炸开那一帧整屏都是爆闪和烟，火海在图上根本看不见。
+      if (fires.length) st.fireFrames = (st.fireFrames ?? 0) + 1;
+      if (!st.shot && burn >= 3 && (st.fireFrames ?? 0) >= 30) st.shot = gg.renderer.canvas.toDataURL('image/png');
+      st.frames += 1;
+      if (st.frames < 330) requestAnimationFrame(step); // 5.5 秒：够倒两瓢（冷却各 2.5 秒）
+    };
+    requestAnimationFrame(step);
+  });
+  await sleep(5600);
+  const pour = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const st = window.__POUR__;
+    return {
+      log: st.log,
+      shot: st.shot,
+      oil0: st.oil0,
+      hp0: st.hp0,
+      pours: g.pourCount,
+      spent: g.pourSpent,
+      fires: g.grounds.filter((gr) => gr.ignites).length,
+      douse: g.save.achievements.includes('pour_douse'),
+      unit: window.__WICKLIGHT__.data.weapons.find((w) => w.id === 'pour').levels[0].pour,
+      minOil: window.__WICKLIGHT__.data.pour.minOil,
+    };
+  });
+  const pLog = pour.log;
+  const first = pLog[0];
+  expect(pour.pours >= 1, '真开火路径真的倒出去了一瓢（走的是 Player 那条分支，不是直接摆一片火）', `pourCount=${pour.pours}`);
+  expect(
+    Math.abs(pour.spent - pour.unit * pour.pours) < 1e-6,
+    '账面记下的就是这一瓢的油（一瓢 = 卡面上那个数）',
+    `${pour.spent.toFixed(3)} vs ${pour.unit} × ${pour.pours}`,
+  );
+  expect(
+    Math.abs(first.oil - (1 - pour.unit)) < 0.01,
+    '倒完这一瓢，灯真的暗了一瓢（这就是它全部的代价）',
+    `${(pour.oil0 * 100).toFixed(0)}% → ${(first.oil * 100).toFixed(1)}%`,
+  );
+  // 采样器挂上 rAF 的那一刻瓢还在半路上：火是几帧之后才落地的，所以看的是整段的峰值
+  const maxFires = Math.max(0, ...pLog.map((r) => r.fires));
+  expect(maxFires >= 1, '地上多了一片**自己烧的**火（`ignites` 那一片）', `fires=${maxFires}`);
+  const maxBurn = Math.max(0, ...pLog.map((r) => r.burn));
+  expect(maxBurn >= 3, '火里的怪被一层层续上灼烧（不是烧一下就算）', `最多续到 ${maxBurn} 层`);
+  // ① 人确实站在自己的火里（不然"不掉血"这条是空话），② 而且真的不掉血
+  const inFire = pLog.some((r) => r.fires && Math.hypot(r.px - r.fx, r.py - r.fy) <= 100);
+  expect(inFire, '玩家确实一度站在自己倒的火圈里（火心离人不到 100px）', `火心 ${pLog.find((r) => r.fires)?.fx}`);
+  expect(
+    pLog.every((r) => r.hp === pour.hp0),
+    '站在自己倒的火里一根汗毛都不掉（自动开火的武器不罚玩家）',
+    `血量 ${pour.hp0} → ${pLog[pLog.length - 1].hp}`,
+  );
+  expect(pour.douse, `往自家火上再倒一瓢解「火上浇油」（门槛 ${pour.minOil} 那一片火里 5 只）`);
+  const pourCodex = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const mech = g.codex.entry('mechanic:pour');
+    return {
+      w: g.codex.entry('weapon:pour')?.name ?? '',
+      m: g.codex.entry('weapon:pour_tide')?.name ?? '',
+      k: g.codex.has('mechanic', 'pour'),
+      rows: (mech?.rows ?? []).map((r) => r[0]).join('/'),
+    };
+  });
+  expect(pourCodex.w.includes('倾灯') && pourCodex.m.includes('灯潮'), '图鉴收录了倾灯与它的进化', JSON.stringify(pourCodex));
+  expect(pourCodex.k, '倒出第一瓢之后，图鉴「机制」章多出一条', JSON.stringify(pourCodex));
+  expect(pourCodex.rows.includes('一瓢多少钱'), '图鉴里写清了一瓢的油钱与那道门槛', pourCodex.rows);
+  const pourRow = await page.evaluate(() => window.__WICKLIGHT__.game.ui.statsBlock());
+  expect(pourRow.includes('倾灯') && pourRow.includes('桶油'), '结算面板里写出了"倾灯 n 瓢 · x 桶油"', pourRow.includes('倒完自己也暗一阵') ? '' : '');
+  if (pour.shot) {
+    await writeFile(join(SHOTS, '03g-pour.png'), Buffer.from(String(pour.shot).split(',')[1], 'base64'));
+    ok('火海正烧着、怪被点着的那一帧存了下来', '03g-pour.png');
+  } else {
+    fail('火海正烧着、怪被点着的那一帧存了下来', '采样器没抓到那一帧');
+  }
+  // 收尾：把这一段借走的东西还回去（武器、地上的火、敌人、导演、血上限）
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.grounds.length = 0;
+    g.enemies.clear();
+    p.weapons.clear();
+    for (const [id, lv] of window.__SAVED_WEAPONS3__ ?? []) p.weapons.set(id, lv);
+    p.recomputeStats();
+    p.hp = p.stats.maxHp;
+    if (window.__DIRP__) {
+      const d = g.director;
+      d.phase = window.__DIRP__.phase;
+      d.introTimer = window.__DIRP__.intro;
+      d.spawnTimer = window.__DIRP__.spawn;
+      d.spawned = window.__DIRP__.spawned;
+      d.wave = window.__DIRP__.wave;
+      d.hazardTimer = window.__DIRP__.hazard;
+      delete window.__DIRP__;
+    }
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    delete window.__POUR__;
+    delete window.__SAVED_WEAPONS3__;
+  });
+  await sleep(200);
+
   // ── 3b. 窗口尺寸：后备缓冲必须跟着窗口走 ──
   // 旧实现里"倍率没变就提前返回"，后备缓冲会停在 1280×720，
   // 浏览器只好把它拉伸到窗口大小 —— 画面整体发虚、镜头中心还会偏。

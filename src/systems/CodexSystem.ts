@@ -14,6 +14,7 @@ import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { GRAZE } from '../data/graze';
 import { MINE } from '../data/mines';
+import { POUR } from '../data/pour';
 import { VORTEX } from '../data/vortex';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
@@ -358,6 +359,27 @@ export function codexCatalog(): CodexEntry[] {
       ['进化', `满级 + 拾光 → 「${maelstromDef.name}」：一次两盏，而且连弹幕一起卷，卷到中心就吞掉`],
     ],
     extra: `一个旋涡里同时拽住 ${VORTEX.crowd} 只会解「一网打尽」，收尾那一下同时打到 ${VORTEX.haul} 只会解「收网」——前者数的是转的时候拽住几只，后者数的是收的那一下按住了几只。收尾那个数还要乘上灯火（油满约 1.35 倍、烧干约 0.65 倍），所以同一网在灯亮的时候看到的是另一个数。它的底子伤害不高，用处在于让别的武器打得疼：燃爆打的是半径、雷弧要跳、光矛要一条线、伏灯要一堆人踩在同一片地上。`,
+  });
+  // 倾灯：这一条讲的是"它花的是你的光"，不是"它打多少"。
+  const pourDef = WEAPON_MAP.pour;
+  const tideDef = WEAPON_MAP.pour_tide;
+  out.push({
+    kind: 'mechanic',
+    id: 'pour',
+    name: '倾灯',
+    blurb: '把灯火本身倒出去：一瓢砸出一片火海，倒完你自己的灯会暗一阵。',
+    color: '#f0a13c',
+    icon: '🔥',
+    rows: [
+      ['什么时候响', `灯火 ≥ ${Math.round(POUR.minOil * 100)}% 才倒。不满就整发不出手（连冷却都不走）——它倒的永远是油桶最上面那一层，不会把你倒到油尽`],
+      ['一瓢多少钱', `${Math.round(POUR.costHint * 100)}% 的油（满级 ${Math.round((pourDef.levels[pourDef.levels.length - 1].pour ?? 0) * 100)}%）——大致等于四只影蛭的油，或者贴着黑暗擦十秒钟`],
+      ['代价', '灯火就是火力与视野：倒完你的灯会暗下去（视野从 320px 收，别的武器也跟着变轻），捡油、擦身、灯台都能把它补回来'],
+      ['留下的火', `地上烧 ${POUR.fireLife} 秒，半径是爆炸的 ${POUR.fireSpread} 倍；火里每 ${POUR.igniteEvery} 秒给怪续一层灼烧（吃「燎原」加成），**同一片火上多倒几瓢会一层层叠上去**`],
+      ['烧得到自己吗', '不烧。别的火都烧玩家，这一片不烧——它是自动开火的武器，罚一件你没按过扳机的东西不叫代价'],
+      ['和谁抢油', '「分灯」点的那盏也是从这桶油里出的——同一桶油，两个动词在抢；「蚀烛」把你的油偷走，等于把它按哑'],
+      ['进化', `满级 + 油雨 → 「${tideDef.name}」：一瓢变三瓢（扇形泼开），还是那一瓢的价钱`],
+    ],
+    extra: `往自己倒出来的火上再浇一瓢、那一刻火里已经有 ${POUR.douse} 只敌人在烧，就解「火上浇油」。它把灯火这件原来只能攒的东西变成了要"什么时候花"的东西：油满的时候连倒三瓢，油见底之前它一声不响——它的节奏不是冷却，是你补油有多快。和「枯灯 / 低语」那类"灯火越低伤害越高"的路子正好相反，凑在一起会互相拆台。`,
   });
   for (const s of STAGES) {
     out.push({

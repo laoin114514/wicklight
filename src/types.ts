@@ -16,7 +16,8 @@ export type WeaponKind =
   | 'beam'
   | 'boomerang'
   | 'mine'
-  | 'vortex';
+  | 'vortex'
+  | 'pour';
 
 export interface WeaponStats {
   damage: number;
@@ -36,6 +37,12 @@ export interface WeaponStats {
    * 这里也允许"同一个字段在不同武器里意思不同"——省得为一个布尔开一堆新字段。
    */
   drag?: number;
+  /**
+   * 只有「倾灯」看这一项：这一瓢从油桶里取走多少（占一桶的比例）。
+   * 和 `drag` 一样是"同一个字段在不同武器里意思不同"的写法——
+   * 它的好处是**能跟着 `scale()` 一起长大**：升级之后同一瓢更省油。
+   */
+  pour?: number;
 }
 
 export interface WeaponDef {

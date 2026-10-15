@@ -6,6 +6,7 @@ import type { ParticleSystem } from './Particle';
 import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
 import { GRAZE } from '../data/graze';
+import { POUR } from '../data/pour';
 
 export interface PlayerContext {
   enemies: EnemySystem;
@@ -18,6 +19,8 @@ export interface PlayerContext {
   hurt: (amount: number) => void;
   hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number }) => boolean;
   findTarget: (x: number, y: number, maxDist: number, requireLight?: boolean) => Enemy | null;
+  /** 「倾灯」倒了一瓢：把"这一瓢花了多少油"记回这一局的账上（结算面板要看） */
+  pour: (cost: number) => void;
   chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number }) => void;
   /** 光矛：一条贯穿光束，沿途全部命中 */
   beam: (
@@ -658,6 +661,10 @@ export class Player {
 
       const cd = this.cooldowns.get(id) ?? 0;
       if (cd > 0) continue;
+      // 「倾灯」只在灯火够满时才倒：不满就整发不出手，**连冷却都不走**——
+      // 于是它的射速不是"冷却多短"，而是"你补油有多快"（冷却对它就只是个上限）。
+      // 而且它倒的永远是油桶最上面那一层（见 data/pour.ts），不会把玩家倒到油尽。
+      if (def.kind === 'pour' && this.oilFrac < POUR.minOil) continue;
       this.cooldowns.set(id, st.cooldown * this.stats.cooldownMult);
       this.fireWeapon(def.kind, id, st, dmg, area, ctx, target);
     }
@@ -795,6 +802,38 @@ export class Player {
           ctx.mine(this.x + Math.cos(a) * 22, this.y + Math.sin(a) * 22, dmg, st.radius * area, st.range, st.burn);
         }
         ctx.audio('lamp');
+        break;
+      }
+      case 'pour': {
+        // 一瓢：先从灯里挖走那一块（这就是它全部的"代价"——接下来你的灯会暗一阵，
+        // 视野、亮度、还有所有武器的伤害都跟着掉），然后把那团油泼出去。
+        // 注意 `dmg` 是在这一句之前算好的：**这一瓢用的是倒之前的灯火**——
+        // 灯还亮着的时候倒出去的那一瓢，本来就该是亮的。
+        const cost = (st.pour ?? POUR.costHint) * this.oilMax;
+        this.oil = Math.max(0, this.oil - cost);
+        ctx.pour(st.pour ?? POUR.costHint);
+        const count = this.countOf(st);
+        for (let i = 0; i < count; i += 1) {
+          // 一瓢是准的（自动瞄准锁着最近那只怪），三瓢（进化）才散开成一个扇面
+          const a = aim + (count > 1 ? (i - (count - 1) / 2) * st.spread : (Math.random() - 0.5) * 0.14);
+          ctx.projectiles.spawn({
+            x: this.x,
+            y: this.y,
+            vx: Math.cos(a) * st.speed,
+            vy: Math.sin(a) * st.speed,
+            damage: dmg,
+            radius: st.radius * 0.2,
+            color: def.color,
+            explode: st.radius,
+            knockback: st.knockback,
+            burn: st.burn,
+            maxLife: st.range / st.speed,
+            weaponId: id,
+            poolRadius: st.radius * POUR.fireSpread,
+            poolLife: POUR.fireLife,
+          });
+        }
+        ctx.audio('pour');
         break;
       }
       case 'vortex': {
