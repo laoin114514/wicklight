@@ -46,6 +46,14 @@ async function open(t, tag = '') {
     s.x = 9e5;
     s.y = 9e5;
   }
+  // 灯台也要挪走（v74）：它跟祭坛不一样，**站在旁边就会被点着**，而点燃会回 14% 的油、
+  // 还顺带加余温。这个场合玩家常常是"钉在一个固定坐标上量十几秒"的（比如量爆灯烧掉的那口油），
+  // 只要那一局的地图恰好在那个坐标上刷了一座灯台，量出来的就是"油 +14%"，而且是随机的——
+  // 实测 40 局里有 5 局会把灯台刷在 (700,700) 的 200px 内。场面本来就该全由测试自己摆。
+  for (const py of game.level.pyres) {
+    py.x = 9e5;
+    py.y = 9e5;
+  }
   game.enemies.clear();
   game.projectiles.clear();
   game.player.x = 0;
@@ -304,6 +312,53 @@ test('燎野：每一跳留一层火，而燎灯不留', async (t) => {
   const e2 = dummy(game2, 60, 0);
   run(game2, 90);
   assert.equal(e2.burn, 0, '燎灯不留火（留火是「燎野」那一件的升级内容）');
+});
+
+test('燎灯：每一次心跳都放出一圈冲击波，而且它在光边上停下', async (t) => {
+  // 这一件不发射任何东西，所以"它开火了"这件事要有个形状——不然它没烫到人的时候
+  // （怪还在灯外走过来）屏幕上就是彻底安静的，玩家没法判断它是在转还是坏了。
+  // 那一圈冲击波就是这一拍的形状，而它的**大小**必须等于这一件的射程：
+  // 圈停在哪儿，就是它打得到哪儿（燎野会多出那 60px，所以进化的"够得到灯外"也看得见）。
+  const game = await open(t, 'wave');
+  equip(game, 'aura');
+  oilAt(game, 1);
+  const waves = [];
+  const shock = game.particles.shockwave.bind(game.particles);
+  game.particles.shockwave = (x, y, color, size, life) => {
+    // ⚠ 灯火是每帧从油量重算的（这一秒里油在烧），所以"该多大的圈"要在**放圈的那一帧**读，
+    //    跑完再看就只剩 316.5 了——那量到的是油衰减，不是它接得对不对。
+    waves.push({ size, life, d: Math.hypot(x - game.player.x, y - game.player.y), r: game.player.lightRadius });
+    return shock(x, y, color, size, life);
+  };
+  run(game, 60); // 一秒：满级 0.31 秒一下，够响三下
+  const AURA = AURA_OF();
+  assert.ok(waves.length >= 2, `一秒里该放出去好几圈（实测 ${waves.length}）`);
+  for (const w of waves) {
+    assert.ok(Math.abs(w.d) < 1e-6, '这一圈是从人身上扩出去的');
+    assert.equal(w.life, AURA.pulseFade, '它飞完的时间就是 pulseFade');
+    assert.ok(
+      Math.abs(w.size - w.r) < 1e-6,
+      `没进化时这一圈该正好停在灯火半径上（圈 ${w.size.toFixed(1)} vs 灯火 ${w.r.toFixed(1)}）`,
+    );
+  }
+
+  // 进化形态：圈要多走 60px——"火能烧到灯照不到的地方"那一条在画面上也是真的
+  const game2 = await open(t, 'wave2');
+  equip(game2, 'aura_wild');
+  oilAt(game2, 1);
+  const wild = [];
+  const shock2 = game2.particles.shockwave.bind(game2.particles);
+  game2.particles.shockwave = (x, y, color, size, life) => {
+    wild.push({ size, r: game2.player.lightRadius });
+    return shock2(x, y, color, size, life);
+  };
+  run(game2, 30);
+  const wildRange = globalThis.window.__WICKLIGHT__.data.weapons.find((w) => w.id === 'aura_wild').levels[4].range;
+  assert.ok(wild.length >= 1, '燎野照样有心跳');
+  assert.ok(
+    Math.abs(wild[0].size - (wild[0].r + wildRange)) < 1e-6,
+    `燎野那一圈该走到灯火外面 ${wildRange}px（${wild[0].size.toFixed(1)} vs 灯火 ${wild[0].r.toFixed(1)}）`,
+  );
 });
 
 test('燎灯：不烫到人的时候也在烧——每一次心跳在光的边缘飞起一组火星', async (t) => {

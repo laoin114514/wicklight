@@ -381,6 +381,50 @@ const SCENES = {
     game.newRun('warden', 'normal', true);
     fight(600);
   },
+  // 燎灯（v73）：灯光本身在烧。这一屏是给**那一圈**看的——它不发射任何东西，
+  // 所以"它开火了"只剩这一圈冲击波（Player 里那一行 `particles.shockwave`）。
+  // 先跑一段真的战斗（相机 / 光照 / 地面都落到位），再把武器位换成单独的燎灯、
+  // 摆一圈 10 只打不死的靶在光里（外加一只在灯外，它永远不挨打），
+  // 最后手动放一圈冲击波、把它往前推几帧——于是这一帧正好是"烫到一半"的样子。
+  // ⚠ 这里一律走 `step()`（只推进模拟），不走 `env.frame()`：后者会跑真实的 rAF 循环，
+  //    而那一套在体检场景里会把局面带到别的地方去（人死了 / 回了菜单）。
+  aura() {
+    game.newRun('warden', 'normal', false);
+    fight(420);
+    const p = game.player;
+    p.weapons.clear();
+    p.weapons.set('aura', 5);
+    p.recomputeStats();
+    game.enemies.clear();
+    game.projectiles.clear();
+    // 这一屏是给"那一圈"看的：别再刷波、别再弹升级面板，也别让人物在镜头前躺下
+    p.hp = p.stats.maxHp;
+    p.oil = p.oilMax;
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    step();
+    const R = p.lightRadius;
+    const es = [];
+    for (let i = 0; i < 10; i += 1) {
+      const a = (i / 10) * Math.PI * 2;
+      es.push(game.enemies.spawn('shade', p.x + Math.cos(a) * R * 0.82, p.y + Math.sin(a) * R * 0.82, 1, 0));
+    }
+    es.push(game.enemies.spawn('shade', p.x + R * 1.35, p.y, 1, 0));
+    for (const e of es) {
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0; // 不咬人：这一屏量的是"那一圈"，不是挨打
+      e.speed = 0;
+      e.spawnTimer = 0;
+    }
+    p.hp = p.stats.maxHp;
+    step();
+    p.auraCd = 1e9; // 不再有新的脉冲把这一拍顶掉
+    game.particles.clear();
+    game.particles.shockwave(p.x, p.y, '#ffd08a', R, 0.3);
+    for (let i = 0; i < 5; i += 1) game.particles.update(1 / 60); // 推到半路（后面的 4 帧还会再推一点）
+  },
 };
 
 const scene = arg('scene', 'play');

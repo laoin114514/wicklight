@@ -1450,6 +1450,14 @@ async function main() {
     const hp0 = foes.map((e) => e.hp);
     const out0 = out.hp;
     let best = 0;
+    // 顺手量"那一拍长什么样"：这一件不发射任何东西，所以"它开火了"只有画面上的那一圈，
+    // 而那一圈**停在哪儿**就是它打得到哪儿——数记在放圈的那一刻（灯火是每帧从油量重算的）。
+    const rings = [];
+    const shock = g.particles.shockwave.bind(g.particles);
+    g.particles.shockwave = (x, y, color, size, life) => {
+      rings.push({ size: +size.toFixed(2), at: +p.lightRadius.toFixed(2), life });
+      return shock(x, y, color, size, life);
+    };
     for (let f = 0; f < 90; f += 1) {
       g.setInput(0, 0, false, false);
       g.update(1 / 60);
@@ -1459,6 +1467,7 @@ async function main() {
     return {
       R: Math.round(R),
       best,
+      rings,
       outsideHp: out.hp === out0,
       oil: +p.oilFrac.toFixed(2),
       dps: Math.round(g.damageBySource.get('aura') ?? 0),
@@ -1467,6 +1476,12 @@ async function main() {
   expect(aura.R > 240 && aura.R < 340, '燎灯的罩子就是玩家自己的灯火半径', JSON.stringify(aura));
   expect(aura.best >= 8, '一次脉冲把光里的每一只都烫一遍（不是只打最近的那一只）', JSON.stringify(aura));
   expect(aura.outsideHp, '光圈外的敌人一点都挨不到（它的射程写在灯火上）', JSON.stringify(aura));
+  expect(aura.rings.length >= 2, '真帧里每一次心跳都放出一圈（不是"偶尔"）', JSON.stringify(aura.rings));
+  expect(
+    aura.rings.every((r) => Math.abs(r.size - r.at) < 1e-6 && Math.abs(r.life - 0.22) < 1e-6),
+    '那一圈是从人身上扩出去、正好停在灯火半径上、0.22 秒走完',
+    JSON.stringify(aura.rings),
+  );
   await shot('03l-aura');
 
   // 构筑总览那一行：光里全体

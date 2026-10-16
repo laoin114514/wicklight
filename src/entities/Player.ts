@@ -207,7 +207,6 @@ export class Player {
    * 整盏灯只有一个计时器——不按怪挂冷却（见 data/aura.ts 里为什么）。
    */
   private auraCd = 0;
-  private auraPulse = 0;
   private hitFlash = 0;
   damageMult = 1;
   oilDecayPerSec = 0.018;
@@ -985,12 +984,14 @@ export class Player {
       // 它不走下面的"冷却 + 索敌 + 开火"那一套，因为这里根本不需要瞄准：
       // 光罩到哪儿，就是打到哪儿。
       if (def.kind === 'aura') {
-        this.auraPulse = Math.max(0, this.auraPulse - dt / AURA.pulseFade);
         this.auraCd -= dt;
         if (this.auraCd > 0) continue;
         this.auraCd = st.cooldown * this.stats.cooldownMult;
-        this.auraPulse = 1;
         const reach = this.lightRadius + st.range;
+        // 这一拍长什么样：一圈冲击波从人身上扩到 `reach` 为止——**它在光边上停下**，
+        // 于是"烫到哪儿"和"照着哪儿"是同一个圈（见 AURA.pulseFade）。走的是这个游戏
+        // 一直在用的那套话（燃爆 / 收网 / 灯台都是它），而不是另画一条线。
+        ctx.particles.shockwave(this.x, this.y, def.color, reach, AURA.pulseFade);
         let hits = 0;
         ctx.enemies.forEach((e) => {
           const rr = reach + e.radius; // 大块头从边缘就开始被烤（和伏灯的触发判定同一个道理）

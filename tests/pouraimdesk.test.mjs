@@ -46,6 +46,14 @@ async function open(t, tag = '') {
     s.x = 9e5;
     s.y = 9e5;
   }
+  // 灯台也要挪走（v74）：它跟祭坛不一样，**站在旁边就会被点着**，而点燃会回 14% 的油、
+  // 还顺带加余温。这个场合玩家常常是"钉在一个固定坐标上量十几秒"的（比如量爆灯烧掉的那口油），
+  // 只要那一局的地图恰好在那个坐标上刷了一座灯台，量出来的就是"油 +14%"，而且是随机的——
+  // 实测 40 局里有 5 局会把灯台刷在 (700,700) 的 200px 内。场面本来就该全由测试自己摆。
+  for (const py of game.level.pyres) {
+    py.x = 9e5;
+    py.y = 9e5;
+  }
   game.enemies.clear();
   game.projectiles.clear();
   game.level.walls.length = 0;
