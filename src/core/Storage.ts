@@ -24,6 +24,7 @@ export function defaultSave(): SaveData {
     embers: 0,
     unlockedLanterns: ['warden'],
     meta: [],
+    fire: {},
     achievements: [],
     best: 0,
     bestEndlessWave: 0,

@@ -309,6 +309,11 @@ export interface SaveData {
   hintsSeen?: boolean;
   /** 已经弹过的"首次遭遇"提示（精英 / 首领 / 险境），只弹一次。 */
   tips?: string[];
+  /**
+   * 「薪火」烧到几级了（v80）：`{ fire_damage: 3, ... }`。
+   * 老存档没有这一格 = 一级都没烧过（`MetaSystem` 那边按空表读，不需要迁移）。
+   */
+  fire?: Record<string, number>;
 }
 
 export interface SettingsData {

@@ -1,6 +1,6 @@
 import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
-import { META_TREE } from '../data/meta';
+import { FIRE_LEVELS_TOTAL, FIRE_LINES, META_TREE, fireCost } from '../data/meta';
 import { PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
 import { CODEX_SECTIONS, HAZARD_LABEL } from '../systems/CodexSystem';
 import { RELIC_MAP, TRIBES } from '../data/relics';
@@ -1121,12 +1121,54 @@ export class UIManager implements UIHost {
     </button>`;
   }
 
+  /**
+   * 「薪火」那一块（v80）：解锁树买完之后余烬的去处。
+   *
+   * 为什么另开一块而不是并进 `node-grid`：树上那 16 个节点是**一次性的**（买过就标"已解锁"），
+   * 这三条是**可重复**的（同一张卡点第二下就是第 2 级，价格也变了）。两种卡片的形状不一样，
+   * 混在一个网格里，玩家会去点那张已经灰掉的树节点，以为"梯子怎么买不了"。
+   *
+   * 头部那一行顺手指一次路（"树还剩 N 个节点"）：炉子比树贵得多（60 余烬换 +18% 油 vs
+   * 320 换 +5%），价格差本身就是引导，但**指路得写出来**——不然新手会先来烧炉子，
+   * 那才是真的把钱花错了地方。
+   */
+  private fireBlock(): string {
+    const meta = this.game.meta;
+    const total = meta.fireLevelsTotal();
+    const lines = FIRE_LINES.map((line) => {
+      const lv = meta.fireLevel(line.id);
+      const maxed = lv >= line.levels;
+      const can = meta.canBuyFire(line);
+      const cls = maxed ? 'is-max' : can ? 'is-can' : 'is-poor';
+      // 刻度：一格一级（和升级卡同一套 `card__pips`），已经烧着的亮、下一格在呼吸
+      const pips = Array.from({ length: line.levels }, (_, i) => {
+        const c = i < lv ? ' class="is-on"' : i === lv && !maxed ? ' class="is-next"' : '';
+        return `<i${c}></i>`;
+      }).join('');
+      return `<button class="fire ${cls}" data-fire="${line.id}">
+        <div class="fire__top">${line.icon} <b>${line.name}</b><span class="fire__lv">${lv}/${line.levels}</span></div>
+        <div class="fire__per">${line.per} · ${line.blurb}</div>
+        <div class="card__pips">${pips}</div>
+        <div class="fire__cost">${maxed ? '已烧满' : `${fireCost(line, lv)} 余烬`}</div>
+      </button>`;
+    }).join('');
+    const left = META_TREE.filter((n) => !this.game.save.meta.includes(n.id)).length;
+    return `
+      <div class="fire-block">
+        <div class="fire-head">🔥 薪火 · <b>${total}/${FIRE_LEVELS_TOTAL}</b> 级
+          <span class="fire-note">${left ? `解锁树还剩 ${left} 个节点 —— 先买树，再添柴` : '树已经买全了：这里就是余烬的去处'}</span>
+        </div>
+        <div class="fire-grid">${lines}</div>
+      </div>`;
+  }
+
   private meta(): void {
     const nodes = META_TREE.map((n) => this.nodeCard(n)).join('');
     this.show(`
       <div class="panel panel--meta panel--board">
         <div class="panel__title">余烬解锁 · <b>${this.game.save.embers}</b> 余烬</div>
         <div class="node-grid">${nodes}</div>
+        ${this.fireBlock()}
         <div class="row-actions">
           <button class="btn" data-act="reset">清空存档</button>
           <button class="btn btn--primary" data-act="back">返回</button>
@@ -1135,6 +1177,10 @@ export class UIManager implements UIHost {
     `);
     this.onAll('[data-node]', (el) => {
       this.game.buyMeta(el.dataset.node as string);
+      this.showScreen('meta');
+    });
+    this.onAll('[data-fire]', (el) => {
+      this.game.buyMetaFire(el.dataset.fire as string);
       this.showScreen('meta');
     });
     this.on('[data-act="back"]', () => this.backToOrigin());

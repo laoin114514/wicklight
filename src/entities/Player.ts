@@ -175,8 +175,11 @@ export class Player {
   pactOilDecayMult = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
   shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
-  /** 局外解锁带来的修正：也要走 recomputeStats，不然中途重算（拿到遗物）就会把它冲掉。 */
-  metaMods = { moveSpeedMult: 1 };
+  /**
+   * 局外解锁带来的修正：也要走 recomputeStats，不然中途重算（拿到遗物）就会把它冲掉。
+   * `damageMult` 是 v80「薪火 · 薪柴」那一笔（局外第一次动火力），走同一条路。
+   */
+  metaMods = { moveSpeedMult: 1, damageMult: 1 };
   /** 本局由「灯台」累积的余温：点亮的灯台越多，灯火越旺、伤害越高。 */
   pyreMods = { damageMult: 1, lightMult: 1 };
   brightness = 1;
@@ -343,7 +346,7 @@ export class Player {
     this.heatDelay = 0;
     this.grazePulse = 0;
     this.dashGraze = 0;
-    this.metaMods = { moveSpeedMult: 1 };
+    this.metaMods = { moveSpeedMult: 1, damageMult: 1 };
     this.curseOilMult = 1;
     this.difficultyOilMult = 1;
     this.invuln = 0;
@@ -445,6 +448,7 @@ export class Player {
     flags.goldMult *= sm.goldMult;
     stats.damageMult *= this.pyreMods.damageMult;
     stats.moveSpeed *= this.metaMods.moveSpeedMult;
+    stats.damageMult *= this.metaMods.damageMult;
     return { stats, flags };
   }
 

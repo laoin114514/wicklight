@@ -2820,6 +2820,53 @@ async function main() {
   });
   expect(bought.owned && bought.after === bought.before - bought.cost, '买下解锁节点会扣余烬', JSON.stringify(bought));
   expect(bought.w > 0 && bought.h > 0, '解锁节点的卡片有尺寸', JSON.stringify(bought));
+
+  // ── 9b. 「薪火」（v80）：余烬的第二个出口 ──
+  // 离线单测（tests/fire.test.mjs）量的是价格阶梯与"三条各改了哪个数"，这里量的是**隔着真界面点下去**
+  // 那件事：三张卡画出来了没有、点一下是不是真的扣钱并涨一级、以及第二级的价格有没有比第一级贵
+  // （"可重复"这件事只有在界面上成立才算数——卡片自己长着一套刻度与价格，不是静态的一段说明）。
+  const fireCards = await page.evaluate(() => ({
+    cards: window.__PROBE__.layout('.fire'),
+    head: document.querySelector('.fire-head')?.textContent ?? '',
+    note: document.querySelector('.fire-note')?.textContent ?? '',
+  }));
+  expect(fireCards.cards.count === 3, '「薪火」三张卡都画出来了', `count=${fireCards.cards.count}`);
+  expect(fireCards.cards.issues.length === 0, '三张薪火卡不越界、不被切', fireCards.cards.issues.join('; '));
+  expect(fireCards.head.includes('/18'), '头部写清了整个炉子的总级数（分母 = 三条加起来）', fireCards.head);
+  expect(fireCards.note.includes('解锁树还剩'), '树还没买完时那一行要指路：先买树，再添柴', fireCards.note);
+  // ⚠ 面板先等一帧再拍：`.screen` 挂着 `backdrop-filter: blur(3px)`，软件光栅化的合成器
+  //   会晚一帧才把面板内容画进那一层里——当场拍下去得到的是"背景糊了一层、面板不见踪影"的空图
+  //   （v80 实测撞到的：断言全绿、截图是空的）。
+  await sleep(220);
+  await shot('10b-meta-fire');
+  const fireBuy = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.embers = 5000;
+    g.save.fire = {};
+    g.ui.showScreen('meta');
+    const priceOf = (id) => Number((document.querySelector(`[data-fire="${id}"] .fire__cost`)?.textContent ?? '').replace(/[^0-9]/g, ''));
+    const first = priceOf('fire_light');
+    const before = g.save.embers;
+    document.querySelector('[data-fire="fire_light"]')?.click();
+    const mid = g.save.embers;
+    const second = priceOf('fire_light');
+    document.querySelector('[data-fire="fire_light"]')?.click();
+    const after = g.save.embers;
+    // 收尾：这一块买下的两级要还回去，后面的检查照旧（不然之后每一局都多 6% 灯火，
+    // 而那种差别在界面上看不出来，只会让后面某一条像素断言量到另一个世界）
+    const level = g.meta.fireLevel('fire_light');
+    g.save.fire = {};
+    g.save.embers = before;
+    g.ui.showScreen('meta');
+    return { first, second, before, mid, after, level };
+  });
+  expect(fireBuy.level === 2, '点两下就是第 2 级（这是**可重复**的那一种卡）', JSON.stringify(fireBuy));
+  expect(
+    fireBuy.mid === fireBuy.before - fireBuy.first && fireBuy.after === fireBuy.mid - fireBuy.second,
+    '每一级都按牌价扣钱',
+    JSON.stringify(fireBuy),
+  );
+  expect(fireBuy.second > fireBuy.first, '第 2 级比第 1 级贵（价格阶梯在界面上也成立）', JSON.stringify(fireBuy));
   await shot('10-meta');
   await page.click('[data-act="back"]');
   await sleep(300);
@@ -3796,6 +3843,47 @@ async function main() {
   expect(bgPaused.hasResume, '后台回来停在暂停面板上', JSON.stringify(bgPaused));
   await mobile.click('[data-act="resume"]');
   await sleep(400);
+
+  // 手机上的「薪火」那一块（v80）：844×390 上解锁树本来就是滚着看的，
+  // 炉子加进来之后要量的是（1）三张卡排成**一排**（折行就是白白多滚一屏）、
+  // （2）面板没有被撑出横向滚动、（3）矮横屏上那句指路的话收起来了（省下的正是那一行的高度）。
+  await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.embers = Math.max(5000, g.save.embers);
+    g.togglePause();
+    g.ui.showScreen('meta');
+  });
+  await sleep(320);
+  await mobile.evaluate(() => document.querySelector('.fire-block')?.scrollIntoView({ block: 'center' }));
+  await sleep(200);
+  const mobileFire = await mobile.evaluate(() => {
+    const cards = window.__PROBE__.layout('.fire');
+    const panel = document.querySelector('.panel--meta');
+    return {
+      count: cards.count,
+      issues: cards.issues,
+      rows: new Set([...document.querySelectorAll('.fire')].map((e) => Math.round(e.getBoundingClientRect().y))).size,
+      scroll: panel?.scrollWidth ?? 0,
+      client: panel?.clientWidth ?? 0,
+      noteH: Math.round(document.querySelector('.fire-note')?.getBoundingClientRect().height ?? -1),
+      perH: Math.round(document.querySelector('.fire__per')?.getBoundingClientRect().height ?? -1),
+      head: document.querySelector('.fire-head')?.textContent ?? '',
+    };
+  });
+  expect(mobileFire.count === 3, '手机上「薪火」三张卡也都画出来了', `count=${mobileFire.count}`);
+  expect(mobileFire.issues.length === 0, '矮横屏上三张薪火卡不被切、也不出界', mobileFire.issues.join('; '));
+  expect(mobileFire.rows === 1, '矮横屏上三张卡排成一排（不白白多滚一屏）', `${mobileFire.rows} 行`);
+  expect(mobileFire.scroll <= mobileFire.client + 1, '多出「薪火」那一块也没把解锁树撑出横向滚动', `${mobileFire.scroll}/${mobileFire.client}`);
+  expect(mobileFire.noteH === 0 && mobileFire.perH > 0, '矮横屏上收掉的是指路那句话，不是"每一级改什么"', JSON.stringify({ noteH: mobileFire.noteH, perH: mobileFire.perH }));
+  await mobile.screenshot({ path: join(SHOTS, '16c-mobile-meta.png') });
+  // 收尾：这一屏是从暂停面板进来的，量完要**回到这一局**（`togglePause` 只看 playing / paused
+  // 两个状态，留在 meta 上不还回去的话，后面那一步的 `togglePause` 就翻不动了）
+  await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.ui.showScreen('paused');
+    g.togglePause();
+  });
+  await sleep(250);
 
   // 手机上的设置面板多一项触感开关，点一下要真的翻转并存进设置
   await mobile.evaluate(() => window.__WICKLIGHT__.game.togglePause());

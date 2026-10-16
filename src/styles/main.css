@@ -1995,6 +1995,37 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
 }
 .node.is-can { box-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.12), 0 0 24px rgba(255, 150, 60, 0.22); border-color: var(--amber); }
 
+/* ── 「薪火」：可重复的那三条梯子（v80）──
+   和解锁树那一片用同一种黄铜卡片，但**另起一块**、并且在头部画一条分隔：
+   一次性 / 可重复是两种形状的卡片，混在一起读不出"哪张还能再点"（见 UIManager.fireBlock）。 */
+.fire-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(192, 138, 62, 0.22); }
+.fire-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 9px; }
+.fire-head b { color: #ffd24e; font-variant-numeric: tabular-nums; }
+.fire-note { font-size: 11.5px; color: rgba(255, 255, 255, 0.42); }
+.fire-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.fire {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(192, 138, 62, 0.26);
+  background: linear-gradient(180deg, rgba(44, 48, 60, 0.9), rgba(14, 16, 21, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.09), 0 8px 20px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.fire:hover { transform: translateY(-2px); }
+.fire.is-can { border-color: var(--amber); box-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.12), 0 0 24px rgba(255, 150, 60, 0.22); }
+.fire.is-poor { opacity: 0.55; }
+.fire.is-max { border-color: rgba(120, 255, 170, 0.4); background: linear-gradient(180deg, rgba(24, 56, 42, 0.9), rgba(10, 22, 17, 0.92)); }
+.fire__top { display: flex; align-items: baseline; gap: 6px; font-weight: 800; }
+.fire__lv { margin-left: auto; font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.fire__per { margin-top: 4px; font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+.fire__cost { margin-top: 2px; font-size: 12px; color: var(--amber); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.fire.is-max .fire__cost { color: #8affc1; }
+
 /* 设置：黄铜滑杆 */
 .setting input[type='range'] {
   -webkit-appearance: none;
@@ -2968,6 +2999,13 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .card__hint { display: none; }
   /* 一排三张卡上，数值对照留两条就够（排序时最有分量的那两条排在最前） */
   .card__delta .dl:nth-child(n+3) { display: none; }
+  /* 炉子在矮横屏上也要排成**一排**：844×390 上八行树已经滚着看了，
+     再让三张薪火卡折成两行就是白白多滚一屏（"每局开局的灯火半径"那半句先摘掉，
+     数值那一半（灯火 +3%）留着头一行就说清了）。 */
+  .fire-grid { grid-template-columns: repeat(3, 1fr); }
+  .fire { padding: 8px 9px; }
+  .fire__per { font-size: 11px; }
+  .fire-note { display: none; }
 }
 /* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘、别贴脸 ───────────────────
    三条都是手机上才有的问题：

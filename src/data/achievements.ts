@@ -60,6 +60,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'bounty_first', name: '赏金猎人', blurb: '完成第一次悬赏。', embers: 15, group: '收集与档案' },
   { id: 'bounty40', name: '赏金贯日', blurb: '累计完成 40 次悬赏。', embers: 80, group: '收集与档案' },
   { id: 'runs25', name: '长明不熄', blurb: '累计进行 25 局冒险。', embers: 60, group: '收集与档案' },
+  { id: 'firemax', name: '添到顶', blurb: '把「薪火」里任意一条梯子烧到满级。', embers: 150, group: '收集与档案' },
+  { id: 'fireall', name: '长夜不熄', blurb: '把「薪火」那三条梯子全部烧满。', embers: 260, group: '收集与档案' },
 ];
 
 export const ACHIEVEMENT_MAP: Record<string, AchievementDef> = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));

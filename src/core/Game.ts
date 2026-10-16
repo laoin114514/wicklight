@@ -44,6 +44,7 @@ import { WICK } from '../data/wick';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { PACTS, PACT_MAP, noPacts, pactEmberMult, pactMods, pactsUnlocked, type PactMods } from '../data/pacts';
+import { FIRE_LINES, FIRE_MAP } from '../data/meta';
 import { POUR } from '../data/pour';
 import { AURA } from '../data/aura';
 import { EMBERWIND } from '../data/emberwind';
@@ -833,8 +834,9 @@ export class Game {
       this.player.addPassive(p.id, 1);
     }
     this.player.revives = b.revives;
-    // 移速走 metaMods（由 recomputeStats 套用），这样后面拿到遗物重算也不会把它冲掉
-    this.player.metaMods = { moveSpeedMult: 1 + b.moveSpeedMult };
+    // 移速与「薪火」的火力都走 metaMods（由 recomputeStats 套用），
+    // 这样后面拿到遗物重算也不会把它们冲掉
+    this.player.metaMods = { moveSpeedMult: 1 + b.moveSpeedMult, damageMult: 1 + b.damageMult };
     this.player.recomputeStats();
     this.player.baseLightMult = 1 + b.lightMult;
     this.gold += b.startGold;
@@ -4041,6 +4043,34 @@ export class Game {
       this.ui?.setMeta(this.meta);
     }
     return ok;
+  }
+
+  /**
+   * 烧一级「薪火」（v80）。
+   *
+   * 和 `buyMeta` 分开两条路是有意的：树上那 16 个节点是"一次性的解锁"，买过就没了；
+   * 薪火是"同一个东西买第 n 级"，扣的钱也不一样（价格看的是**这一条已经烧到几级**）。
+   * 硬塞进 `buyMeta` 里就得在那一处按 id 前缀分叉，那是把两种东西混成一个函数。
+   *
+   * 两条成就在这里发：烧满一条 / 三条全满。它们不是"再给一份余烬"（那会变成循环），
+   * 是给这条梯子一个**说得完的结尾**——18 级之后这个系统就结束了，档案里写着。
+   */
+  buyMetaFire(lineId: string): boolean {
+    const line = FIRE_MAP[lineId];
+    if (!line) return false;
+    const before = this.meta.fireLevel(lineId);
+    if (!this.meta.buyFire(lineId)) return false;
+    this.storage.save(this.save);
+    this.audio.play('ui');
+    this.ui?.setMeta(this.meta);
+    // 第一级单独说一声：它是"这条线从此开着"的那一刻，而后面每一级都在面板上看得见
+    if (!before) this.hud?.toast(`${line.icon} ${line.name} · 第 1 级`);
+    if (this.meta.fireMaxed(line)) {
+      this.achievements.unlock('firemax');
+      this.hud?.toast(`${line.icon} ${line.name} 烧到底了`);
+    }
+    if (FIRE_LINES.every((l) => this.meta.fireMaxed(l))) this.achievements.unlock('fireall');
+    return true;
   }
 
   resetSave(): void {

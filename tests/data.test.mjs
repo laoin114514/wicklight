@@ -23,10 +23,10 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）；
   // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套；
   // `newWeaponPool` / `starterWeapons` 也是名单（见下面那一段）；
-  // `pacts`（v79）是一个**包**：深宵之约那张表 + 它那三个纯函数（合并 / 定价 / 解锁），
-  // 所以它也跳过去——跳过去之后在下面按它自己的形状单独校验。
+  // `pacts`（v79）与 `fire`（v80）都是**包**：一张表 + 几个纯函数（合并 / 定价 / 解锁 / 价格阶梯），
+  // 所以它们也跳过去——跳过去之后在下面按各自的形状单独校验。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts' || name === 'fire') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -63,6 +63,41 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.equal(pacts.pactsUnlocked(0), false, '没通关过时这套该锁着');
   assert.equal(pacts.pactsUnlocked(1), true, '通关过一次之后该打开');
   assert.ok(!('requires' in pacts.PACTS[0]), '之约不该有前置条件（见 data/pacts.ts 里那条设计规矩）');
+
+  // ── 「薪火」那一套（v80）：可重复的三条梯子 ──
+  // 这张表也一样是"改了不会报错、只会让局外成长变味"的那一类，所以形状与关系一起钉住。
+  const fire = data.fire;
+  assert.ok(fire && Array.isArray(fire.FIRE_LINES), '构建产物应导出薪火那张表');
+  assert.ok(fire.FIRE_LINES.length >= 2, `薪火不该只有一条梯子（实际 ${fire.FIRE_LINES.length}）`);
+  assert.deepEqual(
+    fire.FIRE_LINES.map((l) => l.id).filter((id, i, a) => a.indexOf(id) !== i),
+    [],
+    '薪火每一条的 id 不许重复',
+  );
+  // 两条梯子烧同一个数 = 它们其实是一条（玩家会以为自己在两条线上各投了钱）
+  assert.equal(
+    new Set(fire.FIRE_LINES.map((l) => l.key)).size,
+    fire.FIRE_LINES.length,
+    '每一条薪火该各烧一个数',
+  );
+  for (const line of fire.FIRE_LINES) {
+    assert.ok(line.id && line.name && line.blurb && line.per && line.icon, `${line.id} 缺少字段`);
+    assert.ok(line.levels > 0, `${line.id} 该有级数上限`);
+    assert.ok(line.value > 0 && line.value < 0.5, `${line.id} 每一级的量该是"一点点"（实际 ${line.value}）`);
+    assert.ok(line.growth > 1, `${line.id} 的每一级该比上一级贵（growth ${line.growth}）`);
+    assert.equal(fire.fireCost(line, 0), line.baseCost, `${line.id} 第 1 级的价格该就是 baseCost`);
+    for (let i = 1; i < line.levels; i += 1) {
+      assert.ok(fire.fireCost(line, i) > fire.fireCost(line, i - 1), `${line.id} 的价格该一级比一级贵`);
+    }
+  }
+  // 整个炉子多少钱：文档里写的就是这个数，改价格就必须一起改（漂了会当场红）
+  const fireTotal = fire.FIRE_LINES.reduce((sum, line) => {
+    let s = 0;
+    for (let i = 0; i < line.levels; i += 1) s += fire.fireCost(line, i);
+    return sum + s;
+  }, 0);
+  assert.equal(fireTotal, 19170, `薪火全烧满该是 19170 余烬（实际 ${fireTotal}）`);
+  assert.equal(fire.FIRE_LEVELS_TOTAL, fire.FIRE_LINES.reduce((a, l) => a + l.levels, 0), '级数上限那个分母要跟表一致');
 
   // `wickFamily` 是**导出的 id 名单**（拨芯这条线）：每个 id 都要真的能查回一件遗物，
   // 而且那份名单要和"改这几个数的遗物"完全一致——名单跟内容漂了，`Game.scanWickFamily`

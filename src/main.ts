@@ -16,7 +16,7 @@ import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies, NORMAL_ENEMIES as normalEnemies } from './data/enemies';
 import { AFFIXES as affixes } from './data/affixes';
 import { BOUNTIES as bounties } from './data/bounties';
-import { META_TREE as meta } from './data/meta';
+import { FIRE_LINES, FIRE_LEVELS_TOTAL, META_TREE as meta, fireCost } from './data/meta';
 import { GRAZE as graze } from './data/graze';
 import { WICK as wick } from './data/wick';
 import { MINE as mines } from './data/mines';
@@ -75,6 +75,9 @@ function boot(): void {
       // ⚠ 它是一个**包**（表 + 纯函数），不是"条目列表"——`tests/data.test.mjs` 里那张
       // 逐个条目校验 id/name/blurb 的循环要把它跳过去（跳过去之后按它自己的形状单测）。
       pacts: { PACTS, PACT_MAP, PACT_EMBER_EACH, pactMods, pactEmberMult, pactsUnlocked, noPacts },
+      // 「薪火」（v80）：那三条可重复的梯子 + 价格函数。同样是一个**包**（表 + 纯函数），
+      // `tests/data.test.mjs` 那张列表也要把它跳过去——理由和上面 `pacts` 那一段一样。
+      fire: { FIRE_LINES, FIRE_LEVELS_TOTAL, fireCost },
     },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
