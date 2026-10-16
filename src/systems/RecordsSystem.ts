@@ -26,6 +26,7 @@ export function defaultRecords(): RecordsData {
     clearedRuns: 0,
     endlessRuns: 0,
     bounties: 0,
+    bestPacts: 0,
     lanterns: {},
   };
 }
@@ -114,6 +115,12 @@ export class RecordsSystem {
       r.bestTime = stats.time;
       hi.push({ key: 'time', label: '最快通关', value: fmtTime(stats.time) });
     }
+    // 「深宵之约」：只有**通关**才算数，而且数的是条数——背了 3 条死在第 2 关不该记进档案，
+    // 那记录的是"你死得多深"，不是"你扛住了多少"（和 `bestTime` 同一条规矩）。
+    if (cleared && beat(stats.pacts, r.bestPacts)) {
+      r.bestPacts = stats.pacts;
+      hi.push({ key: 'pacts', label: '深宵通关', value: `${stats.pacts} 条` });
+    }
 
     r.totalTime += stats.time;
     if (cleared) r.clearedRuns += 1;
@@ -146,6 +153,7 @@ export class RecordsSystem {
       bossKills: stats.bossKills,
       embers: stats.embers,
       daily: stats.daily,
+      pacts: stats.pacts,
     };
     this.save.history.unshift(entry);
     if (this.save.history.length > HISTORY_CAP) this.save.history.length = HISTORY_CAP;

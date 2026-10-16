@@ -279,8 +279,115 @@ async function main() {
   await page.click('[data-diff="normal"]');
   await sleep(150);
   await shot('03-select-diff');
+
+  // ── 2b. 「深宵之约」（v79）：自己给自己加难度 ──
+  // 离线单测（tests/pacts.test.mjs）量的是"七条各改了哪个数"，这里量界面那两件事：
+  // **锁着的时候说不说得清**（还没通关过的人该看到解锁条件，而不是一排灰按钮），
+  // 以及**背着它开一局之后，界面认不认这件事**（开局公告 / 构筑总览那一栏 / HUD 的构筑行）。
+  const pactLocked = await page.evaluate(() => ({
+    chips: document.querySelectorAll('[data-pact]').length,
+    text: document.querySelector('.pact-locked')?.textContent ?? '',
+  }));
+  expect(
+    pactLocked.chips === 0 && pactLocked.text.includes('通关'),
+    '没通关时「深宵之约」锁着，而且写清了怎么开（不是一排灰按钮）',
+    JSON.stringify(pactLocked),
+  );
+  // 解锁走的是**真判据**（生涯档案里的通关次数），这里把它临时设成 1
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    window.__PACT_CLEARS__ = g.save.records.clearedRuns;
+    g.save.records.clearedRuns = 1;
+    g.ui.showScreen('select');
+  });
+  await sleep(250);
+  const pactRow = await page.evaluate(() => ({
+    chips: window.__PROBE__.layout('.pact'),
+    panel: window.__PROBE__.layout('.panel--select'),
+  }));
+  expect(pactRow.chips.count === 7, '通关之后那七条之约都画出来了', `count=${pactRow.chips.count}`);
+  expect(
+    pactRow.chips.issues.length === 0 && pactRow.panel.issues.length === 0 && pactRow.panel.hOverflow === 0,
+    '多了「深宵之约」这一块，选灯火那屏仍然不越界、也不横向滚动',
+    `${pactRow.chips.issues.join('; ')} | ${pactRow.panel.issues.join('; ')} hOverflow=${pactRow.panel.hOverflow}`,
+  );
+  await shot('02b-pacts');
+  for (const id of ['dense', 'shell', 'claw']) {
+    await page.click(`[data-pact="${id}"]`);
+    await sleep(120);
+  }
+  const pactPick = await page.evaluate(() => ({
+    selected: document.querySelectorAll('.pact.is-selected').length,
+    note: document.querySelector('.pact-note')?.textContent ?? '',
+    text: document.querySelector('.pact-block')?.textContent ?? '',
+  }));
+  expect(pactPick.selected === 3, '点三下就选中三条（这一排是**可多选**的）', `${pactPick.selected} 条`);
+  expect(
+    pactPick.note.includes('背 3 条') && pactPick.note.includes('1.45'),
+    '面板上写清"背几条 · 结算余烬多少倍"',
+    pactPick.note,
+  );
+  for (const name of ['来客更密', '壳更硬', '爪更利']) {
+    expect(pactPick.text.includes(name), `选项上写着「${name}」这一条是什么`, pactPick.text.slice(-160));
+  }
   await page.click('[data-act="start"]');
-  await sleep(700);
+  await sleep(800);
+  const pactRun = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return {
+      pacts: g.pacts.slice(),
+      mult: window.__WICKLIGHT__.data.pacts.pactEmberMult(g.pacts),
+      announce: document.querySelector('.announce')?.textContent ?? '',
+    };
+  });
+  expect(pactRun.pacts.length === 3 && pactRun.pacts.join('/') === 'dense/shell/claw', '开局真的背着这三条（走的是界面那条路）', pactRun.pacts.join('/'));
+  expect(
+    pactRun.announce.includes('深宵 3 条'),
+    '开局那条大公告里读得出"这一局背着之约"——不写出来，玩家只会觉得今天手感怪',
+    pactRun.announce,
+  );
+  // （结算屏上「本局构筑」那一行由离线单测盯：`run-build` 只在死亡 / 通关那两屏上，
+  //   而打仗的时候它不在 DOM 里——在战场上调 `showScreen('dead')` 就是伪造一个死，
+  //   那会把后面的生涯档案搅乱。这一条量的是"开局那一刻玩家看不看得见"。）
+  // 构筑总览：那三条要连"改了什么"一起写出来（和遗物那一族同一条规矩）
+  await page.keyboard.press('Tab');
+  await sleep(400);
+  await shot('02b-pacts-run');
+  const pactSheet = await page.evaluate(() => ({
+    rows: [...document.querySelectorAll('.lo-pact')].map((e) => e.textContent),
+    sum: document.querySelector('.lo-pact__sum')?.textContent ?? '',
+    text: document.querySelector('.panel')?.textContent ?? '',
+    layout: window.__PROBE__.layout('.panel'),
+  }));
+  expect(pactSheet.rows.length === 3, '构筑总览里列出这一局背的那三条', JSON.stringify(pactSheet.rows));
+  expect(
+    pactSheet.rows.join('|').includes('敌人血量 +30%'),
+    '总览里写的是这条之约**改了什么**，不只是它的名字',
+    pactSheet.rows.join('|'),
+  );
+  expect(pactSheet.sum.includes('3 条') && pactSheet.sum.includes('1.45'), '总览里同样写清条数与余烬倍率', pactSheet.sum);
+  expect(!/undefined|NaN/.test(pactSheet.text), '「深宵」那一栏没有缺字段', pactSheet.text.match(/undefined|NaN/g)?.slice(0, 2).join(',') ?? '');
+  expect(pactSheet.layout.issues.length === 0, '多了「深宵」那一栏，总览仍然正常', pactSheet.layout.issues.join('; '));
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  // 收尾：把这一局换回"一条都不背"，后面的检查照旧（走的是同一条开局路径）。
+  // ⚠ 选择屏上勾过的三条也要还回去——它跟着会话走，不还的话后面每一局都会背着它开（而且没人看得出）。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.records.clearedRuns = window.__PACT_CLEARS__;
+    g.ui.selectedPacts.clear();
+    g.newRun('warden', 'normal', false);
+  });
+  await sleep(450);
+  const pactClean = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { pacts: g.pacts.length, mult: window.__WICKLIGHT__.data.pacts.pactEmberMult(g.pacts), announce: document.querySelector('.announce')?.textContent ?? '' };
+  });
+  expect(
+    pactClean.pacts === 0 && pactClean.mult === 1 && !pactClean.announce.includes('深宵'),
+    '把之约还回去之后，这一局就是平常那一夜',
+    JSON.stringify(pactClean),
+  );
 
   // ── 3. 战斗：真实键盘输入 ──
   const posAt = () =>
@@ -3053,6 +3160,51 @@ async function main() {
 
   await mobile.click('[data-act="play"]');
   await sleep(250);
+  // 手机上的选灯火那屏（v79 起它多了「深宵之约」那一块）：窄屏横带上最容易出事的就是"多一整行"。
+  // 这一份存档已经通关过了（后面的流程会真打通一次），所以这里量的是**解锁之后**的那一排：
+  // 七块小卡要在 844×390 里排得下、不许把面板撑出横向滚动。
+  const mobilePacts = await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    window.__MOB_CLEARS__ = g.save.records.clearedRuns;
+    g.save.records.clearedRuns = Math.max(1, g.save.records.clearedRuns);
+    g.ui.showScreen('select');
+    return true;
+  });
+  expect(mobilePacts === true, '手机上打开选灯火那一屏');
+  await sleep(250);
+  // 选灯火那一屏本来就比 390 高的横屏长（4 盏灯 2×2 就 304px），从 v72 起就是**滚着看**的——
+  // 所以这里和「伏灯 / 旋灯」那两栏同一个做法：先滚进来，再量它在不在视野里、有没有被切。
+  await mobile.evaluate(() => document.querySelector('.pact-block')?.scrollIntoView({ block: 'center' }));
+  await sleep(200);
+  const mobilePactLayout = await mobile.evaluate(() => ({
+    chips: window.__PROBE__.layout('.pact'),
+    panel: window.__PROBE__.layout('.panel--select'),
+    scroll: document.querySelector('.panel--select')?.scrollWidth ?? 0,
+    client: document.querySelector('.panel--select')?.clientWidth ?? 0,
+    // 几行：按所有小卡的 y 去重（`repeat(auto-fit)` 折成几行就数得出来）
+    rows: new Set([...document.querySelectorAll('.pact')].map((e) => Math.round(e.getBoundingClientRect().y))).size,
+  }));
+  expect(mobilePactLayout.chips.count === 7, '手机上七条之约也都画出来了', `count=${mobilePactLayout.chips.count}`);
+  expect(
+    mobilePactLayout.chips.issues.length === 0,
+    '手机横带上「深宵之约」那一排滚得进视野、也不被切',
+    mobilePactLayout.chips.issues.join('; '),
+  );
+  expect(
+    mobilePactLayout.panel.hOverflow === 0 && mobilePactLayout.scroll <= mobilePactLayout.client + 1,
+    '多出那一块也没把手机上的选灯火撑出横向滚动',
+    JSON.stringify(mobilePactLayout.panel),
+  );
+  expect(
+    mobilePactLayout.chips.count === 7 && mobilePactLayout.rows === 1,
+    '矮横屏上那七条收成一排（说明那一行摘了，免得白白多滚一屏）',
+    `${mobilePactLayout.chips.count} 块 / ${mobilePactLayout.rows} 行`,
+  );
+  await mobile.screenshot({ path: join(SHOTS, '16b-mobile-pacts.png') });
+  await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.records.clearedRuns = window.__MOB_CLEARS__;
+  });
   await mobile.click('[data-act="start"]');
   await sleep(1500);
   expect(

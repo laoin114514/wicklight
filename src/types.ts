@@ -209,6 +209,8 @@ export interface RunStats {
   endless: boolean;
   /** 是否今日灯芯 */
   daily: boolean;
+  /** 这一局背了几条「深宵之约」（0 = 没背，见 data/pacts.ts） */
+  pacts: number;
 }
 
 /** 单局战报（生涯档案里"最近对局"用的那一条）。 */
@@ -234,6 +236,8 @@ export interface RunRecord {
   embers: number;
   /** 是否今日灯芯 */
   daily?: boolean;
+  /** 这一局背的「深宵之约」条数（老战报没有这个字段） */
+  pacts?: number;
 }
 
 /** 单盏灯火的累计战绩。 */
@@ -264,6 +268,8 @@ export interface RecordsData {
   endlessRuns: number;
   /** 累计完成的悬赏数 */
   bounties: number;
+  /** 带着「深宵之约」通关的最多条数（0 = 还没背过） */
+  bestPacts: number;
   lanterns: Record<string, LanternRecord>;
 }
 

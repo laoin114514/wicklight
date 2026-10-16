@@ -41,6 +41,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'trio_boss', name: '三首同辉', blurb: '在无尽模式同一波里击败三位首领。', embers: 150, group: '关卡与首领' },
   { id: 'blaze_boss', name: '焰中斩', blurb: '在「灯焰高涨」期间击败一位首领。', embers: 50, group: '关卡与首领' },
   { id: 'clears3', name: '三度长明', blurb: '累计通关 3 次。', embers: 90, group: '关卡与首领' },
+  { id: 'pact3', name: '深宵行者', blurb: '背着 3 条「深宵之约」通关。', embers: 120, group: '关卡与首领' },
+  { id: 'pactall', name: '长夜独行', blurb: '背着全部「深宵之约」通关。', embers: 220, group: '关卡与首领' },
 
   { id: 'shrine_first', name: '与暗交易', blurb: '在祭坛上做出第一次抉择。', embers: 15, group: '抉择与风险' },
   { id: 'curse_bearer', name: '负咒而行', blurb: '带着夜咒平定一整关。', embers: 25, group: '抉择与风险' },

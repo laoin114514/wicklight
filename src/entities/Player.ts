@@ -161,6 +161,18 @@ export class Player {
   flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0, vortexSpread: 0, vortexTime: 0, vortexMark: 0, vortexHarvest: 0, vortexSnare: 0 };
   oil = 1;
   oilMax = 1;
+  /**
+   * 「深宵之约」带来的灯油耗率倍率（v79，1 = 不变、1.4 = 烧快四成）。
+   *
+   * 为什么不塞进 `shrineMods`（那也是"这一局的长期修正"）：两个来源要能分开读——
+   * 祭坛那几笔是玩家**中途**在祭坛上一笔一笔换来的（`shrineMods.oilDecayMult *= 0.75` 那些），
+   * 而之约是**开局前**就定下的、这一局不会变的一件事。混在同一个袋子里，构筑总览就没法把
+   * "你背了几条约"单列一行（那是玩家最该看见的一件事），而且以后任何一处"清掉这一局的临时修正"
+   * 的写法都会顺手把它一起洗掉——那种错在画面上看不出来，只是"油耗好像回到正常了"。
+   * 所以它单独走一条路：在 `computeStats` 里和 `shrineMods` 挨着乘上去，
+   * 那是"重算一身属性"的**唯一**出口（拉掉遗物、升级、拨芯都会经过它）。
+   */
+  pactOilDecayMult = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
   shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
   /** 局外解锁带来的修正：也要走 recomputeStats，不然中途重算（拿到遗物）就会把它冲掉。 */
@@ -311,6 +323,9 @@ export class Player {
     this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0, vortexSpread: 0, vortexTime: 0, vortexMark: 0, vortexHarvest: 0, vortexSnare: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
+    // 之约在 `Game.newRun` 里按选择重新写一遍；这里先归 1，免得上一局背了 7 条的那笔账
+    // 静悄悄地跟到下一局（新局不背之约时，玩家只会觉得"油耗怎么还是快的"）。
+    this.pactOilDecayMult = 1;
     this.weapons.set(model.weapon, 1);
     this.addPassive(model.passive, 1);
     this.oil = 1;
@@ -424,6 +439,7 @@ export class Player {
     stats.damageMult *= sm.damageMult;
     stats.maxHp *= sm.maxHpMult;
     stats.oilDecayMult *= sm.oilDecayMult;
+    stats.oilDecayMult *= this.pactOilDecayMult;
     stats.moveSpeed *= sm.moveSpeedMult;
     stats.critChance += sm.critChance;
     flags.goldMult *= sm.goldMult;

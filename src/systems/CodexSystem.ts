@@ -19,6 +19,7 @@ import { MINE } from '../data/mines';
 import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { VORTEX } from '../data/vortex';
+import { PACTS, PACT_EMBER_EACH, pactEmberMult } from '../data/pacts';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
 import { WEAPON_MAP } from '../data/weapons';
@@ -475,6 +476,25 @@ export function codexCatalog(): CodexEntry[] {
       ],
     });
   }
+  // 「深宵之约」（v79）：这一条不是敌人身上的规则，也不是某件武器——它是**玩家自己选的难度**。
+  // 放它进来的理由和 `hunt` 那一页一样：它在 HUD 上、在选择屏上、在结算的余烬里都会出现，
+  // 那它就该有一个地方能读到"这几条到底各改了什么、值多少"（数值从 `data/pacts.ts` 现取）。
+  out.push({
+    kind: 'mechanic',
+    id: 'pacts',
+    name: '深宵之约',
+    blurb: `通关一次之后，开局前可以自己给自己加难度：每一条只改一件事，背几条你说了算——结算的余烬也跟着多条。`,
+    color: '#c084fc',
+    icon: '🌘',
+    rows: [
+      ['什么时候能背', '通关一次之后（生涯档案里"通关次数" ≥ 1）。在那之前它锁着，选择屏上会写清楚为什么'],
+      ...PACTS.map((p) => [`${p.icon} ${p.name}`, `${p.blurb}（${p.detail}）`] as [string, string]),
+      ['值多少', `每一条 +${Math.round(PACT_EMBER_EACH * 100)}% 结算余烬，乘在难度那一档与元进度那个数的**旁边**——背满 ${PACTS.length} 条是 ×${pactEmberMult(PACTS.map((p) => p.id)).toFixed(2)}`],
+      ['只有通关才算', '背着之约死在第几关都不进档案：那是"死得多深"，不是"扛住了多少"（和最快通关同一条规矩）'],
+      ['今日灯芯不吃这一套', '那一天的挑战是所有人共用的同一道题——谁能背几条就等于谁的成绩不成立'],
+    ],
+    extra: '它和夜咒是一对：夜咒是**关**自己带的（你只能接受、换关重掷），这一套是**你**自己选的（开局前勾、这一局不变）。每一条都保证"一直在咬"——没有"只有某种构筑才生效"的条款（那种条款对另一部分玩家等于没加，是「拨芯那四件在没拨芯的人手里是废牌」同一个坑）。',
+  });
   return out;
 }
 

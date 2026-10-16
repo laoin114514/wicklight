@@ -22,9 +22,11 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）；
   // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套；
-  // `newWeaponPool` / `starterWeapons` 也是名单（见下面那一段）。
+  // `newWeaponPool` / `starterWeapons` 也是名单（见下面那一段）；
+  // `pacts`（v79）是一个**包**：深宵之约那张表 + 它那三个纯函数（合并 / 定价 / 解锁），
+  // 所以它也跳过去——跳过去之后在下面按它自己的形状单独校验。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -41,6 +43,26 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(aura.pulseFade > 0 && aura.pulseFade < 0.4, `脉冲余温该是"一眼看得出来在变"的量级（实际 ${aura.pulseFade}）`);
   assert.ok(Number.isFinite(aura.edgeEmbers) && aura.edgeEmbers > 0, '边缘火星数应当是正数');
   assert.equal(typeof aura.sound, 'string', '音效名该是字符串（它走的不是数值那套校验）');
+
+  // ── 「深宵之约」那一套（v79）：表和三个纯函数都在这个包里 ──
+  // 这张表是"改了不会报错、只会让难度悄悄变味"的那一类，所以把关系和形状一起钉住。
+  const pacts = data.pacts;
+  assert.ok(pacts && Array.isArray(pacts.PACTS), '构建产物应导出深宵之约那张表');
+  assert.ok(pacts.PACTS.length >= 5, `之约不该少到"没得选"（实际 ${pacts.PACTS.length} 条）`);
+  assert.deepEqual(
+    pacts.PACTS.map((p) => p.id).filter((id, i, a) => a.indexOf(id) !== i),
+    [],
+    '深宵之约的 id 不许重复',
+  );
+  for (const p of pacts.PACTS) {
+    assert.ok(p.id && p.name && p.blurb && p.detail && p.icon, `之约 ${p.id} 缺少字段`);
+    assert.ok(p.mods && Object.keys(p.mods).length > 0, `之约 ${p.id} 什么都没有改`);
+  }
+  assert.deepEqual({ ...pacts.pactMods([]) }, { ...pacts.noPacts() }, '一条都不背时那份合成就该是"什么都不改"');
+  assert.equal(pacts.pactEmberMult([]), 1, '一条都不背时余烬不该被乘');
+  assert.equal(pacts.pactsUnlocked(0), false, '没通关过时这套该锁着');
+  assert.equal(pacts.pactsUnlocked(1), true, '通关过一次之后该打开');
+  assert.ok(!('requires' in pacts.PACTS[0]), '之约不该有前置条件（见 data/pacts.ts 里那条设计规矩）');
 
   // `wickFamily` 是**导出的 id 名单**（拨芯这条线）：每个 id 都要真的能查回一件遗物，
   // 而且那份名单要和"改这几个数的遗物"完全一致——名单跟内容漂了，`Game.scanWickFamily`

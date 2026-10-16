@@ -17,6 +17,7 @@ import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
+import { PACTS, PACT_MAP, pactEmberMult } from '../data/pacts';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -29,6 +30,8 @@ export class UIManager implements UIHost {
   private rerolls = 0;
   private selectedLantern = 'warden';
   private selectedDifficulty: Difficulty = 'normal';
+  /** 开局前勾上的「深宵之约」（v79）。跟着这一次会话走，不写进存档：它每局重选。 */
+  private selectedPacts = new Set<string>();
   private endless = false;
   private returnState: GameState = 'menu';
   /** 图鉴里正在查看详情的条目（`kind:id`），为空时显示目录。 */
@@ -219,6 +222,25 @@ export class UIManager implements UIHost {
         </button>`;
     }).join('');
 
+    // 「深宵之约」（v79）：自己给自己加难度。锁着的时候把**规矩**说出来（什么时候开、
+    // 它不吃今日灯芯），而不是只画一排灰按钮——玩家该知道那是什么，才谈得上期待。
+    const pactOpen = this.game.pactsAvailable();
+    const pactCount = this.selectedPacts.size;
+    const pactCards = PACTS.map((p) => {
+      const on = this.selectedPacts.has(p.id);
+      return `<button class="pact ${on ? 'is-selected' : ''}" data-pact="${p.id}" style="--accent:${p.color}">
+        <b>${p.icon} ${p.name}</b><span>${p.detail}</span>
+      </button>`;
+    }).join('');
+    const pactRow = pactOpen
+      ? `<div class="pact-row">${pactCards}</div>
+        <div class="pact-note">${
+          pactCount
+            ? `背 ${pactCount} 条 · 结算余烬 ×${pactEmberMult([...this.selectedPacts]).toFixed(2)}`
+            : '一条不背 · 就是平常那一夜'
+        }</div>`
+      : `<div class="pact-locked">🔒 通关一次之后开启：那之后你可以自己决定这一夜有多难（今日灯芯不吃这一套）</div>`;
+
     const diffCards = DIFFICULTY_ORDER.map((d) => {
       const mods = DIFFICULTIES[d];
       return `<button class="diff ${d === this.selectedDifficulty ? 'is-selected' : ''}" data-diff="${d}">
@@ -231,6 +253,10 @@ export class UIManager implements UIHost {
         <div class="panel__title">${this.endless ? '无尽之夜' : '冒险 · 选择灯火与难度'}</div>
         <div class="lantern-grid">${lanternCards}</div>
         <div class="diff-row">${diffCards}</div>
+        <div class="pact-block">
+          <div class="pact-head"><b>深宵之约</b><span>每背一条，敌人与这一夜都更狠一点，结算的余烬也多一份</span></div>
+          ${pactRow}
+        </div>
         <div class="row-actions">
           <button class="btn" data-act="back">返回</button>
           <button class="btn btn--primary" data-act="start">点燃灯芯</button>
@@ -247,8 +273,17 @@ export class UIManager implements UIHost {
       this.selectedDifficulty = el.dataset.diff as Difficulty;
       this.showScreen('select');
     });
+    this.onAll('[data-pact]', (el) => {
+      if (!this.game.pactsAvailable()) return;
+      const id = el.dataset.pact as string;
+      if (this.selectedPacts.has(id)) this.selectedPacts.delete(id);
+      else this.selectedPacts.add(id);
+      this.showScreen('select');
+    });
     this.on('[data-act="back"]', () => this.game.goMenu());
-    this.on('[data-act="start"]', () => this.game.newRun(this.selectedLantern, this.selectedDifficulty, this.endless));
+    this.on('[data-act="start"]', () =>
+      this.game.newRun(this.selectedLantern, this.selectedDifficulty, this.endless, null, [...this.selectedPacts]),
+    );
   }
 
   /** 这张卡是否会把某件武器推过进化门槛（满级武器 + 被动点满）。 */
@@ -550,6 +585,8 @@ export class UIManager implements UIHost {
             ${this.lightBlock()}
             <h4>夜咒</h4>
             ${curse}
+            <h4>深宵之约</h4>
+            ${this.pactBlock()}
             <h4>悬赏</h4>
             ${bounty}
             <h4>掠影</h4>
@@ -683,6 +720,28 @@ export class UIManager implements UIHost {
    * 什么时候才画：手里有旋灯（或进化那一把）、或者身上挂着这一族的遗物——和伏灯同一条规矩
    * （没有这件武器的玩家读到"本局转了 0 盏"是占地方）。
    */
+  /**
+   * 构筑总览里的「深宵之约」一栏（v79）：这一局背了哪几条、每条改了什么、余烬翻了多少倍。
+   *
+   * 为什么非写不可：之约是玩家自己选的**唯一**一件事，而它的代价全是看不见的数
+   * （敌人血量 / 伤害 / 数量、油耗、视野、进油）。不写出来，玩起来只会觉得"今天手感怪"。
+   * 没背的时候也不留空——那一行顺手承担了"这东西在哪儿"的指路（锁着的时候写解锁条件）。
+   */
+  private pactBlock(): string {
+    const g = this.game;
+    if (!g.pacts.length) {
+      return g.pactsAvailable()
+        ? '<div class="lo-empty">这一局没背 · 平常的一夜</div>'
+        : '<div class="lo-empty">通关一次之后可以自己给自己加难度</div>';
+    }
+    const rows = g.pacts
+      .map((id) => PACT_MAP[id])
+      .filter(Boolean)
+      .map((p) => `<div class="lo-pact" style="--c:${p.color}"><b>${p.icon} ${p.name}</b><span>${p.blurb}</span></div>`)
+      .join('');
+    return `${rows}<div class="lo-pact__sum">背 ${g.pacts.length} 条 · 结算余烬 ×${pactEmberMult(g.pacts).toFixed(2)}</div>`;
+  }
+
   private vortexBlock(): string {
     const g = this.game;
     const p = g.player;
@@ -843,6 +902,14 @@ export class UIManager implements UIHost {
     );
 
     if (g.curse) parts.push(`<div class="run-build__row"><span>夜咒</span><b><span class="rb-item" style="--c:${g.curse.color}">${g.curse.name}</span></b></div>`);
+
+    if (g.pacts.length) {
+      const items = g.pacts
+        .map((id) => PACT_MAP[id])
+        .filter(Boolean)
+        .map((p) => `<span class="rb-item" style="--c:${p.color}">${p.icon} ${p.name}</span>`);
+      parts.push(`<div class="run-build__row"><span>深宵</span><b>${items.join('')}<i class="rb-reso">余烬 ×${pactEmberMult(g.pacts).toFixed(2)}</i></b></div>`);
+    }
 
     return `<div class="run-build"><div class="run-build__title">本局构筑</div>${parts.join('')}</div>`;
   }

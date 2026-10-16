@@ -4,6 +4,7 @@ import { STAGES } from '../data/stages';
 import { HUNT } from '../data/hunt';
 import type { Difficulty, StageDef } from '../types';
 import { DIFFICULTIES } from './DifficultySystem';
+import { noPacts, type PactMods } from '../data/pacts';
 
 export interface DirectorContext {
   spawnEnemy: (defId: string, x: number, y: number, hpMult: number, dmgMult: number) => string | void;
@@ -55,6 +56,15 @@ export class Director {
     dmgMult: 1,
     extraWaves: 0,
   };
+  /**
+   * 这一局背的「深宵之约」（v79，见 `data/pacts.ts`）。默认是那份"什么都不改"，
+   * 所以不背之约的每一局，这里乘上去的三个数都正好是 1——`bench --fixed` 因此**逐字节不变**
+   * （那一条就是这条"加法式改动"的护栏：加系统的版本不许悄悄改到没勾它的那一局）。
+   *
+   * 它走自己的字段、不进 `curse`：夜咒是"这一关"带的（换关重掷），之约是"这一局"背的，
+   * 两者的寿命不一样——混在一个袋子里，换关时就会出"夜咒没了、之约也跟着没了"这种错。
+   */
+  pacts: PactMods = noPacts();
   private spawnTimer = 0;
   private spawned = 0;
   private waveBudget = 0;
@@ -125,10 +135,13 @@ export class Director {
     const w = this.wave;
     const endlessBonus = this.endless ? Math.floor(this.wave / 5) : 0;
     const curse = this.curse;
-    this.hpMult = mods.hpMult * curse.hpMult * (1 + (w - 1) * 0.16 + this.stageIndex * 0.4 + endlessBonus * 0.2);
-    this.dmgMult = mods.dmgMult * curse.dmgMult * (1 + (w - 1) * 0.05 + this.stageIndex * 0.14 + endlessBonus * 0.08);
+    const pact = this.pacts;
+    this.hpMult =
+      mods.hpMult * curse.hpMult * pact.hpMult * (1 + (w - 1) * 0.16 + this.stageIndex * 0.4 + endlessBonus * 0.2);
+    this.dmgMult =
+      mods.dmgMult * curse.dmgMult * pact.dmgMult * (1 + (w - 1) * 0.05 + this.stageIndex * 0.14 + endlessBonus * 0.08);
     const base = 6 + w * 2.4;
-    this.waveBudget = Math.round(base * mods.countMult * curse.countMult);
+    this.waveBudget = Math.round(base * mods.countMult * curse.countMult * pact.countMult);
     this.aliveCap = Math.min(90, 14 + w * 3);
     this.spawned = 0;
     this.spawnTimer = 0.4;
@@ -169,10 +182,19 @@ export class Director {
       // 首领前那一波把话说在前面：不然"下一波直接站着首领"会显得不讲道理
       const warning = this.bossNext ? ' · 首领将至' : '';
       if (this.wave % 3 === 0 && this.stage.elites.length) {
-        const eliteId = this.rng.pick(this.stage.elites);
-        const pos = ctx.spawnPoint();
-        const affix = ctx.spawnEnemy(eliteId, pos.x, pos.y, this.hpMult * 0.85, this.dmgMult);
-        ctx.announce(`精英来袭：${ENEMY_MAP[eliteId].name}${affix ? ' · ' + affix : ''}${warning}`, true);
+        // 「成群」那条之约：这一次精英波多来一位。为什么把它做成"多一位"而不是"每波都来"：
+        // 每波都来会把这个游戏的节奏改成"一直在打精英"，而"两只同时站在这片地上"考的是
+        // 另一件事——你得先决定点哪一只（这一版里唯一一条改**节奏**而不是改数值的条款）。
+        // 不背「成群」时 count = 1，下面这一圈和原来那一版**逐字一样**（名字后面挂它自己的词缀）。
+        const count = 1 + pact.extraElites;
+        const lines: string[] = [];
+        for (let k = 0; k < count; k += 1) {
+          const eliteId = this.rng.pick(this.stage.elites);
+          const pos = ctx.spawnPoint();
+          const affix = ctx.spawnEnemy(eliteId, pos.x, pos.y, this.hpMult * 0.85, this.dmgMult);
+          lines.push(`${ENEMY_MAP[eliteId].name}${affix ? ' · ' + affix : ''}`);
+        }
+        ctx.announce(`精英来袭：${lines.join('、')}${warning}`, true);
       } else {
         ctx.announce(`第 ${this.wave} 波${warning}`);
       }

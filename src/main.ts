@@ -26,6 +26,7 @@ import { NOVA as nova } from './data/nova';
 import { EMBERWIND as emberwind } from './data/emberwind';
 import { HUNT } from './data/hunt';
 import { ARRIVAL } from './data/arrival';
+import { PACTS, PACT_MAP, PACT_EMBER_EACH, noPacts, pactEmberMult, pactMods, pactsUnlocked } from './data/pacts';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -64,7 +65,17 @@ function boot(): void {
     // graze / mines / vortex / pour / nova / wick 也放进来：掠影、伏灯、旋灯、倾灯、爆灯、拨芯那几串调参值
     // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
-    data: { weapons, newWeaponPool, starterWeapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova, emberwind, hunt: HUNT, arrival: ARRIVAL, wick, wickFamily, aura },
+    data: {
+      weapons, newWeaponPool, starterWeapons, relics, passives, curses, bounties, tribes, meta,
+      graze, mines, vortex, pour, nova, emberwind, wick, wickFamily, aura,
+      hunt: HUNT, arrival: ARRIVAL,
+      // 「深宵之约」这一套（v79）：表和那几个纯函数一起放进来——测试要对着它断"七条各改了哪个数"，
+      // 而 `pactMods / pactEmberMult / pactsUnlocked` 是这套规则唯一的三条真话，
+      // 让测试自己再抄一遍就等于把那三条真话抄成六条。
+      // ⚠ 它是一个**包**（表 + 纯函数），不是"条目列表"——`tests/data.test.mjs` 里那张
+      // 逐个条目校验 id/name/blurb 的循环要把它跳过去（跳过去之后按它自己的形状单测）。
+      pacts: { PACTS, PACT_MAP, PACT_EMBER_EACH, pactMods, pactEmberMult, pactsUnlocked, noPacts },
+    },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

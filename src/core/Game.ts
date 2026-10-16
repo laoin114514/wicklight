@@ -43,6 +43,7 @@ import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
+import { PACTS, PACT_MAP, noPacts, pactEmberMult, pactMods, pactsUnlocked, type PactMods } from '../data/pacts';
 import { POUR } from '../data/pour';
 import { AURA } from '../data/aura';
 import { EMBERWIND } from '../data/emberwind';
@@ -379,6 +380,10 @@ export class Game {
    * 每一轮的险境与精英池都换一批。两者分开记，才不用为了换场景去动难度。
    */
   endlessArena = 0;
+  /** 这一局背的「深宵之约」id（见 data/pacts.ts）：开局前勾的，这一局不变。 */
+  pacts: string[] = [];
+  /** 上面那几条合成的一份修正。不背时它就是那份"什么都不改"（全 1 / 全 0）。 */
+  pactMods: PactMods = noPacts();
   paused = false;
   pendingLevels = 0;
   private sheetReturn: 'playing' | 'paused' = 'playing';
@@ -624,12 +629,43 @@ export class Game {
     this.ui?.showScreen(state);
   }
 
-  newRun(lanternId: string, difficulty: Difficulty, endless: boolean, daily: DailyPlan | null = null): void {
+  /**
+   * 「深宵之约」开了没有（通关一次之后，见 `data/pacts.ts` 里那一段）。
+   *
+   * 判定收在这里、不散给界面：解锁条件只有一个（通关过），
+   * 而"哪天改成通关两次"这种事只该改一个地方——界面上抄一遍条件，
+   * 就等着出现"按钮亮着、点下去没反应"（或者反过来的）那种谁也说不清的错。
+   */
+  pactsAvailable(): boolean {
+    return pactsUnlocked(this.save.records?.clearedRuns ?? 0);
+  }
+
+  /**
+   * 开一局。
+   *
+   * `pacts` 是这一局背的「深宵之约」（见 `data/pacts.ts`）——做成**可选参数**是有意的：
+   * 不背之约是默认，于是所有老的调用点（测试、每日灯芯、无尽、界面里那一大堆）一个字都不用改，
+   * 而"改动是加法"这件事也就有了形状（`bench --fixed` 逐字节不变就是这么来的）。
+   *
+   * 今日灯芯**不吃**之约：那一天的所有人共用同一道题，谁能背几条就等于谁的成绩不成立。
+   */
+  newRun(
+    lanternId: string,
+    difficulty: Difficulty,
+    endless: boolean,
+    daily: DailyPlan | null = null,
+    pacts: readonly string[] = [],
+  ): void {
     const lantern = LANTERN_MAP[lanternId] ?? LANTERNS[0];
     this.lanternId = lantern.id;
     this.difficulty = difficulty;
     this.endless = endless;
     this.dailyPlan = daily;
+    const chosen = daily ? [] : pacts.filter((id) => !!PACT_MAP[id]);
+    this.pacts = [...chosen];
+    this.pactMods = pactMods(chosen);
+    // 导演从**下一波**起读这份修正（`beginWave` 里乘上去）；这一局已经在跑的那些波不受影响
+    this.director.pacts = this.pactMods;
     this.stageIndex = 0;
     // 今日灯芯用日期派生的固定种子：条件一样，过程仍旧看本事
     this.startSeed = daily ? daily.seed : (Math.random() * 1e9) | 0;
@@ -639,9 +675,15 @@ export class Game {
     const stats = this.buildStats();
     this.player.reset(stats, { weapon: lantern.weapon, passive: lantern.passive });
     this.player.novaStyle = lantern.id;
+    // 「灯烧得快」要赶在 applyMetaToPlayer 之前落到玩家身上：那一步最后会 `recomputeStats()`，
+    // 而那就是这一局第一次把一身属性算出来——晚一步，这一局的第一帧油耗就不是之约那一份。
+    this.player.pactOilDecayMult = this.pactMods.oilDecayMult;
     this.applyMetaToPlayer();
-    // 难度那一档的灯油进项（见 Player.difficultyOilMult）：乘在掉落 / 擦身 / 灯台余温上
-    this.player.difficultyOilMult = DIFFICULTIES[difficulty].oilMult;
+    // 难度那一档的灯油进项（见 Player.difficultyOilMult）：乘在掉落 / 擦身 / 灯台余温上；
+    // 「薄油」乘在**同一个数**上，于是它自动继承了那条规矩（三条进项都算、一次性结算不算）
+    this.player.difficultyOilMult = DIFFICULTIES[difficulty].oilMult * this.pactMods.oilIncomeMult;
+    // 「昏灯」：和「暗视」那个元进度节点乘在同一个数上，两笔各算各的（先暗 12% 再亮 12% ≠ 不变）
+    this.player.baseLightMult *= this.pactMods.lightMult;
 
     // 上一局挂着的卡片（和它身后排队的那些话）不进这一局。
     // ⚠ 必须在 loadStage 之前清：那一关的"关卡 · xxx"提示卡就是 loadStage 里弹的，
@@ -658,7 +700,13 @@ export class Game {
     this.audio.ensure();
     this.audio.setMood('battle');
     this.ui?.showScreen('playing');
-    this.hud?.announce(endless ? '无尽之夜 · 开始' : `${stage.theme.name} · ${difficultyLabel(difficulty)}`, true);
+    // 之约必须在开局那一条大公告里读得出来：它是这一局**唯一**一件玩家自己选的事，
+    // 而"我这一局比平时难"这件事如果在 HUD 上找不到，玩起来只会觉得"今天怎么这么卡"。
+    const pactTag = this.pacts.length ? ` · 深宵 ${this.pacts.length} 条` : '';
+    this.hud?.announce(
+      (endless ? '无尽之夜 · 开始' : `${stage.theme.name} · ${difficultyLabel(difficulty)}`) + pactTag,
+      true,
+    );
     // 首局的开局引导：一次性的三条提示，之后 HUD 底部那行常驻说明就够了
     this.hintQueue = this.save.hintsSeen
       ? []
@@ -3864,7 +3912,12 @@ export class Game {
     const cleared = outcome === 'clear';
     let base = Math.round(this.runTime * 0.6 + this.kills * 1.4 + this.wave * 12 + this.bossKills * 120 + this.playerLevel * 8);
     if (cleared) base = Math.round(base * 1.25) + 120;
-    const embers = Math.max(1, Math.round(base * mods.emberMult * (1 + this.meta.bonuses().emberMult)));
+    // 之约的回报乘在**同一个位置**（难度那一档、元进度那一笔的旁边）：三条都是"这一局难了多少"，
+    // 谁先谁后不影响结果，但放在一起读得出来"我今天这个数是怎么来的"。
+    const embers = Math.max(
+      1,
+      Math.round(base * mods.emberMult * (1 + this.meta.bonuses().emberMult) * pactEmberMult(this.pacts)),
+    );
     this.embersEarned = embers;
     this.save.embers += embers;
     this.save.runs += 1;
@@ -3875,6 +3928,9 @@ export class Game {
     if (this.dailyPlan) this.recordDaily();
     if (this.save.runs >= 25) this.achievements.unlock('runs25');
     if (this.save.records.clearedRuns >= 3) this.achievements.unlock('clears3');
+    // 之约那两枚：只有**通关**才发（背着 3 条死在第 2 关是"死得多深"，不是"扛住了多少"）
+    if (cleared && this.pacts.length >= 3) this.achievements.unlock('pact3');
+    if (cleared && this.pacts.length >= PACTS.length) this.achievements.unlock('pactall');
     this.storage.save(this.save);
     this.events.emit('gameOver', { stats: this.runStats() });
   }
@@ -3942,6 +3998,7 @@ export class Game {
       stageId: this.currentStage().id,
       endless: this.endless,
       daily: !!this.dailyPlan,
+      pacts: this.pacts.length,
     };
   }
 
