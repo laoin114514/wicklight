@@ -17,6 +17,18 @@ import { NOVA } from '../data/nova';
  */
 const DASH_BUFFER = 0.2;
 const NOVA_BUFFER = 0.15;
+/**
+ * 「收力」（v87）：冲刺跑完之后人是**滑**着的——残余速度是走速的 3.4 倍（748px/s），
+ * 手上那个方向键得花 20 帧（0.33 秒）才扳得回来（探针实测）。
+ * 这一点惯性是冲刺的一部分（顺着它跑，那一发本来就多送几十像素），但它只该在**你顺着它**的时候存在：
+ * 逆着推，就该当场刹住。这是乘在走路那个加速度上的倍率，而且**只在"逆着推、且速度还高于走速"时**生效——
+ * 寻常走路的掉头只要 7 帧（0.12 秒）、松手滑停也照旧（那是惯性该有的样子），两样都不该被这一条顺手改掉。
+ * 4 这个数是台架量出来的：冲刺收尾按住反方向，起步 20 帧 → **3 帧**、走开 30px 28 帧 → **15 帧**；
+ * 2 倍只有 12 帧（不够）、6 倍会变成"一帧急停"（比走路掉头还快，手感发硬）。
+ */
+const DASH_BRAKE = 4;
+/** 逆着推、而且残余速度还在走速两倍以上的那一帧：在地上留一撮灰（见走路那一段里的注释）。 */
+const BRAKE_DUST = 2;
 
 export interface PlayerContext {
   enemies: EnemySystem;
@@ -836,8 +848,19 @@ export class Player {
         this.terrainSlow *
         (this.blazeTimer > 0 ? GRAZE.blazeSpeed : 1) *
         (this.dimmed ? 1 + this.flags.wickStride : 1);
-      this.vx += (mvx * walk - this.vx) * Math.min(1, accel / Math.max(1, s.moveSpeed));
-      this.vy += (mvy * walk - this.vy) * Math.min(1, accel / Math.max(1, s.moveSpeed));
+      // 「收力」：逆着残余速度推的时候刹得更狠（见 DASH_BRAKE）。
+      // 判据看的是**手推的方向与当前速度的夹角**（点积为负），不是"松手"——
+      // 松手照旧只是慢慢滑停（那是惯性该有的样子），要停得快就自己往回推。
+      const carrySpeed = Math.hypot(this.vx, this.vy);
+      const braking = carrySpeed > walk * 1.15 && mvx * this.vx + mvy * this.vy < 0;
+      const rate = Math.min(1, (accel * (braking ? DASH_BRAKE : 1)) / Math.max(1, s.moveSpeed));
+      this.vx += (mvx * walk - this.vx) * rate;
+      this.vy += (mvy * walk - this.vy) * rate;
+      // 那一下要看得见：残余速度还在走速两倍以上时刹住，只有"冲刺刚收尾"这一种情形
+      //（这一档一帧就把 748 砍到走速以下，所以一次冲刺最多留一次灰），在地上划一道痕。
+      if (braking && carrySpeed > walk * BRAKE_DUST) {
+        ctx.particles.burst(this.x, this.y, 5, '#c8d2e6', { speed: 70, size: 2.4, life: 0.3 });
+      }
     }
     this.x += this.vx * dt;
     this.y += this.vy * dt;

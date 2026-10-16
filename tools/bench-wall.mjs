@@ -27,6 +27,10 @@
  *   · `dashwall` —— **玩家自己**朝墙冲刺（v86）。量的是"这一发冲刺有多少帧是白压在墙上的、
  *                  撞完按住反方向多久能走开 30px"。怪那边 v84 早就有了交代，玩家这边到 v85
  *                  还是不声不响的：冲刺是拿来躲的，撞墙该收掉的是这一次冲刺，不是把人钉在那里。
+ *   · `dashfree` —— 同一发冲刺，在**空地**上跑满，然后按住反方向（v87）。这一栏量的是冲刺**正常跑完**
+ *                  那一下的收力：残余速度是走速的 3.4 倍（748px/s），手上那个方向键要多久才扳得回来。
+ *                  v87 之前它是 20 帧（0.33 秒），而"撞墙收掉冲刺"那一发（`dashwall`，速度清零）
+ *                  第 1 帧就能动——同一件事两套手感，这一栏就是拿来盯这个的。
  *   · `dashege` —— 同一发冲刺，改朝**场地边界**冲。这一栏是 `dashwall` 的对照组，**不用改代码**：
  *                  `clampToArena` 一样把人拦住，但这条规矩（`Game.update` 里那一段）明写只看墙、
  *                  不看边界——所以它量出来的就是"改前"那套空转（冲刺照旧跑满 0.18 秒、人压在线外不动）。
@@ -53,7 +57,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,dashwall,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -249,8 +253,11 @@ const SCENES = {
  *
  * 每一栏都从"**撞上那一帧**"起算，而不是等它跑完再统计：撞上墙的人会当场往回推杆，
  * 量的是那一推推不动的帧数。三栏：
- *   · 撞上(帧)   —— 从起步到撞上用了几个物理帧（一发冲刺 0.18s = 10~11 帧，满速一帧 12.47px）；
- *   · 起步(帧)   —— 撞上之后立刻按住反方向，第几帧开始往回动（撞上那一帧之后的帧数）；
+ *   · 停下(帧)   —— 从起步到"撞上 / 跑完"用了几个物理帧（一发冲刺 0.18s = 10~11 帧，满速一帧 12.47px）；
+ *   · 停时冲刺   —— 停下那一刻冲刺还剩多少秒。撞墙那种是 0（被收掉）；空地上跑满那种也是 0
+ *                  （自己跑完）；场地边界那一种是 0.08——边界拦得住人，但那条规矩明写不管它，
+ *                  所以冲刺照旧跑完。这一列把"收掉冲刺"与"没收到"分开给你看。
+ *   · 起步(帧)   —— 停下之后立刻按住反方向，第几帧开始往回动（停下那一帧之后的帧数）；
  *   · 走开30px   —— 从撞上到离墙面 30px 用了多少帧（上限 60 帧）；
  *   · 这一发走了 / 响了几声。
  */
@@ -262,11 +269,12 @@ async function runDash(seed, tag, kind) {
     if (n === 'bash') bashes += 1;
     return realPlay(n);
   };
-  // 两种摆法**对称**：都是"离挡路的那一面 60px 处起步、正对它冲"（冲刺一帧 12.47px，
-  // 所以撞上那一下落在第 5 帧左右、冲刺还剩一半），差的那一半就是这条规矩管的那一段。
+  // 撞墙 / 撞边界这两种摆法是**对称**的：都是"离挡路的那一面 60px 处起步、正对它冲"
+  //（冲刺一帧 12.47px，所以撞上那一下落在第 5 帧左右、冲刺还剩一半），差的那一半就是那条规矩管的那一段。
+  // `dashfree` 前头什么都没有：让它把 0.18 秒跑满，量"跑完那一刻"的收力。
   const wall = { x: -200, y: -140, w: 400, h: 80 };
   if (kind === 'wall') game.level.walls.push(wall);
-  const fromY = kind === 'wall' ? -214 : -(900 - p.radius - 60);
+  const fromY = kind === 'wall' ? -214 : kind === 'edge' ? -(900 - p.radius - 60) : 0;
   p.x = 0;
   p.y = fromY;
   p.vx = 0;
@@ -274,7 +282,7 @@ async function runDash(seed, tag, kind) {
   p.dashTimer = 0;
   p.dashCd = 0;
   p.invuln = 0;
-  const dy = kind === 'wall' ? 1 : -1; // 墙在 +y 侧，边界在 -y 侧
+  const dy = kind === 'edge' ? -1 : 1; // 墙在 +y 侧，边界在 -y 侧，空地那一种朝场地里侧走
   const tick = (moveY, dash) => {
     p.hp = 1e9;
     p.oil = p.oilMax;
@@ -282,13 +290,14 @@ async function runDash(seed, tag, kind) {
     game.setInput(0, moveY, dash, false);
     game.update(dt);
   };
-  // ① 冲上去，直到某一帧"沿冲刺方向几乎没动"（那就是撞上了；满速一帧 12.47px）
+  // ① 冲上去，直到某一帧"沿冲刺方向几乎没动"（那就是撞上了；满速一帧 12.47px）。
+  //    `dashfree` 没有东西可撞，终点换成同一个意思：这一发自己跑完（`dashTimer` 归零）。
   let contactAt = 0;
   for (let i = 0; i < 30; i += 1) {
     const before = p.y;
     tick(dy, i === 0);
     contactAt += 1;
-    if ((p.y - before) * dy < 1) break;
+    if (kind === 'free' ? p.dashTimer <= 0 : (p.y - before) * dy < 1) break;
   }
   const along = (p.y - fromY) * dy;
   const dashLeft = p.dashTimer; // 撞上那一刻冲刺还剩多少秒（改前这一段是白熬的）
@@ -310,6 +319,7 @@ async function runDash(seed, tag, kind) {
 
 const DASH_SCENES = {
   dashwall: (seed) => runDash(seed, 'dashwall', 'wall'),
+  dashfree: (seed) => runDash(seed, 'dashfree', 'free'),
   dashege: (seed) => runDash(seed, 'dashege', 'edge'),
 };
 
@@ -341,7 +351,7 @@ for (const name of ONLY.filter((n) => SCENES[n])) {
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {
   console.log('');
-  console.log(`${pad('场景', 9)}${pad('撞上(帧)', 9)}${pad('撞剩冲刺', 9)}${pad('起步(帧)', 9)}${pad('走开30px', 9)}${pad('这一发走了', 11)}${pad('响', 4)}`);
+  console.log(`${pad('场景', 9)}${pad('停下(帧)', 9)}${pad('停时冲刺', 10)}${pad('起步(帧)', 9)}${pad('走开30px', 9)}${pad('这一发走了', 11)}${pad('响', 4)}`);
   for (const name of DASH_ONLY) {
     const acc = { contactAt: 0, dashLeft: 0, startFrame: 0, framesTo30: 0, along: 0, bashes: 0 };
     for (const seed of SEEDS) {
@@ -356,7 +366,7 @@ if (DASH_ONLY.length) {
     const n = SEEDS.length;
     out[name] = acc;
     console.log(
-      `${pad(name, 9)}${pad((acc.contactAt / n).toFixed(1), 9)}${pad((acc.dashLeft / n).toFixed(3), 9)}`
+      `${pad(name, 9)}${pad((acc.contactAt / n).toFixed(1), 9)}${pad((acc.dashLeft / n).toFixed(3), 10)}`
       + `${pad((acc.startFrame / n).toFixed(1), 9)}${pad((acc.framesTo30 / n).toFixed(1), 9)}`
       + `${pad((acc.along / n).toFixed(1), 11)}${pad(String(acc.bashes), 4)}`,
     );
