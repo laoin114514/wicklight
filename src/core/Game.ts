@@ -1217,8 +1217,11 @@ export class Game {
     this.updateShrines();
 
     this.updateTerrain(dt);
-    this.grazeFromX = this.player.x;
-    this.grazeFromY = this.player.y;
+    // 这一帧开始时人在哪儿：擦身判据要它，下面"冲刺撞墙"那一条也要它（见那一段的注释）
+    const moveFromX = this.player.x;
+    const moveFromY = this.player.y;
+    this.grazeFromX = moveFromX;
+    this.grazeFromY = moveFromY;
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
     // 手动瞄准的那盏灯：手指按下去的时候，灯也往那个方向偏一点。
     // 两个理由，都不是装饰：① 落点标记必须看得见——射程能到 300px，而灯火最暗时视野只有 96px，
@@ -1234,6 +1237,31 @@ export class Game {
       this.light.addGlow(ax, ay, pourAim.pool * 1.25, 0.22 + 0.3 * pourAim.charge);
     }
     const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
+    // 冲刺一头撞在墙面上（v86）：怪那边早就有交代了（`moveWithWalls` 撞停 + 发呆 0.55 秒），
+    // 玩家这边一直是**不声不响**的——人只会觉得"我这下没冲出去"，不知道是自己撞了墙。
+    // 收掉的是**这次冲刺**，不是罚站：冲刺本来就是拿来躲的，罚站比撞墙本身更难受；
+    // 收掉之后控制权当场还给你（那 0.18 秒剩下的部分不用再贴着墙磨完），另外一记闷响、
+    // 一撮尘、一点点屏震——借的是怪撞墙那一套反馈（同一个 `bash`），只是震得轻些，
+    // 因为人是会主动往墙上冲的，震大了屏幕上会一直抖。
+    //
+    // 判据是"这一帧**沿冲刺方向**真的走了多远"，不是"碰没碰到墙"：正面撞上去 ≈ 0（收掉），
+    // 斜着擦上去还剩一半（照旧滑过去）、贴着墙平行冲是满速——后两种是走路本来就该有的手感
+    // （台架实测：贴墙平行冲的位移与空地**逐位相同**），不该被当成撞墙。
+    // 也只看墙、不看场地边界：边界那一下不在这一条规矩里（`pcol` 是撞墙那一步，clamp 还在后面）。
+    if (this.player.dashTimer > 0) {
+      const dashX = this.player.dashDirX;
+      const dashY = this.player.dashDirY;
+      const want = (this.player.vx * dashX + this.player.vy * dashY) * dt;
+      const got = (pcol.x - moveFromX) * dashX + (pcol.y - moveFromY) * dashY;
+      if (want > 1 && got < want * 0.25) {
+        this.player.dashTimer = 0;
+        this.player.vx = 0;
+        this.player.vy = 0;
+        this.audio.play('bash');
+        this.particles.burst(pcol.x, pcol.y, 8, '#cbd4e8', { speed: 130, size: 2.6, life: 0.4 });
+        this.camera.addTrauma(0.1, this.settings.data.shake * this.settings.motionScale);
+      }
+    }
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
     this.player.x = clamped.x;
     this.player.y = clamped.y;

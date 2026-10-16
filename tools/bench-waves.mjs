@@ -7,6 +7,7 @@
  *   node tools/bench-waves.mjs --style=holder  # 只跑"守着交战距离"的那一种走位
  *   node tools/bench-waves.mjs --fixed         # 钉死一套武器、不升级：改规则前后 A/B 用这个
  *   node tools/bench-waves.mjs --god --stages=4 # 打不死的脚本玩家跑完全部四关：跨关卡找崩溃用这个
+ *   node tools/bench-waves.mjs --fixed --nowalls    # 把这一局的墙每帧清掉：用来证明"某条只在墙前面生效的规则"没碰别的东西
  *
  * `--fixed` 是给"改前 / 改后"对比用的：自然局里玩家会随击杀节奏抽到不一样的升级卡，
  * 两次跑出来根本不是同一局（连波数都不一样），差值里混着"构筑运气"，量不出规则本身的效果。
@@ -54,6 +55,20 @@ const JSON_OUT = args.get('json') ?? null;
 const STYLES = args.has('style') ? [args.get('style')] : ['holder', 'chaser'];
 const FIXED = args.has('fixed');
 /**
+ * `--nowalls`：把这一局的墙**每帧**清掉（跨关会重新生成地图，只在开局清一次是不够的——
+ * 第一版就是那样写的，第二关的墙上照样会响，量出来的那一栏是假的）。它和 `bench-wall` 的 `--nocollide` 是一对反着的开关——
+ * 那个是"把怪撞墙这条规则接回去"，这个是"把墙从这一局里拿掉"。
+ * 它的用途只有一个：某条规则**只在墙前面才有话说**的时候（v84 的怪、v86 的玩家冲刺），
+ * 想证明"改前 / 改后差出来的那几个数只可能来自墙"，就跑两边各一遍 `--nowalls`——
+ * 读数必须**逐位相同**，差一位就说明这一版顺手碰了别的东西。
+ *
+ * 还有一栏是 v86 加的：**脚本玩家自己的冲刺撞在墙上几次**（数的是"这一次冲刺活了多久"，
+ * 见 `run()` 里那一段）。它回答"这条规则一局里会不会真的被摸到"——机器人是 0.2 次/局
+ * （12 局里 2 次，它的冲刺几乎都发生在空地上），但那一次就够把整局轨迹岔开：
+ * 同一批种子上只有那 2 局读数不同，其余 10 局逐位相同。
+ */
+const NOWALLS = args.has('nowalls');
+/**
  * `--god`：血厚到打不死。它不是"难度调参"，是**回归跑**——脚本玩家的水平远不如人，
  * 自然模式下它在第一关就会倒下（4 颗种子全倒在第一关），于是熔窟的余烬风、长夜之城的寒潮
  * 这些代码在台架里从来没被跑过。给一条打不死的命，一局就能把四关的怪 / 险境 / 首领全过一遍，
@@ -91,6 +106,14 @@ async function run({ seed, style, stages }) {
     game.player.stats.maxHp = 1e9;
     game.player.hp = 1e9;
   }
+  // 自己冲刺撞在墙上的次数（v86 起这条规则会响）。
+  // 数法：记每一次冲刺**活了多久**（`dashCount` 进位那一刻起到 `dashTimer` 掉到 0）。
+  // 一次冲刺的自然寿命是 0.18 秒（11 帧 ≈ 0.183）；被墙提前收掉的那一次连 0.15 都到不了。
+  // 不去挂 `audio.play`：同一帧里"起步就撞上"的那一次是数不到的（起手时 `dashTimer` 还是 0）。
+  let dashSeen = -1;
+  let dashBirth = -1;
+  let wallBash = 0;
+
   if (FIXED) {
     // 一套固定火力 + 不再升级：这样"改前 / 改后"比的是同一件事（见文件头那一段）
     for (const id of FIXED_LOADOUT) game.player.weapons.set(id, 5);
@@ -232,8 +255,20 @@ async function run({ seed, style, stages }) {
     // ⚠ 每帧都要补回来：升级 / 拿遗物都会重算属性表，`maxHp` 会被重算回真实值、
     //   `hp` 也跟着被夹回去（第一版只在开局设了一次，于是"打不死"的玩家还是死在了第一关）
     if (GOD) { p.stats.maxHp = 1e9; p.hp = 1e9; }
+    // `--nowalls` 每帧都要清一次：开局那张地图只是这一关的墙，跨关时地图会重生成
+    // （第一版只在开局清了一次，于是第二关的墙上照样会响——量出来的一栏是假的）
+    if (NOWALLS) g.level.walls.length = 0;
     g.setInput(mx, my, dash, nova);
     g.update(dt);
+    if (dashSeen < 0) dashSeen = p.dashCount;
+    if (p.dashCount !== dashSeen) {
+      dashSeen = p.dashCount;
+      dashBirth = t;
+    }
+    if (dashBirth >= 0 && p.dashTimer <= 0) {
+      if (t - dashBirth < 0.15) wallBash += 1;
+      dashBirth = -1;
+    }
     if (GOD) { p.stats.maxHp = 1e9; p.hp = 1e9; }
     if (g.playerLevel > lastLevel) { levelTimes.push(+t.toFixed(1)); lastLevel = g.playerLevel; }
     t += dt;
@@ -253,7 +288,7 @@ async function run({ seed, style, stages }) {
     // 难度是不是被顺带改了，得有个数看得见："循灯"只许改节奏，不许偷偷加伤害
     dmgTaken: Math.round(game.damageTaken),
     hpFrac: +(game.player.hp / game.player.stats.maxHp).toFixed(2),
-    dashTaps, dashEaten, levelTimes, waves,
+    dashTaps, dashEaten, wallBash, levelTimes, waves,
   };
 }
 
@@ -299,7 +334,11 @@ for (const style of STYLES) {
   }
   const s = summarize(runs);
   const meanFirst = s.firstUpgrade.filter((x) => x !== null);
-  out.push({ style, s, runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level })) });
+  out.push({
+    style,
+    s,
+    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash })),
+  });
   console.log(`\n── 走位 ${style} · ${runs.length} 局 · ${FIXED ? '钉死火力' : GOD ? '打不死' : '自然'}`
     + ` · ${runs[0].stage} 关跑完（最远到第 ${Math.max(...runs.map((r) => r.stage))} 关）──────────`);
   console.log(`  波数 ${s.waves}   一波总时长 均 ${fmt(s.total.mean)} / p50 ${fmt(s.total.p50)} / p90 ${fmt(s.total.p90)} / 最长 ${fmt(s.total.max)} 秒`);
@@ -309,6 +348,9 @@ for (const style of STYLES) {
   console.log(`  其中空场（${DEAD_AIR}px 内没怪）拆开：刷怪阶段 ${fmt(s.deadAirSpawn)} 秒 · 清场阶段 ${fmt(s.deadAirClear)} 秒`
     + ` · 开波到第一次看见怪 ${fmt(s.firstContact)} 秒`);
   console.log(`  第一张升级卡：${meanFirst.length ? (meanFirst.reduce((a, b) => a + b, 0) / meanFirst.length).toFixed(1) : 'n/a'} 秒（${meanFirst.length}/${runs.length} 局量到）`);
+  const wallBash = runs.reduce((a, r) => a + (r.wallBash ?? 0), 0);
+  console.log(`  自己的冲刺撞在墙上：${(wallBash / runs.length).toFixed(1)} 次/局（共 ${wallBash} 次`
+    + `${NOWALLS ? ' · 墙已被 --nowalls 拿掉，它必须是 0' : ''}）`);
   const dmg = runs.map((r) => r.dmgTaken);
   const hp = runs.map((r) => r.hpFrac);
   console.log(`  挨了多少：整关受伤 均 ${(dmg.reduce((a, b) => a + b, 0) / dmg.length).toFixed(0)}（单局 ${dmg.join(' / ')}）`

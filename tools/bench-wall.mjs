@@ -24,6 +24,13 @@
  *                  **会不会有怪被永久卡在墙背面**（贴着墙面滑要是写错了，答案就是"8 只里 3 只永远不进来"）。
  *   · `bash`   —— 墙摆在你和刺脊之间，骗它把蓄力冲锋撞在墙上。撞停之后它有一段**站着不动**的
  *                  白给时间（`wallStun`）——这一段是"墙从障碍变成掩体"的那一笔，也必须量出来。
+ *   · `dashwall` —— **玩家自己**朝墙冲刺（v86）。量的是"这一发冲刺有多少帧是白压在墙上的、
+ *                  撞完按住反方向多久能走开 30px"。怪那边 v84 早就有了交代，玩家这边到 v85
+ *                  还是不声不响的：冲刺是拿来躲的，撞墙该收掉的是这一次冲刺，不是把人钉在那里。
+ *   · `dashege` —— 同一发冲刺，改朝**场地边界**冲。这一栏是 `dashwall` 的对照组，**不用改代码**：
+ *                  `clampToArena` 一样把人拦住，但这条规矩（`Game.update` 里那一段）明写只看墙、
+ *                  不看边界——所以它量出来的就是"改前"那套空转（冲刺照旧跑满 0.18 秒、人压在线外不动）。
+ *                  两栏放在同一份产物里跑，差的那几帧就是这条规矩挣来的。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -46,7 +53,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,dashwall,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -237,12 +244,81 @@ const SCENES = {
     }),
 };
 
+/**
+ * 玩家冲刺的那两个场景（见文件头）。不走 `run()`：量的是**玩家自己**身上那几帧，没有怪。
+ *
+ * 每一栏都从"**撞上那一帧**"起算，而不是等它跑完再统计：撞上墙的人会当场往回推杆，
+ * 量的是那一推推不动的帧数。三栏：
+ *   · 撞上(帧)   —— 从起步到撞上用了几个物理帧（一发冲刺 0.18s = 10~11 帧，满速一帧 12.47px）；
+ *   · 起步(帧)   —— 撞上之后立刻按住反方向，第几帧开始往回动（撞上那一帧之后的帧数）；
+ *   · 走开30px   —— 从撞上到离墙面 30px 用了多少帧（上限 60 帧）；
+ *   · 这一发走了 / 响了几声。
+ */
+async function runDash(seed, tag, kind) {
+  const { game, p } = await open(seed, tag);
+  let bashes = 0;
+  const realPlay = game.audio.play.bind(game.audio);
+  game.audio.play = (n) => {
+    if (n === 'bash') bashes += 1;
+    return realPlay(n);
+  };
+  // 两种摆法**对称**：都是"离挡路的那一面 60px 处起步、正对它冲"（冲刺一帧 12.47px，
+  // 所以撞上那一下落在第 5 帧左右、冲刺还剩一半），差的那一半就是这条规矩管的那一段。
+  const wall = { x: -200, y: -140, w: 400, h: 80 };
+  if (kind === 'wall') game.level.walls.push(wall);
+  const fromY = kind === 'wall' ? -214 : -(900 - p.radius - 60);
+  p.x = 0;
+  p.y = fromY;
+  p.vx = 0;
+  p.vy = 0;
+  p.dashTimer = 0;
+  p.dashCd = 0;
+  p.invuln = 0;
+  const dy = kind === 'wall' ? 1 : -1; // 墙在 +y 侧，边界在 -y 侧
+  const tick = (moveY, dash) => {
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    game.hitStop = 0;
+    game.setInput(0, moveY, dash, false);
+    game.update(dt);
+  };
+  // ① 冲上去，直到某一帧"沿冲刺方向几乎没动"（那就是撞上了；满速一帧 12.47px）
+  let contactAt = 0;
+  for (let i = 0; i < 30; i += 1) {
+    const before = p.y;
+    tick(dy, i === 0);
+    contactAt += 1;
+    if ((p.y - before) * dy < 1) break;
+  }
+  const along = (p.y - fromY) * dy;
+  const dashLeft = p.dashTimer; // 撞上那一刻冲刺还剩多少秒（改前这一段是白熬的）
+  const contactY = p.y;
+  // ② 撞上之后**当场**按住反方向：第几帧开始动、走开 30px 用几帧
+  let startFrame = -1;
+  let framesTo30 = -1;
+  for (let i = 1; i <= 60; i += 1) {
+    tick(-dy, false);
+    const away = (p.y - contactY) * -dy;
+    if (startFrame < 0 && away > 0.01) startFrame = i;
+    if (away >= 30) {
+      framesTo30 = i;
+      break;
+    }
+  }
+  return { contactAt, dashLeft: Math.max(0, dashLeft), startFrame, framesTo30, along, bashes };
+}
+
+const DASH_SCENES = {
+  dashwall: (seed) => runDash(seed, 'dashwall', 'wall'),
+  dashege: (seed) => runDash(seed, 'dashege', 'edge'),
+};
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
 console.log(`墙台架：${SEEDS.length} 颗种子 · 每场 ${SECS}s 游戏时间${NOCOLLIDE ? ' · 对照组（怪穿墙）' : ''}`);
 console.log(`${pad('场景', 9)}${pad('陷进最深', 9)}${pad('陷进去帧', 9)}${pad('撞停', 6)}${pad('白给', 7)}${pad('贴上', 7)}${pad('首只', 7)}${pad('最后一只', 9)}`);
-for (const name of ONLY) {
+for (const name of ONLY.filter((n) => SCENES[n])) {
   const acc = { deepest: 0, sunkFrames: 0, bashes: 0, stuckS: 0, landed: 0, total: 0, first: [], last: [] };
   for (const seed of SEEDS) {
     const r = await SCENES[name](seed);
@@ -261,6 +337,30 @@ for (const name of ONLY) {
     `${pad(name, 9)}${pad(acc.deepest.toFixed(1), 9)}${pad(String(acc.sunkFrames), 9)}${pad(String(acc.bashes), 6)}`
     + `${pad(acc.stuckS.toFixed(1), 7)}${pad(`${acc.landed}/${acc.total}`, 7)}${pad(f1(avg(acc.first)), 7)}${pad(f1(avg(acc.last)), 9)}`,
   );
+}
+const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
+if (DASH_ONLY.length) {
+  console.log('');
+  console.log(`${pad('场景', 9)}${pad('撞上(帧)', 9)}${pad('撞剩冲刺', 9)}${pad('起步(帧)', 9)}${pad('走开30px', 9)}${pad('这一发走了', 11)}${pad('响', 4)}`);
+  for (const name of DASH_ONLY) {
+    const acc = { contactAt: 0, dashLeft: 0, startFrame: 0, framesTo30: 0, along: 0, bashes: 0 };
+    for (const seed of SEEDS) {
+      const r = await DASH_SCENES[name](seed);
+      acc.contactAt += r.contactAt;
+      acc.dashLeft += r.dashLeft;
+      acc.startFrame += r.startFrame;
+      acc.framesTo30 += r.framesTo30 < 0 ? 0 : r.framesTo30;
+      acc.along += r.along;
+      acc.bashes += r.bashes;
+    }
+    const n = SEEDS.length;
+    out[name] = acc;
+    console.log(
+      `${pad(name, 9)}${pad((acc.contactAt / n).toFixed(1), 9)}${pad((acc.dashLeft / n).toFixed(3), 9)}`
+      + `${pad((acc.startFrame / n).toFixed(1), 9)}${pad((acc.framesTo30 / n).toFixed(1), 9)}`
+      + `${pad((acc.along / n).toFixed(1), 11)}${pad(String(acc.bashes), 4)}`,
+    );
+  }
 }
 if (JSON_OUT) {
   const { writeFile } = await import('node:fs/promises');
