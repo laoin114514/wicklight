@@ -1784,6 +1784,108 @@ async function main() {
   const queued = await page.evaluate(() => window.__WICKLIGHT__.game.pendingLevels);
   expect(queued === 0, '升级队列已被清空', `pendingLevels=${queued}`);
 
+  // ── 5b. 面板热键：真按下数字键 / R（这条链子只有在这儿量得到）──
+  // "哪个键对应哪张卡"在无头测试里能整条走通，但"主循环有没有把键盘状态交给 Game"
+  // 只活在 main.ts 的那两行里——离线测试跑的是主循环之外那条路，永远碰不到它。
+  // 所以这里用**真键盘**按下去，量三件事：键是哪一枚、按下之后生效的是不是那张卡、
+  // 以及按错地方（战斗中）会不会有副作用。
+  await page.evaluate(() => window.__WICKLIGHT__.game.gainXp(window.__WICKLIGHT__.game.xpToNext + 1));
+  await page.waitForFunction(() => window.__WICKLIGHT__.game.state === 'levelup', null, { timeout: 8000 }).catch(() => {});
+  const hotkeys = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const lvl = (id) => (g.player.weapons.get(id) ?? 0) + (g.player.passives.get(id) ?? 0) + (g.player.relics.has(id) ? 1 : 0);
+    const [first, second] = g.currentOffers;
+    const chips = [...document.querySelectorAll('[data-offer] .hotkey')];
+    return {
+      chips: chips.map((e) => e.textContent.trim()),
+      chipsShown: chips.length > 0 && chips.every((e) => e.getBoundingClientRect().width > 0),
+      first: first.id,
+      second: second.id,
+      firstLv: lvl(first.id),
+      secondLv: lvl(second.id),
+      rerollChip: document.querySelector('[data-act="reroll"] .key')?.textContent ?? '',
+    };
+  });
+  expect(hotkeys.chips.join(',') === '1,2,3', '升级卡上写着"按哪个键"', JSON.stringify(hotkeys.chips));
+  expect(hotkeys.chipsShown, '桌面端那几枚数字片是真的画出来了（不是 display:none）');
+  expect(hotkeys.rerollChip === 'R', '重掷按钮上挂着 R', JSON.stringify(hotkeys.rerollChip));
+  await shot('06b-levelup-hotkeys');
+
+  // 按 2：生效的必须是**第二张**（不是第一张，也不是"随手一张"）
+  await page.keyboard.press('Digit2');
+  await sleep(350);
+  const afterKey = await page.evaluate(({ firstId, secondId }) => {
+    const g = window.__WICKLIGHT__.game;
+    const lvl = (id) => (g.player.weapons.get(id) ?? 0) + (g.player.passives.get(id) ?? 0) + (g.player.relics.has(id) ? 1 : 0);
+    return { state: g.state, firstLv: lvl(firstId), secondLv: lvl(secondId) };
+  }, { firstId: hotkeys.first, secondId: hotkeys.second });
+  expect(afterKey.state === 'playing', '按数字键选完卡就该回到战场', JSON.stringify(afterKey));
+  expect(afterKey.secondLv > hotkeys.secondLv, `按 2 生效的该是第二张（${hotkeys.second}）`, JSON.stringify({ before: hotkeys.secondLv, after: afterKey.secondLv }));
+  expect(afterKey.firstLv === hotkeys.firstLv, `第一张不该被顺手也塞进来（${hotkeys.first}）`, JSON.stringify({ before: hotkeys.firstLv, after: afterKey.firstLv }));
+
+  // R：升级面板里按一下，三张卡真的换了、重掷点真的少了，而且**屏幕上的牌就是手里的牌**。
+  // 最后这条不是洁癖：面板是一张静态 DOM，卡片点下去时按屏幕上那个 id 回 `offers` 里找，
+  // 找不到就什么都不做——"数据换了、画没换"会让整块面板看着好好的却一张都点不动。
+  await page.evaluate(() => window.__WICKLIGHT__.game.gainXp(window.__WICKLIGHT__.game.xpToNext + 1));
+  await page.waitForFunction(() => window.__WICKLIGHT__.game.state === 'levelup', null, { timeout: 8000 }).catch(() => {});
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.rerollsLeft = 2; // 面板一打开就会把重掷点重置成局外解锁的那份，所以在这里发牌
+    g.ui.setOffers(g.currentOffers, g.rerollsLeft);
+    g.ui.showScreen('levelup');
+  });
+  const rerollBefore = await page.evaluate(() => window.__WICKLIGHT__.game.currentOffers.map((o) => `${o.kind}:${o.id}`).join(','));
+  await page.keyboard.press('KeyR');
+  await sleep(350);
+  const rerollAfter = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const dom = [...document.querySelectorAll('[data-offer]')].map((e) => e.dataset.offer);
+    const data = g.currentOffers.map((o) => `${o.kind}:${o.id}`);
+    return {
+      state: g.state,
+      left: g.rerollsLeft,
+      data: data.join(','),
+      orphans: dom.filter((k) => !data.includes(k)),
+      domCount: dom.length,
+      label: document.querySelector('[data-act="reroll"]')?.textContent ?? '',
+    };
+  });
+  expect(rerollAfter.left === 1, '升级面板里按 R 花掉一次重掷', JSON.stringify({ after: rerollAfter.left }));
+  expect(rerollAfter.state === 'levelup' && rerollAfter.data !== rerollBefore, '重掷真的换掉了那三张卡，而且人还停在面板上', JSON.stringify(rerollAfter.data));
+  expect(rerollAfter.orphans.length === 0 && rerollAfter.domCount === 3, '重掷之后面板上的牌就是手里的牌（没有点不动的孤儿卡）', JSON.stringify(rerollAfter.orphans));
+  expect(/1/.test(rerollAfter.label), '重掷按钮上的数字跟着往下走了', JSON.stringify(rerollAfter.label));
+  // 换完牌照样点得动：这一下走的是鼠标那条老路（键盘那条上面已经量过）
+  await page.click('[data-offer]');
+  await sleep(300);
+  const afterRerollPick = await page.evaluate(() => window.__PROBE__.state());
+  expect(afterRerollPick && afterRerollPick.state !== 'levelup', '重掷之后那三张卡还是点得动（不是一块死面板）', JSON.stringify(afterRerollPick));
+
+  // 把可能排队的升级面板走完，然后回战场量"按错地方"那一条
+  for (let i = 0; i < 6; i += 1) {
+    const st = await page.evaluate(() => window.__WICKLIGHT__.game.state);
+    if (st !== 'levelup') break;
+    await page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      g.chooseUpgrade(g.currentOffers[0]);
+    });
+    await sleep(180);
+  }
+  const idleKey = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.rerollsLeft = 3;
+    return { state: g.state, left: g.rerollsLeft, gold: g.gold, kit: g.player.weapons.size + g.player.passives.size + g.player.relics.size };
+  });
+  expect(idleKey.state === 'playing', '热键量完，人该在战场上', JSON.stringify(idleKey));
+  await page.keyboard.press('KeyR');
+  await page.keyboard.press('Digit1');
+  await sleep(300);
+  const idleAfter = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { state: g.state, left: g.rerollsLeft, gold: g.gold, kit: g.player.weapons.size + g.player.passives.size + g.player.relics.size };
+  });
+  expect(idleAfter.left === idleKey.left && idleAfter.gold === idleKey.gold, '战斗中按 R 不该白吃一次重掷、也不该扣金币刷新商品', JSON.stringify({ before: idleKey, after: idleAfter }));
+  expect(idleAfter.kit === idleKey.kit && idleAfter.state === 'playing', '战斗中按数字键不该凭空多出一件东西', JSON.stringify({ before: idleKey, after: idleAfter }));
+
   // ── 6. 商店 ──
   await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -1802,6 +1904,46 @@ async function main() {
   await sleep(300);
   const goldAfter = (await page.evaluate(() => window.__PROBE__.state())).gold;
   expect(goldAfter < goldBefore, '购买后金币减少', `${goldBefore} → ${goldAfter}`);
+
+  // 商店也归键盘管：数字键买第 n 件、R 刷新货架（刷新是**一口价 8 金币**，得真的扣）
+  const shopKeys = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.gold = Math.max(g.gold, 400);
+    g.ui.showScreen('shop');
+    return {
+      gold: g.gold,
+      price: g.shopItems[1]?.price ?? null,
+      sold: g.shopItems[1]?.sold ?? null,
+      // 前面用鼠标买过第 0 件，所以"别的货没动"要拿这一份当基准去比，不能假定全都还没卖
+      soldBefore: g.shopItems.map((it) => it.sold),
+      chips: [...document.querySelectorAll('.shop-item .hotkey')].map((e) => e.textContent.trim()).slice(0, 3),
+    };
+  });
+  expect(shopKeys.chips.join(',') === '1,2,3', '商品上写着"按哪个键"', JSON.stringify(shopKeys.chips));
+  if (shopKeys.price !== null && !shopKeys.sold) {
+    await page.keyboard.press('Digit2');
+    await sleep(350);
+    const bought = await page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      return { gold: g.gold, sold: g.shopItems.map((it) => it.sold) };
+    });
+    // 只有第 1 件变了状态，别的货一件都没动
+    const others = bought.sold.filter((_, i) => i !== 1);
+    const othersBefore = shopKeys.soldBefore.filter((_, i) => i !== 1);
+    expect(bought.sold[1] === true && JSON.stringify(others) === JSON.stringify(othersBefore), '按 2 买的是第二件（别的货一件都没动）', JSON.stringify({ before: shopKeys.soldBefore, after: bought.sold }));
+    expect(bought.gold === shopKeys.gold - shopKeys.price, '扣的该正好是那一件的价', JSON.stringify({ before: shopKeys.gold, price: shopKeys.price, after: bought.gold }));
+    const beforeReroll = bought.gold;
+    await page.keyboard.press('KeyR');
+    await sleep(350);
+    const rerolled = await page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      return { gold: g.gold, state: g.state, sold: g.shopItems.filter((it) => it.sold).length };
+    });
+    expect(rerolled.gold === beforeReroll - 8, 'R 刷新商品：一口价 8 金币', JSON.stringify({ before: beforeReroll, after: rerolled.gold }));
+    expect(rerolled.state === 'shop' && rerolled.sold === 0, '刷新之后还是那家店，货架是新的', JSON.stringify(rerolled));
+  } else {
+    fail('商店热键', `第二件买不了（价 ${shopKeys.price} / 已售 ${shopKeys.sold}）`);
+  }
 
   // ── 6b. 熔铸台：真的把一件已有遗物换掉 ──
   const forge = await page.evaluate(() => {
@@ -1927,10 +2069,13 @@ async function main() {
     expect(shrineCards.count === 3, '祭坛给出三张卡', `count=${shrineCards.count}`);
     expect(shrineCards.issues.length === 0, '祭坛卡布局正常', shrineCards.issues.join('; '));
     await shot('08-shrine');
-    await page.click('[data-shrine]');
+    // 祭坛也归键盘管：按 1 就等于点第一张卡（面板上的按钮一点没变，只是多了个入口）
+    await page.keyboard.press('Digit1');
     await sleep(350);
     const afterShrine = await page.evaluate(() => window.__PROBE__.state());
-    expect(afterShrine && afterShrine.state === 'playing', '祭坛抉择后回到战斗', JSON.stringify(afterShrine));
+    expect(afterShrine && afterShrine.state === 'playing', '按数字键选完祭坛供物就回到战斗', JSON.stringify(afterShrine));
+    const shrineUsed = await page.evaluate(() => window.__WICKLIGHT__.game.level.shrines.filter((x) => x.used).length);
+    expect(shrineUsed >= 1, '按下去的那件供物得真的用掉（不然玩家能回来再拿一次）', `used=${shrineUsed}`);
   } else {
     fail('祭坛', '这一关没有可用祭坛');
   }
@@ -1961,9 +2106,31 @@ async function main() {
   expect(!/undefined|NaN/.test(deadInfo.text), '死亡结算没有缺字段', deadInfo.text.slice(0, 120));
   await shot('09-dead');
 
-  // ── 9. 局外成长 / 设置 / 成就 ──
-  await page.click('[data-act="menu"]');
+  // 结算面板的回车 = 面板上那颗主按钮（"再点一盏"），然后从选灯火那一屏自己退回来。
+  // 先确认它只在结算面板里认：战斗中按下去不该有任何动静。
+  const idleEnter = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.state = 'playing';
+    const ok = g.ui.panelPrimary();
+    const after = g.state;
+    g.state = 'dead';
+    g.ui.showScreen('dead');
+    return { ok, after };
+  });
+  expect(idleEnter.ok === false && idleEnter.after === 'playing', '战斗中按回车不该有动作', JSON.stringify(idleEnter));
+  const primaryChip = await page.evaluate(() => document.querySelector('[data-act="again"] .key')?.textContent ?? '');
+  expect(primaryChip === '回车', '主按钮上挂着回车', JSON.stringify(primaryChip));
+  await page.keyboard.press('Enter');
+  await sleep(350);
+  const afterEnter = await page.evaluate(() => window.__PROBE__.state());
+  expect(afterEnter && afterEnter.state === 'select', '结算面板按回车 = 走主按钮（去选灯火那一屏）', JSON.stringify(afterEnter));
+  await page.click('[data-act="back"]');
   await sleep(400);
+  // 从那一屏退回来就是主菜单（原来这一步是点结算面板上的"返回主菜单"，现在回车那条路已经把它走完了）
+  const backAtMenu = await page.evaluate(() => window.__PROBE__.state());
+  expect(backAtMenu && backAtMenu.state === 'menu', '从选灯火那一屏退回来就是主菜单', JSON.stringify(backAtMenu));
+
+  // ── 9. 局外成长 / 设置 / 成就 ──
   await page.click('[data-act="meta"]');
   await sleep(350);
   const metaNodes = await page.evaluate(() => window.__PROBE__.layout('[data-node]'));
@@ -2712,6 +2879,13 @@ async function main() {
   }));
   expect(pausedByTap.state === 'paused', '点暂停按钮会暂停', JSON.stringify(pausedByTap));
   expect(pausedByTap.hasResume, '暂停面板出来了（手机上的构筑总览从这里进）', JSON.stringify(pausedByTap));
+  // 手机上那几枚键盘提示要整片藏掉：没有键盘可用，画出来只会占地方
+  // （`body.is-touch .key` 这条老规矩，新加的面板热键小片也得走它）。
+  const keyChips = await mobile.evaluate(() => {
+    const chips = [...document.querySelectorAll('.panel .key')];
+    return { total: chips.length, shown: chips.filter((e) => e.getBoundingClientRect().width > 0).length };
+  });
+  expect(keyChips.total > 0 && keyChips.shown === 0, '手机上键盘提示全部藏掉', JSON.stringify(keyChips));
   expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
   await mobile.click('[data-act="resume"]');
   await sleep(400);

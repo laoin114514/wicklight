@@ -170,6 +170,31 @@ export class UIManager implements UIHost {
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
   }
 
+  /**
+   * 结算面板上的**主按钮**，交给键盘走：死亡 = 再点一盏、通关 = 挑战无尽之夜。
+   *
+   * 它和 `Game.pickOffer` 是同一类东西（把面板上那颗按钮接给键盘），但落点不一样：
+   * 那三个"选第几张"选的是一份游戏状态，而这两个按钮按下去是**换一块面板**
+   * （其中"挑战无尽之夜"还要先把 `endless` 这个界面自己的开关拨上去）——
+   * 面板的班次该由面板自己交代。
+   *
+   * 只认这两块：商店那颗"继续前进"是另一回事。它意味着"我买完了"，而这里意味着
+   * "我读完了"——同一颗回车在两处各自表示什么，得说清楚，不然迟早有人在补给站里
+   * 习惯性按下回车，然后带着一钱包金币上了下一关。
+   */
+  panelPrimary(): boolean {
+    if (this.game.state === 'dead') {
+      this.game.openMenu('select');
+      return true;
+    }
+    if (this.game.state === 'victory') {
+      this.endless = true;
+      this.openSelect();
+      return true;
+    }
+    return false;
+  }
+
   private openSelect(): void {
     this.selectedLantern = LANTERNS.find((l) => this.game.save.unlockedLanterns.includes(l.id))?.id ?? 'warden';
     this.game.openMenu('select');
@@ -262,12 +287,23 @@ export class UIManager implements UIHost {
     return `<div class="card__pips" title="Lv ${o.level}/${o.maxLevel}">${pips}</div>`;
   }
 
-  private offerCard(o: UpgradeOffer): string {
+  /**
+   * 卡片左上角那枚数字小片：它说的是"按这个键等于点这张卡"（见 InputState 里"面板热键"那一段）。
+   *
+   * 做成一个方法而不是各面板手写一遍，是为了让"第几张"这个意思只有一处产出——
+   * 三块面板上的卡片是三条不同的 DOM，索引却必须是同一个（`Game.pickOffer` 那边的下标）。
+   * 手机上没有键盘，`body.is-touch .key` 会把整片藏掉（沿用 `Tab` 提示那条老规矩）。
+   */
+  private hotkey(index: number): string {
+    return `<span class="key hotkey">${index + 1}</span>`;
+  }
+
+  private offerCard(o: UpgradeOffer, index: number): string {
     const tagLabel = o.tag === 'evolve' ? '进化' : o.tag === 'new' ? '新' : '升级';
     return `<button class="card" data-offer="${o.kind}:${o.id}" style="--accent:${o.color}">
       <div class="card__icon">${o.icon}</div>
       <div class="card__top">
-        <span class="card__tag">${tagLabel}</span>
+        <span class="card__tag">${this.hotkey(index)}${tagLabel}</span>
         <span class="card__lv">Lv ${o.level}/${o.maxLevel}</span>
       </div>
       ${this.levelPips(o)}
@@ -319,13 +355,13 @@ export class UIManager implements UIHost {
   }
 
   private levelup(): void {
-    const cards = this.offers.map((o) => this.offerCard(o)).join('');
+    const cards = this.offers.map((o, i) => this.offerCard(o, i)).join('');
     this.show(`
       <div class="panel panel--levelup panel--plank">
         <div class="panel__title">灯火更亮 · Lv ${this.game.playerLevel}</div>
         <div class="card-grid">${cards}</div>
         <div class="row-actions">
-          <button class="btn ${this.rerolls > 0 ? '' : 'is-locked'}" data-act="reroll">重掷 (${this.rerolls})</button>
+          <button class="btn ${this.rerolls > 0 ? '' : 'is-locked'}" data-act="reroll">重掷 (${this.rerolls})<span class="key">R</span></button>
         </div>
       </div>
     `);
@@ -676,7 +712,7 @@ export class UIManager implements UIHost {
         <div class="shop-item__name">${it.name}</div>
         <div class="shop-item__blurb">${it.blurb}</div>
         ${it.offer ? this.offerDelta(it.offer, 2) : ''}
-        <div class="shop-item__price">${it.sold ? '已售出' : `${it.price} 🪙`}</div>
+        <div class="shop-item__price">${this.hotkey(i)}${it.sold ? '已售出' : `${it.price} 🪙`}</div>
       </button>`,
       )
       .join('');
@@ -688,7 +724,7 @@ export class UIManager implements UIHost {
         <div class="shop-grid">${items}</div>
         ${this.forgeBlock()}
         <div class="row-actions">
-          <button class="btn ${g.gold >= 8 ? '' : 'is-locked'}" data-act="reroll">刷新商品 (8 🪙)</button>
+          <button class="btn ${g.gold >= 8 ? '' : 'is-locked'}" data-act="reroll">刷新商品 (8 🪙)<span class="key">R</span></button>
           <button class="btn btn--primary" data-act="leave">${g.endless ? '继续战斗' : '继续前进'}</button>
         </div>
       </div>
@@ -777,8 +813,9 @@ export class UIManager implements UIHost {
     const g = this.game;
     const cards = g.shrineOffers
       .map(
-        (o) => `
+        (o, i) => `
       <button class="shrine-card" data-shrine="${o.id}" style="--accent:${o.color}">
+        ${this.hotkey(i)}
         <div class="shrine-card__icon">${o.icon}</div>
         <div class="shrine-card__name">${o.name}</div>
         <div class="shrine-card__blurb">${o.blurb}</div>
@@ -814,7 +851,7 @@ export class UIManager implements UIHost {
         ${this.damageBlock()}
         ${this.runBuildBlock()}
         <div class="row-actions">
-          <button class="btn btn--primary" data-act="again">再点一盏</button>
+          <button class="btn btn--primary" data-act="again">再点一盏<span class="key">回车</span></button>
           <button class="btn" data-act="menu">返回主菜单</button>
         </div>
       </div>
@@ -837,7 +874,7 @@ export class UIManager implements UIHost {
         ${this.damageBlock()}
         ${this.runBuildBlock()}
         <div class="row-actions">
-          <button class="btn btn--primary" data-act="endless">挑战无尽之夜</button>
+          <button class="btn btn--primary" data-act="endless">挑战无尽之夜<span class="key">回车</span></button>
           <button class="btn" data-act="menu">返回主菜单</button>
         </div>
       </div>

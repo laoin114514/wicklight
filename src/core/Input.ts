@@ -23,6 +23,19 @@ const KEYMAP: KeyMap = {
   Escape: 'pause',
   KeyP: 'pause',
   Tab: 'sheet',
+  // 面板热键（见 InputState 上那一段）：数字键选第几张卡 / R 重掷 / 回车确认。
+  // 小键盘也认——右手正在小键盘上的人不该被漏掉。
+  Digit1: 'pick1',
+  Digit2: 'pick2',
+  Digit3: 'pick3',
+  Digit4: 'pick4',
+  Numpad1: 'pick1',
+  Numpad2: 'pick2',
+  Numpad3: 'pick3',
+  Numpad4: 'pick4',
+  KeyR: 'reroll',
+  Enter: 'confirm',
+  NumpadEnter: 'confirm',
 };
 
 /**
@@ -58,7 +71,7 @@ export class Input {
   private held = new Set<string>();
   private pressedThisFrame = new Set<string>();
   private releasedThisFrame = new Set<string>();
-  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false };
+  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false, pick: 0, reroll: false, confirm: false };
   pointer: PointerState = { x: 0, y: 0, active: false };
   private listeners: Array<() => void> = [];
   private enabled = true;
@@ -79,7 +92,19 @@ export class Input {
       if (e.repeat) return;
       this.held.add(action);
       this.pressedThisFrame.add(action);
-      if (action === 'dash' || action === 'nova' || action === 'pause' || action === 'sheet') e.preventDefault();
+      // 默认行为要挡掉的几个：
+      // · 空格 / 方向键会滚动页面、翻滚那个还能"点击"当前获得焦点的按钮；
+      // · Tab 会把焦点挪到面板按钮上（这个游戏里 Tab 只有"看构筑"一个意思）；
+      // · **回车会激活焦点上的按钮**——鼠标点过"重掷"之后那个按钮就是焦点，
+      //   这时候按回车本该走的是结算面板的主按钮，结果会再重掷一次（两件事一起发生）。
+      if (
+        action === 'dash' ||
+        action === 'nova' ||
+        action === 'pause' ||
+        action === 'sheet' ||
+        action === 'confirm'
+      )
+        e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const action = this.isAction(e.code);
@@ -172,6 +197,12 @@ export class Input {
     s.pause = this.wasPressed('pause');
     s.sheet = this.wasPressed('sheet');
     s.lamp = this.wasPressed('lamp');
+    // 数字键折成一个数：下游只问"选了第几张"，不该看见四个布尔
+    let pick = 0;
+    for (let i = 1; i <= 4; i += 1) if (this.wasPressed(`pick${i}`)) pick = i;
+    s.pick = pick;
+    s.reroll = this.wasPressed('reroll');
+    s.confirm = this.wasPressed('confirm');
   }
 
   endFrame(): void {

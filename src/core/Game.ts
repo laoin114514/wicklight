@@ -2274,11 +2274,77 @@ export class Game {
   }
 
   reroll(): void {
+    // 只在升级面板里才算数：热键是从主循环喂进来的，而 R 在战场上没有别的意思，
+    // 不挡的话"战斗中随手按一下 R"会白白吃掉一次重掷（还会把三张卡悄悄换掉）。
+    if (this.state !== 'levelup') return;
     if (this.rerollsLeft <= 0) return;
     this.rerollsLeft -= 1;
     this.currentOffers = this.upgrades.generate(this.player, 3, this.rng);
     this.ui?.setOffers(this.currentOffers, this.rerollsLeft);
+    // ⚠ 换了牌就得重画。面板是按 `offers` 渲染的一张静态 DOM，而重掷是**唯一**一次
+    //   "面板还开着的时候换了牌"——只更新数据不重画，屏幕上留下的是上一把牌。
+    //   那不是"看着旧、点下去还是对的"：卡片点下去时按**屏幕上那个 id**去 `offers` 里找，
+    //   找不到就 `return`（什么都不做）。于是整块面板看起来好好的，三张卡却可能一张都点不动，
+    //   重掷按钮上写的还是旧数字——只能刷页面。真实浏览器里量到过（重掷一次就撞上，
+    //   见 `tools/playtest.mjs` 里"重掷之后面板上的牌就是手里的牌"那几条）。
+    this.ui?.showScreen('levelup');
     this.audio.play('ui');
+  }
+
+  /**
+   * 面板热键的总入口：主循环每帧把这一帧按下的键喂进来，规则全在这儿。
+   *
+   * 为什么不是主循环自己 `switch (state)`：那样"哪块面板认哪几个键"就只活在 main.ts 里，
+   * 而 main.ts 没有任何测试能碰到（软件测试跑的是主循环之外的那条路）——这条规则会长歪。
+   * 摊到这儿之后，无头测试可以直接调它，主循环只负责把键盘读出来交过去。
+   *
+   * `confirm`（回车）不在这里：它按下去是**换一块面板**，那件事归界面自己交代
+   * （`UIManager.panelPrimary`），不属于"这一局的状态"。
+   */
+  panelHotkeys(pick: number, reroll: boolean): void {
+    if (pick) {
+      if (this.state === 'levelup') this.pickOffer(pick - 1);
+      else if (this.state === 'shrine') this.pickShrine(pick - 1);
+      else if (this.state === 'shop') this.pickShopItem(pick - 1);
+    }
+    if (reroll) {
+      if (this.state === 'levelup') this.reroll();
+      else if (this.state === 'shop') this.rerollShop();
+    }
+  }
+
+  /**
+   * 面板热键：直接走**第几张**（0 起）。
+   *
+   * 三个入口（升级卡 / 祭坛供物 / 商店商品）长得一样，是因为它们回答的是同一个问题：
+   * "这块面板上的第 n 个按钮是哪个"。做成三个方法而不是一个通用的"点第 n 个"，
+   * 是因为它们按下去之后走的路完全不同——一张卡改数值、一件供物换代价、一件商品花钱——
+   * 而每一条路都已经有一个名字了（`chooseUpgrade` / `chooseShrine` / `buyShop`），
+   * 这里只是把"第几张"翻译成那个名字，不复制任何规则。
+   *
+   * 返回真假：没选成（不在那块面板上 / 那个位置没有东西）就是假——测试要能分辨
+   * "热键按了但没用"和"热键根本没走到这"。
+   */
+  pickOffer(index: number): boolean {
+    if (this.state !== 'levelup') return false;
+    const offer = this.currentOffers[index];
+    if (!offer) return false;
+    this.chooseUpgrade(offer);
+    return true;
+  }
+
+  pickShrine(index: number): boolean {
+    if (this.state !== 'shrine') return false;
+    const offer = this.shrineOffers[index];
+    if (!offer) return false;
+    this.chooseShrine(offer.id);
+    return true;
+  }
+
+  pickShopItem(index: number): boolean {
+    if (this.state !== 'shop') return false;
+    if (!this.shopItems[index]) return false;
+    return this.buyShop(index);
   }
 
   private resolveProjectiles(dt: number): void {
@@ -3495,6 +3561,7 @@ export class Game {
   }
 
   rerollShop(): void {
+    if (this.state !== 'shop') return;
     if (this.gold < 8) return;
     this.gold -= 8;
     this.rollShop();

@@ -979,6 +979,13 @@ body.is-touch .hud__pause { display: grid; }
 .dmg-row__val { color: rgba(240, 236, 226, 0.92); font-variant-numeric: tabular-nums; }
 .dmg-row__val u { text-decoration: none; margin-left: 7px; font-size: 11px; color: rgba(226, 220, 208, 0.5); }
 
+/* 面板热键（升级卡 / 祭坛 / 商店上的那枚数字）：见 InputState 里"面板热键"那一段。
+   条 `.key` 那套老规矩照旧——触屏上 `body.is-touch .key` 会把它整片藏掉。
+   顺序上它排在面板自己的边距之前，所以把左边那道 6px 边距收掉，让它贴着卡片左上角。 */
+/* 右边留一道，而不是给"后面那个元素"加左边距：紧跟它的常常是一段**文本节点**
+   （商店价格"70 🪙"），而 `+ *` 选不中文本节点——不留这道，价格会读成"170"。 */
+.hotkey { margin-left: 0; margin-right: 6px; }
+
 /* 比祭坛更冷、更沉，卡片先把"回报"亮出来，代价写在下面 */
 .curse-grid {
   display: grid;

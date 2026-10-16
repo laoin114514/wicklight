@@ -119,6 +119,11 @@ function boot(): void {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
       }
       if (st.sheet) game.toggleSheet();
+      // 面板热键（见 InputState 上那一整段）：三块会打断战斗的面板——升级卡 / 祭坛 / 商店——
+      // 都能用键盘走完，手不必从 WASD 上拿开。规则全在 `Game.panelHotkeys` 里，
+      // 这里只把这一帧的键盘状态交过去；回车那一下换的是面板，归界面管。
+      game.panelHotkeys(st.pick, st.reroll);
+      if (st.confirm) ui.panelPrimary();
       game.update(dt);
       // 战斗里 HUD 整块跟着走；其他界面（暂停 / 结算 / 菜单）也要推卡片与公告的计时，
       // 不然"按了返回键 · 已暂停"这种排队上屏的消息会一直等在那里
