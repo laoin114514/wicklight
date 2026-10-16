@@ -516,6 +516,15 @@ export class Game {
   /** 本局倒了几瓢「倾灯」、累计倒掉多少桶油（结算用） */
   pourCount = 0;
   pourSpent = 0;
+  /**
+   * 最近这一瓢花掉的那点油（占油桶的比例），以及「拾油」在这一瓢里已经收回来多少。
+   *
+   * 为什么这两个数要留在 Game 上（而不是算在玩家身上）：`emberCap` 那条封顶是**按瓢**的
+   * （见 data/pour.ts 里那一段的算术），而"这一瓢"这件事只有倒出去的那一下知道。
+   * 每倒一瓢就把这两个数清一次，于是"一瓢最多收回它代价的六成"是一句可以直读的话。
+   */
+  pourCastCost = 0;
+  pourEmberGained = 0;
   lampCd = 0;
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
@@ -703,6 +712,8 @@ export class Game {
     this.vortexPayoff = 0;
     this.pourCount = 0;
     this.pourSpent = 0;
+    this.pourCastCost = 0;
+    this.pourEmberGained = 0;
     // 没被教过就往开局 14 秒后插一张卡：躲开开局的关卡提示卡，
     // 也别在最乱的那两秒讲新东西
     this.lampTipIn = this.save.tips?.includes('verb:lamp') ? -1 : 14;
@@ -1636,6 +1647,9 @@ export class Game {
       pour: (cost) => {
         this.pourCount += 1;
         this.pourSpent += cost;
+        // 新的一瓢：代价写下来，「拾油」的账从头开始（"一瓢最多收回代价的几成"是它的规矩）
+        this.pourCastCost = cost;
+        this.pourEmberGained = 0;
       },
     };
   }
@@ -2059,10 +2073,13 @@ export class Game {
     // 只在烧着的时候生效：它不是一件无条件的护甲，而是"贴着打"这套牌的兜底。
     // 「炭衣」同理，但它那几秒是"你自己点出来的"：爆出去的火挡在身前（ashGuard 是 1 或减伤后的倍率）。
     // 「遮光」：拨着芯时更难被打中——最危险的那一段（贴上去打）正好也是你最小的时候。
+    // 「烬护」：倒完那一瓢之后你的灯正好最暗（代价就写在那儿），所以这一件买的是
+    // **站在自己倒的火里**时的那层掩护——它是一个位置换来的，不是白给的一层甲。
     const guard =
       (this.player.blazing ? 1 - this.player.flags.blazeGuard : 1) *
       this.player.ashGuard *
-      (this.player.dimmed ? 1 - this.player.flags.wickGuard : 1);
+      (this.player.dimmed ? 1 - this.player.flags.wickGuard : 1) *
+      (this.player.inOilFire ? 1 - this.player.flags.pourShelter : 1);
     const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult * guard;
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;
@@ -2082,6 +2099,24 @@ export class Game {
   }
 
   private onEnemyDeath(e: Enemy): void {
+    // 「拾油」（遗物）：**死在你倒出来的那片油火里**的怪，把那口油还给你一点。
+    // 判据是"死的时候身上还带着你倒的那层火"（`burnTimer > 0`，来源认 `kind: 'pour'`）。
+    // ⚠ 来源是从武器表里**认**出来的（`WEAPON_MAP[...].kind`），不是手抄的 id 清单——
+    //   写两个字面量的话，以后再加一件"倒油"的武器，这一件就会对它静默失效。
+    // 单只回油很少（0.5%），真正有力量的是"往人堆里倒"：所以封顶是**按瓢**的
+    // （一瓢最多收回它代价的六成，见 POUR.emberCap），不然一片 30 只的怪群就是一口油井。
+    const ember = this.player.flags.pourEmber;
+    const burnSource = e.burnSource;
+    if (ember > 0 && e.burnTimer > 0 && burnSource && WEAPON_MAP[burnSource]?.kind === 'pour') {
+      const p = this.player;
+      const cap = p.oilMax * POUR.emberCap * this.pourCastCost;
+      const gain = Math.max(0, Math.min(p.oilMax * ember, cap - this.pourEmberGained));
+      if (gain > 0) {
+        this.pourEmberGained += gain;
+        p.oil = Math.min(p.oilMax, p.oil + gain);
+        this.floaters.label(e.x, e.y - e.radius - 10, `+${(gain * 100).toFixed(1)}% 油`, '#ffd24e', 12);
+      }
+    }
     this.kills += 1;
     this.totalKills += 1;
     this.save.killsTotal += 1;
@@ -2931,7 +2966,17 @@ export class Game {
     let oil = 1;
     let light = 1;
     let frost = false;
+    // 「烬护」（遗物）问的是"倒完之后那几步走在哪儿"：**你自己倒出来的**那片油火
+    // （`ignites`）站进去就是一处掩体。别的火（爆裂菇的词缀、连珠伏灯留下的那层）不算——
+    // 那些本来就烧你，躲进去不是"掩体"而是"挨打"。
+    let shelter = false;
     for (const g of this.grounds) {
+      if (g.ignites) {
+        const gx = this.player.x - g.x;
+        const gy = this.player.y - g.y;
+        if (gx * gx + gy * gy <= g.r * g.r) shelter = true;
+        continue;
+      }
       if (g.kind !== 'mud' && g.kind !== 'frost') continue;
       if (g.kind === 'mud') {
         const dx = this.player.x - g.x;
@@ -2952,6 +2997,7 @@ export class Game {
     this.player.terrainSlow = slow;
     this.player.terrainOil = oil;
     this.player.terrainLight = light;
+    this.player.inOilFire = shelter;
     if (slow < 1) {
       this.mudTime += dt;
       if (this.mudTime >= 20) this.achievements.unlock('mirewalker');
@@ -2983,7 +3029,9 @@ export class Game {
           g.igniteIn = POUR.igniteEvery;
           this.enemies.forEach((e) => {
             if ((e.x - g.x) ** 2 + (e.y - g.y) ** 2 > (g.r + e.radius) ** 2) return;
-            this.enemies.applyBurn(e, POUR.igniteStacks, g.source ?? null);
+            // 「浇油」（遗物）：一次多续一层。12 层是 `applyBurn` 自己的上限，
+            // 所以这一件买到的不是"更高"，而是"更快到顶"（1 层要 7.2 秒，2 层 3.6 秒到 12 层）。
+            this.enemies.applyBurn(e, POUR.igniteStacks + this.player.flags.pourStacks, g.source ?? null);
           });
         }
         // 它也是一片光：油烧起来比别的火亮，暗幕里那圈火自己就是路标

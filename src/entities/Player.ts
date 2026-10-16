@@ -106,6 +106,16 @@ export interface PlayerFlags {
   auraSiphon: number;
   /** 「烟熏」（遗物）：被烫到的敌人减速多少 */
   auraSnare: number;
+  /** 「浇油」（遗物）：倾灯那片火每次续的灼烧层数加成 */
+  pourStacks: number;
+  /** 「大瓢」（遗物）：倾灯火海的半径加成 */
+  pourSpread: number;
+  /** 「大瓢」（遗物）：倾灯火海多烧几秒 */
+  pourLife: number;
+  /** 「拾油」（遗物）：死在你油火里的怪回多少油 */
+  pourEmber: number;
+  /** 「烬护」（遗物）：站在你自己的油火里的减伤 */
+  pourShelter: number;
 }
 
 interface OrbitState {
@@ -126,7 +136,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -218,6 +228,13 @@ export class Player {
   private hitFlash = 0;
   damageMult = 1;
   oilDecayPerSec = 0.018;
+  /**
+   * 脚下有没有**自己倒出来的**那片油火（倾灯）：每帧由 Game 重新写入。
+   * 它只服务一件事——「烬护」（遗物）的减伤要认"站在火里"这个状态。
+   * 和 `terrainSlow` 同一个写法：让 Game 每帧重算，而不是让地面自己去改玩家的属性
+   * （那样一个技能就可能把玩家的数改得收不回来）。
+   */
+  inOilFire = false;
   /** 地形减速（织雾者的滞行雾 / 寒潮的霜冻）：每帧由 Game 重新写入，1 = 不受影响 */
   terrainSlow = 1;
   /** 霜冻带来的额外灯油耗率（1 = 不受影响） */
@@ -269,7 +286,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -371,7 +388,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -456,6 +473,12 @@ export class Player {
     flags.auraCrowd += m.auraCrowd ?? 0;
     flags.auraSiphon += m.auraSiphon ?? 0;
     flags.auraSnare = Math.max(flags.auraSnare, m.auraSnare ?? 0);
+    // 「倾灯」这条线（v76）：前三个是"那一瓢本身"，直接相加；烬护是减伤，取最强的那一件。
+    flags.pourStacks += m.pourStacks ?? 0;
+    flags.pourSpread += m.pourSpread ?? 0;
+    flags.pourLife += m.pourLife ?? 0;
+    flags.pourEmber += m.pourEmber ?? 0;
+    flags.pourShelter = Math.max(flags.pourShelter, m.pourShelter ?? 0);
   }
 
   /** 当前持有某一族遗物的数量。 */
@@ -958,7 +981,9 @@ export class Player {
     return {
       angle: this.aimManual,
       away: st.range * this.aimFar,
-      pool: st.radius * POUR.fireSpread * spread,
+      // ⚠ 这一行必须跟着 `poolRadius` 一起改：标记画的圈和真落下来的那片火差一点点，
+      //   玩家就会按着标记站进火里、结果站在边沿上（「烬护」靠的就是"我在不在火里"）。
+      pool: st.radius * POUR.fireSpread * spread * (1 + this.flags.pourSpread),
       charge: Math.max(0, Math.min(1, Math.min(cdDone, oilDone))),
     };
   }
@@ -1223,8 +1248,10 @@ export class Player {
             burn: st.burn,
             maxLife: (st.range * far) / st.speed,
             weaponId: id,
-            poolRadius: st.radius * POUR.fireSpread,
-            poolLife: POUR.fireLife,
+            // 「大瓢」（遗物）：一瓢铺得更开、也留得更久。`pourAim.pool` 用的是**同一串乘法**
+            // （下面那个 getter），标记画的圈必须和真落下来的那片火一样大。
+            poolRadius: st.radius * POUR.fireSpread * (1 + this.flags.pourSpread),
+            poolLife: POUR.fireLife + this.flags.pourLife,
           });
         }
         ctx.audio('pour');

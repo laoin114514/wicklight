@@ -14,6 +14,7 @@ import { CURSE_MAP } from '../data/curses';
 import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { AURA } from '../data/aura';
+import { POUR } from '../data/pour';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -565,6 +566,10 @@ export class UIManager implements UIHost {
    * 却不知道**暗下来意味着多少**（索敌范围就是跟着半径走的，怪站在 340px 外就完全打不到）。
    * 拨芯把"烧多旺"变成玩家自己拨的一格之后，这三个数就成了一笔**要自己算的账**：
    * 拨小 65% 油耗、代价是半径与火力一起缩——把两边并排写出来，这笔账才看得见。
+   *
+   * v75 / v76 起，围绕这桶油的三族遗物（拨芯 / 燎灯 / 倾灯）都写在这一栏里。
+   * 为什么不是各开一栏：它们买的是**同一个东西**的三个方向——收着烧、照着烧、泼出去烧——
+   * 玩家的决定本来就是"我这桶油怎么用"。分成三栏等于把一次取舍拆成三张清单给他做。
    */
   private lightBlock(): string {
     const p = this.game.player;
@@ -591,12 +596,23 @@ export class UIManager implements UIHost {
     }
     if (f.auraSiphon) auraFam.push(`吮灯 每烫到一只回油 ${(f.auraSiphon * 100).toFixed(2)}%`);
     if (f.auraSnare) auraFam.push(`烟熏 被烫到的慢 ${Math.round(f.auraSnare * 100)}% · ${AURA.snareSpan}s`);
+    // 「倾灯」这条线上的四件（v76，一族一件）：也住在这里，理由和上面那条一样——
+    // 三族买的全是**同一桶油**的三个方向（拨芯：收着烧 · 漫光：照着烧 · 倾灯：泼出去烧），
+    // 摆在同一栏里，那笔账才是"我这桶油到底怎么用"，而不是三张互不相干的清单。
+    const pourFam: string[] = [];
+    if (f.pourStacks) pourFam.push(`浇油 火每 ${POUR.igniteEvery}s 续 ${POUR.igniteStacks + f.pourStacks} 层`);
+    if (f.pourSpread || f.pourLife) {
+      pourFam.push(`大瓢 火海 +${Math.round(f.pourSpread * 100)}% · 多烧 ${f.pourLife.toFixed(1)}s`);
+    }
+    if (f.pourEmber) pourFam.push(`拾油 每只回 ${(f.pourEmber * 100).toFixed(2)}%（一瓢封顶 ${Math.round(POUR.emberCap * 100)}%）`);
+    if (f.pourShelter) pourFam.push(`烬护 自己火里减伤 ${Math.round(f.pourShelter * 100)}%`);
     const walk = p.wickTime >= 1 ? ` · 本局拨芯 ${Math.round(p.wickTime)}s` : '';
     return `<div class="lo-bounty lo-light ${dim ? 'is-dim' : ''}" style="--c:${WICK.color}">
         <b>${dim ? '🌒 拨芯中 · 微光' : '🔥 灯火全开'}</b>
         <span>灯火半径 ${Math.round(p.lightRadius)}px · 亮度 ×${p.brightness.toFixed(2)} · 火力 ×${p.damageScale.toFixed(2)}${walk}</span>
         ${family.length ? `<span>拨芯这套：${family.join(' · ')}</span>` : ''}
         ${auraFam.length ? `<span>燎灯这套：${auraFam.join(' · ')}</span>` : ''}
+        ${pourFam.length ? `<span>倾灯这套：${pourFam.join(' · ')}</span>` : ''}
         <span>${
           dim
             ? `灯油耗率 ×${WICK.oilMult} · 索敌跟着灯火一起变近 · 再按一下 C 拨回来`

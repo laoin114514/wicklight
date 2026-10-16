@@ -230,8 +230,9 @@ test('爆灯这条线：四件遗物各归一族、都进图鉴、价格与说�
   // v70 的「拨芯」四件也走同一条规矩，所以这个数是"每次加一族就一起加 1"
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  // ×v75：「燎灯」那四件（旺火 / 漫光 / 吮灯 / 烟熏）同样一族一件，于是现在是各 13 件
-  assert.deepEqual(counts, { flame: 13, lamp: 13, oil: 13, shade: 13 }, '四族应各 13 件');
+  // ×v75：「燎灯」那四件（旺火 / 漫光 / 吮灯 / 烟熏）同样一族一件，于是变成各 13 件；
+  //  ×v76：「倾灯」那四件（浇油 / 大瓢 / 拾油 / 烬护）再各补一件，于是现在是各 14 件。
+  assert.deepEqual(counts, { flame: 14, lamp: 14, oil: 14, shade: 14 }, '四族应各 14 件');
   // 装上也真的不炸：四件同时在身上，属性算得出来
   const p = game.player;
   p.relics.clear();

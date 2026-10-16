@@ -17,6 +17,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const RELIC_NAME = { wickveil: '遮光', wickember: '暗火', wickstride: '夜步', wickthrift: '守芯' };
 /** 「燎灯」这条线四件遗物的名字（v75，见 3a9c / 手机那段）。 */
 const AURA_RELIC_NAME = { auraflare: '旺火', auralantern: '漫光', aurasiphon: '吮灯', aurasmother: '烟熏' };
+/** 「倾灯」这条线四件遗物的名字（v76，见 3a9d / 手机那段）。 */
+const POUR_RELIC_NAME = { pourstoke: '浇油', pourladle: '大瓢', pourgather: '拾油', pourward: '烬护' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -1572,6 +1574,53 @@ async function main() {
     for (const id of ids) g.player.removeRelic(id);
     g.player.recomputeStats();
   }, auraFamIds);
+  await sleep(150);
+
+  // ── 3a9d. 「倾灯」这条线（四件遗物，v76）：把"把油泼出去"这笔账也读出来 ──
+  // 离线单测（tests/pourrelics.test.mjs）量的是四个数各自生效（火烧到顶快三倍、火海半径与时长、
+  // 死在你火里的怪回油并且**按瓢**封顶、站在自己火里少挨两成五）。
+  // 这里量的是**界面读不读得出来**：这一族和拨芯 / 燎灯那两族住在**同一栏**里（三族买的是同一桶油），
+  // 所以三族一起挂上时那一栏最长——窄屏 / 720p 上最容易出事的正是这一栏。
+  const pourFamIds = ['pourstoke', 'pourladle', 'pourgather', 'pourward'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, pourFamIds);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const pourFamText = await page.evaluate(() => document.querySelector('.lo-light')?.textContent ?? '');
+  const pourFamLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(pourFamLayout.hOverflow === 0, '加了倾灯那四件，总览仍没被撑出横向滚动', `hOverflow=${pourFamLayout.hOverflow}`);
+  expect(pourFamLayout.issues.length === 0, '带满四件倾灯遗物的构筑总览布局正常', pourFamLayout.issues.join('; '));
+  await page.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const pourFamLight = await page.evaluate(() => window.__PROBE__.layout('.lo-light'));
+  expect(pourFamLight.issues.length === 0, '「灯火」栏滚得进视野、也不越界', pourFamLight.issues.join('; '));
+  for (const bit of ['倾灯这套', '浇油', '每 0.6s 续 3 层', '大瓢', '多烧 1.2s', '拾油', '一瓢封顶 60%', '烬护', '自己火里减伤 25%']) {
+    expect(pourFamText.includes(bit), `「灯火」栏写出「${bit}」`, pourFamText.slice(-260));
+  }
+  expect(!/undefined|NaN/.test(pourFamText), '「灯火」栏没有缺字段', pourFamText);
+  await shot('03l3-pour-family');
+  const codexPourFam = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:pour');
+    return { text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    Object.values({ pourstoke: '浇油', pourladle: '大瓢', pourgather: '拾油', pourward: '烬护' }).every((n) =>
+      codexPourFam.text.includes(n),
+    ),
+    '图鉴的「倾灯」条目里点出了这四件遗物',
+    codexPourFam.text.slice(-200),
+  );
+  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.removeRelic(id);
+    g.player.recomputeStats();
+  }, pourFamIds);
   await sleep(150);
 
   // ── 3a-2. 「余烬风」：不动血，动油 ──
@@ -3321,17 +3370,19 @@ async function main() {
   expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
 
   // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
-  // （燎灯那四件，见 3a9c）。窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，
-  // 所以这里也量一次（和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
-  // 为了把"最坏情况"量出来，**两族八件全塞上**：窄屏上这一栏最长就是这样。
+  // （燎灯那四件），v76 是**第三**行（倾灯那四件）——三族买的是同一桶油，所以都住在这一栏里。
+  // 窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，所以这里也量一次
+  // （和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
+  // 为了把"最坏情况"量出来，**三族十二件全塞上**：窄屏上这一栏最长就是这样。
   const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
   const mAuraFamily = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
-  const mEight = [...mFamily, ...mAuraFamily];
+  const mPourFamily = ['pourstoke', 'pourladle', 'pourgather', 'pourward'];
+  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily];
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.addRelic(id);
     g.player.recomputeStats();
-  }, mEight);
+  }, mTwelve);
   await mobile.click('[data-act="sheet"]');
   await sleep(350);
   await mobile.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
@@ -3350,19 +3401,19 @@ async function main() {
   expect(mobileSheet.issues.length === 0, '手机横带上「灯火」栏不越界', mobileSheet.issues.join('; '));
   expect(mobileSheet.hOverflow === 0, '手机横带上总览没被撑出横向滚动', `hOverflow=${mobileSheet.hOverflow}`);
   expect(
-    mEight.every((id) => mobileSheet.text.includes({ ...RELIC_NAME, ...AURA_RELIC_NAME }[id])),
-    '手机上也把两族八件遗物连条件一起写出来了',
+    mTwelve.every((id) => mobileSheet.text.includes({ ...RELIC_NAME, ...AURA_RELIC_NAME, ...POUR_RELIC_NAME }[id])),
+    '手机上也把三族十二件遗物连条件一起写出来了',
     mobileSheet.text.slice(-200),
   );
   await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
   await mobile.click('[data-act="sheet-close"]');
   await sleep(300);
-  // 收尾：把塞进去的八件拿掉（后面的检查照旧）
+  // 收尾：把塞进去的十二件拿掉（后面的检查照旧）
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.relics.delete(id);
     g.player.recomputeStats();
-  }, mEight);
+  }, mTwelve);
 
   await mobile.click('[data-act="resume"]');
   await sleep(400);

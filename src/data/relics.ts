@@ -45,6 +45,16 @@ export interface RelicMods {
   auraSiphon?: number;
   /** 「燎灯」烫到的敌人减速多少（0.22 = 移速 -22%） */
   auraSnare?: number;
+  /** 「倾灯」那片火每次续的灼烧层数加成（1 = 每次 2 层） */
+  pourStacks?: number;
+  /** 「倾灯」火海半径加成（0.2 = +20%） */
+  pourSpread?: number;
+  /** 「倾灯」火海燃烧时长的加成（1.2 = 多烧 1.2 秒） */
+  pourLife?: number;
+  /** 「倾灯」死在你倒的那片油火里的敌人回多少油（占油桶比例，0.005 = 0.5%） */
+  pourEmber?: number;
+  /** 站在**你自己倒的**那片油火里时的减伤（0.25 = 少挨两成五） */
+  pourShelter?: number;
   /** 「灯焰高涨」期间的减伤（0.3 = 少挨三成） */
   blazeGuard?: number;
   /** 「爆灯」之后的短时伤害加成（0.35 = 那 4 秒里伤害 +35%） */
@@ -169,6 +179,22 @@ export const RELICS: RelicDef[] = [
   { id: 'auralantern', tribe: 'lamp', name: '漫光', blurb: '灯火半径 +10%（光罩得更宽），但灯油烧快 12%——多烧一点、照得更远。', icon: '🏮', color: '#ffe27a', rarity: 'rare', price: 80, mods: { lightSpread: 0.1, oilDecayMult: 0.12 } },
   { id: 'aurasiphon', tribe: 'oil', name: '吮灯', blurb: '「燎灯」每烫到一只敌人回 0.05% 灯油（一次最多 0.5%）——光里清场就是补油。', icon: '🕯️', color: '#ffd24e', rarity: 'common', price: 55, mods: { auraSiphon: 0.0005 } },
   { id: 'aurasmother', tribe: 'shade', name: '烟熏', blurb: '被「燎灯」烫到的敌人移速 -22%，持续 1.2 秒——光里的那块地方，他们走不开。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { auraSnare: 0.22 } },
+
+  // ── 「倾灯」这条线（v76）：把"把油泼出去"接成一套牌 ──
+  // 倾灯（v64）是这个游戏里第一件**花油**的武器：一瓢挖走油桶最上面那一层，换来一片只烧敌人的火海。
+  // 它把"油"从一条只能攒的曲线变成了可以花的弹药，可一件武器还不是打法——
+  // 要成为打法得回答四个问题（照「焰路」「爆灯」「燎灯」「拨芯」那四条线的规矩，**一族一件**）：
+  //   **那片火烧得够不够厚**（浇油，焰火族：每 0.6 秒续的灼烧从 1 层变 2 层）、
+  //   **这一瓢铺得够不够大、烧得够不够久**（大瓢，长明族：火海半径 +20%、多烧 1.2 秒）、
+  //   **泼出去的那口油能不能回来**（拾油，灯油族：死在你火里的怪回油，一瓢最多收回代价的六成）、
+  //   **倒完之后那几步该走在哪儿**（烬护，暗影族：站进你自己倒的油火里，受到伤害 -25%）。
+  // 四件凑起来才是"往里倒、站在里面打、烧完的油再倒一瓢"；单拿一件只是把这一件变好一点。
+  // 注意「拾油」必须**按瓢封顶**（见 data/pour.ts 里 emberCap 那一段）：
+  // 不封顶的话，一片 30 只的怪群会把它变成一口油井，"油"这个资源当场失效。
+  { id: 'pourstoke', tribe: 'flame', name: '浇油', blurb: '「倾灯」那片火每 0.6 秒续 3 层灼烧（原来 1 层）——火里的怪烧到最厚从 3.6 秒缩到 1.2 秒。', icon: '🥄', color: '#ff8a3c', rarity: 'rare', price: 70, mods: { pourStacks: 2 } },
+  { id: 'pourladle', tribe: 'lamp', name: '大瓢', blurb: '「倾灯」的火海半径 +20%、多烧 1.2 秒——一瓢铺得更开，也留得更久。', icon: '🫗', color: '#ffe27a', rarity: 'rare', price: 75, mods: { pourSpread: 0.2, pourLife: 1.2 } },
+  { id: 'pourgather', tribe: 'oil', name: '拾油', blurb: '死在你倒的那片油火里的敌人回 0.5% 灯油；一瓢最多收回它代价的六成——收得回来，但收不回本。', icon: '🪣', color: '#ffd24e', rarity: 'common', price: 55, mods: { pourEmber: 0.005 } },
+  { id: 'pourward', tribe: 'shade', name: '烬护', blurb: '站在你自己倒的油火里时受到伤害 -25%——倒完那几步，火里就是掩体。', icon: '🏕️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { pourShelter: 0.25 } },
 
   // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
   // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。
