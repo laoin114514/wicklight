@@ -70,6 +70,8 @@ export class HUD implements HUDHost {
   private dashBtn: HTMLElement | null = null;
   private novaBtn: HTMLElement | null = null;
   private lampBtn: HTMLElement | null = null;
+  /** 触屏的「拨芯」按钮：它是**开关**（按一下翻一格），所以要记住上一次画的是哪一格 */
+  private wickBtn: HTMLElement | null = null;
   private lastCd = new WeakMap<HTMLElement, string>();
   private dashFiring = false;
   /** 「你按的那一下记下了」：冷却还没转完、但这一下已经进了按下缓冲（v65），按钮上要说出来 */
@@ -77,6 +79,8 @@ export class HUD implements HUDHost {
   private novaBuffered = false;
   private lampEmpty = false;
   private novaCharged = false;
+  /** 上一帧拨芯按钮画的是不是"亮着"（只在真的变了才碰 DOM） */
+  private wickOn = false;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -87,6 +91,7 @@ export class HUD implements HUDHost {
       this.dashBtn = document.querySelector('.touch-btn--dash');
       this.novaBtn = document.querySelector('.touch-btn--nova');
       this.lampBtn = document.querySelector('.touch-btn--lamp');
+      this.wickBtn = document.querySelector('.touch-btn--wick');
     }
   }
 
@@ -96,7 +101,7 @@ export class HUD implements HUDHost {
     hud.innerHTML = `
       <div class="hud__topleft">
         <div class="bar bar--hp"><i></i><span class="bar__label">生命</span></div>
-        <div class="bar bar--oil"><i></i><span class="bar__label">灯油</span></div>
+        <div class="bar bar--oil"><i></i><span class="bar__label">灯油</span><span class="bar__wick">拨芯</span></div>
         <div class="bar bar--xp"><i></i><span class="bar__label">经验</span></div>
         <div class="hud__level">Lv <b>1</b></div>
       </div>
@@ -121,7 +126,7 @@ export class HUD implements HUDHost {
       <div class="hud__curse js-curse"></div>
       <div class="hud__bounty js-bounty"></div>
       <div class="hud__pyre js-pyre"></div>
-      <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · E 分灯 · 自动开火 · Esc 暂停</div>
+      <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · E 分灯 · C 拨芯 · 自动开火 · Esc 暂停</div>
     `;
     this.root.appendChild(hud);
     this.hudEl = hud;
@@ -823,6 +828,12 @@ export class HUD implements HUDHost {
       const hasPour = g.player.weapons.has('pour') || g.player.weapons.has('pour_tide');
       if (hasPour !== oilBar.classList.contains('has-pour')) oilBar.classList.toggle('has-pour', hasPour);
       if (hasPour) oilBar.style.setProperty('--pour-floor', `${(POUR.minOil * 100).toFixed(1)}%`);
+      // 「拨芯」：灯芯拨小了，油条上挂一枚冷色的牌子。
+      // 为什么挂在油条上：它省的是**这一条**（油），读到它的地方就该是油本身。
+      // 门槛用 `wick > 0.35` 而不是 `wickOn`：牌子和画面得几乎同时对得上——
+      // 按下的那一瞬间火其实还没矮下去，牌子却已经挂上了的话，玩家会以为游戏卡了。
+      const dimmed = g.player.wick > 0.35;
+      if (dimmed !== oilBar.classList.contains('is-dim')) oilBar.classList.toggle('is-dim', dimmed);
     }
 
   }
@@ -835,8 +846,18 @@ export class HUD implements HUDHost {
    * 分档写 style：60fps 下每帧写会让浏览器反复排队样式重算，1/32 档在小圆上看不出来。
    */
   private updateTouchButtons(): void {
-    if (!this.dashBtn && !this.novaBtn && !this.lampBtn) return;
+    if (!this.dashBtn && !this.novaBtn && !this.lampBtn && !this.wickBtn) return;
     const p = this.game.player;
+    if (this.wickBtn) {
+      // 拨芯按钮不画冷却圈（它没有冷却），它要说明的是**现在是不是拨着**——
+      // 一枚按钮同时是"开关"和"指示灯"。手机上光看画面很难判断"火矮下去"是拨小了
+      // 还是油快烧完了，按钮亮着的那一下把这件事说清楚。
+      const on = p.wickOn;
+      if (on !== this.wickOn) {
+        this.wickOn = on;
+        this.wickBtn.classList.toggle('is-active', on);
+      }
+    }
     if (this.lampBtn) {
       // 分灯不算"按住"，它只有"能不能按"：冷却走一圈，油不够就暗下去
       this.cdRing(this.lampBtn, this.game.lampCdFrac);

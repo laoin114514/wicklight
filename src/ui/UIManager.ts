@@ -12,6 +12,7 @@ import { buildDailyPlan, dailyLabel } from '../systems/DailySystem';
 import { BOUNTY_MAP } from '../data/bounties';
 import { CURSE_MAP } from '../data/curses';
 import { GRAZE } from '../data/graze';
+import { WICK } from '../data/wick';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -535,6 +536,8 @@ export class UIManager implements UIHost {
             ${relics || '<div class="lo-empty">还没有遗物</div>'}
             <h4>灯火共鸣</h4>
             ${tribeRows}
+            <h4>灯火</h4>
+            ${this.lightBlock()}
             <h4>夜咒</h4>
             ${curse}
             <h4>悬赏</h4>
@@ -548,6 +551,29 @@ export class UIManager implements UIHost {
       </div>
     `);
     this.on('[data-act="sheet-close"]', () => this.game.toggleSheet());
+  }
+
+  /**
+   * 构筑总览里的「灯火」栏：半径 / 亮度 / 火力这三个数，以及拨芯现在开着没有。
+   *
+   * 为什么要单独放一栏：这三个数从前一个都不在界面上——玩家只知道"灯亮了 / 灯暗了"，
+   * 却不知道**暗下来意味着多少**（索敌范围就是跟着半径走的，怪站在 340px 外就完全打不到）。
+   * 拨芯把"烧多旺"变成玩家自己拨的一格之后，这三个数就成了一笔**要自己算的账**：
+   * 拨小 65% 油耗、代价是半径与火力一起缩——把两边并排写出来，这笔账才看得见。
+   */
+  private lightBlock(): string {
+    const p = this.game.player;
+    const dim = p.wickOn;
+    const walk = p.wickTime >= 1 ? ` · 本局拨芯 ${Math.round(p.wickTime)}s` : '';
+    return `<div class="lo-bounty lo-light ${dim ? 'is-dim' : ''}" style="--c:${WICK.color}">
+        <b>${dim ? '🌒 拨芯中 · 微光' : '🔥 灯火全开'}</b>
+        <span>灯火半径 ${Math.round(p.lightRadius)}px · 亮度 ×${p.brightness.toFixed(2)} · 火力 ×${p.damageScale.toFixed(2)}${walk}</span>
+        <span>${
+          dim
+            ? `灯油耗率 ×${WICK.oilMult} · 索敌跟着灯火一起变近 · 再按一下 C 拨回来`
+            : `按 C 拨芯：看得近一半、打得轻三成五，换一桶油多烧近两倍（×${WICK.oilMult} 油耗）`
+        }</span>
+      </div>`;
   }
 
   /**

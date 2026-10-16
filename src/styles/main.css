@@ -675,6 +675,17 @@ body {
   transition: filter 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 .touch-btn--nova { background: rgba(70, 36, 10, 0.7); border-color: var(--amber); }
+/* 「拨芯」：四枚按钮里唯一一枚**开关**（按一下翻一格，手不必一直压着）。
+   冷色的底 + 亮着时整枚发青：它和另外三枚不是一类东西——那三枚是"按下去就有一发"，
+   这一枚改的是"接下来这段路怎么走"。火光在这个游戏里一律是暖的，
+   拨芯是唯一一件**把火压住**的事，所以它是唯一一枚冷色的按钮。 */
+.touch-btn--wick { background: rgba(18, 24, 42, 0.72); border-color: rgba(143, 167, 255, 0.45); }
+.touch-btn--wick.is-active {
+  background: rgba(24, 33, 58, 0.92);
+  border-color: #8fa7ff;
+  color: #dbe4ff;
+  box-shadow: 0 0 18px rgba(143, 167, 255, 0.45), inset 0 0 14px rgba(90, 120, 220, 0.3);
+}
 /* 冷却圈：只在按钮最外那一圈上画（中间挖空，不糊住"冲刺 / 燃爆"两个字），
    进度由 HUD 每帧写进 `--cd`（0 = 可用，1 = 刚放完）。
    两半是分开画的：亮的那半是"已经转回来了"，暗的那半是"还差多少"。
@@ -1295,6 +1306,9 @@ body.is-touch .hud__wave { display: none; }
 .lo-bounty.is-done { opacity: 0.65; }
 
 .lo-graze { border-left-color: #ffb14e; }
+/* 灯火栏：拨着芯的时候整块冷下来——它和「掠影」那一栏的暖光正好是一对（一个把火压住、一个把火撩旺） */
+.lo-light b { font-variant-numeric: tabular-nums; }
+.lo-light.is-dim { background: color-mix(in srgb, #8fa7ff 12%, rgba(255, 255, 255, 0.04)); box-shadow: inset 0 0 18px rgba(143, 167, 255, 0.16); }
 .lo-graze b { color: var(--amber-bright); font-variant-numeric: tabular-nums; }
 /* 烧着的时候整块透出一层暖光：总览是翻一眼就关掉的界面，状态要能被撞见 */
 .lo-graze.is-blazing { background: color-mix(in srgb, #ffb14e 12%, rgba(255, 255, 255, 0.04)); box-shadow: inset 0 0 18px rgba(255, 177, 78, 0.16); }
@@ -2118,6 +2132,36 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   font-variant-numeric: tabular-nums;
 }
 .hud__level b { font-size: 16px; text-shadow: 0 0 14px rgba(255, 170, 60, 0.5); }
+/* 「拨芯」：灯芯拨小之后，油条上挂一枚冷色牌子，油条自己（连同它右端那点火星）也冷下来。
+   为什么挂在**油条**上：它省的就是这一条——一桶油从 55 秒变成 158 秒；
+   而它真正的代价在画面里（火矮下去、看得见的范围少一半）。一处说收益、一处给代价。
+   牌子用冷色：这个游戏里所有暖色都在讲"火在烧"，拨芯是唯一一件**把火压住**的事。 */
+.bar__wick {
+  position: absolute;
+  right: 7px;
+  top: 0;
+  line-height: 13px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #cddcff;
+  text-shadow: 0 0 6px rgba(120, 160, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.bar--oil.is-dim { border-color: rgba(143, 167, 255, 0.42); }
+.bar--oil.is-dim .bar__wick { opacity: 1; }
+.bar--oil.is-dim i {
+  background: linear-gradient(180deg, #9fb7e8, #4c66a8 45%, #243257);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 12px rgba(90, 120, 220, 0.35);
+}
+/* 拨小之后条尾那点火星不该还"呼哧呼哧"地烧（那是一盏旺火的记号） */
+.bar--oil.is-dim i::after {
+  animation: none;
+  opacity: 0.3;
+  background: radial-gradient(closest-side, rgba(206, 222, 255, 0.75), rgba(120, 150, 230, 0.25) 60%, rgba(90, 120, 220, 0));
+}
 
 /* 波次进度：一根在烧的灯芯 */
 .hud__wave {

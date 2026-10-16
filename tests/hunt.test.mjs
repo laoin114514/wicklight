@@ -207,6 +207,31 @@ test('循灯：保持距离的（喷糜者）在窗口里改奔玩家，窗口�
     `收尾时它必须一路走到贴上来（600px → ${closed.toFixed(0)}px）`);
 });
 
+test('循灯：速度是 0 的怪不许把坐标算成 NaN（台架里的假人 + 窗口开着）', async (t) => {
+  // 这一条是"离线台架"撞出来的：台架里那种"站着让你量"的假人 `speed = 0`，
+  // 而循灯那一支要拿"到场时间 × 自己的脚力"反过来算，于是 `want / e.speed` 就是 0/0。
+  // NaN 落到速度上，这只怪的坐标**同一帧**就变成 NaN，接着每一处几何判断都跟着是 NaN——
+  // 掠影那条账会被污染成 NaN（一直挂到结算），而"擦过去没挨打"这种断言也会莫名其妙地红。
+  // 台架里没人在乎一只假人站在哪儿，可这条 NaN 会顺着共享的那条链子爬进玩家的账本，
+  // 所以守卫要写在**规则自己**这里，而不是让每个台架各自小心。
+  const game = await open(t, 'zerospd');
+  const HUNT = HUNT_OF();
+  phase(game, 'clearing');
+  const decoy = statue(game, 'shade', 600, 0);
+  decoy.speed = 0; // 假人：原地站着，让台架量别的东西
+  // 再摆两只凑够"只剩最后几只"，把窗口打开
+  statue(game, 'shade', 560, 40).speed = 0;
+  statue(game, 'shade', 560, -40).speed = 0;
+  for (let i = 0; i < 30; i += 1) tick(game);
+  assert.equal(game.director.hunting, true, '窗口该是开着的（只剩最后 3 只，一波已经刷完）');
+  assert.ok(Number.isFinite(decoy.x) && Number.isFinite(decoy.y), `假人的坐标不该变成 NaN（实际 ${decoy.x}, ${decoy.y}）`);
+  assert.ok(Number.isFinite(decoy.vx) && Number.isFinite(decoy.vy), '速度也不该是 NaN');
+  assert.equal(decoy.huntSpeed, 1, '速度是 0 的怪保持"不加速"（它本来就走不动）');
+  // 顺带：掠影那条账也不该被污染（它读的就是这些坐标）
+  assert.ok(Number.isFinite(game.player.heat), `热度不该变成 NaN（实际 ${game.player.heat}）`);
+  assert.ok(HUNT.mult > 1, '这一条量的是"守卫生效"，规则本身还是那条加速规则');
+});
+
 test('循灯：窗口只报一次，而且余党照样得清掉（不许跳过这一波）', async (t) => {
   const game = await open(t, 'announce');
   let calls = 0;

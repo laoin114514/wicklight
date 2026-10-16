@@ -40,6 +40,7 @@ import { ACHIEVEMENT_MAP } from '../data/achievements';
 import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { GRAZE } from '../data/graze';
+import { WICK } from '../data/wick';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { POUR } from '../data/pour';
@@ -544,7 +545,7 @@ export class Game {
   private frameCooldowns = { hurt: 0 };
   private emberTimer = 0;
   private moteTimer = 0;
-  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, aim: false, aimX: 0, aimY: 0 };
+  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, dim: false, aim: false, aimX: 0, aimY: 0 };
   private startSeed = 1;
   /** 当前性能档位（掌上设备 / 桌面 × 画质），每帧开头刷新一次，全游戏只有这一处结论。 */
   profile: PerfProfile = perfProfile('high');
@@ -1006,6 +1007,13 @@ export class Game {
     // 等回到战场上再"自己"放下一盏灯。
     const lampPressed = this.inputSnapshot.lamp;
     this.inputSnapshot.lamp = false;
+    const wickPressed = this.inputSnapshot.dim;
+    this.inputSnapshot.dim = false;
+    // 拨芯是**状态**而不是这一帧的动作，所以在任何早退（顿帧 / 非战斗状态）之前就先翻掉：
+    // 玩家按下去了却"什么都没发生"，是这个游戏一直在避免的那种操作丢失。
+    // 反过来，"不在战斗中"这一条也得挡住——暂停 / 升级面板上按下的 C 不该攒着，
+    // 等回到战场上"自己"把灯拨小（和上面分灯那条注释是同一个道理）。
+    if (wickPressed && this.state === 'playing') this.toggleWick();
     this.time += dt;
     this.postfx.update(dt);
     this.floaters.update(dt);
@@ -2896,6 +2904,10 @@ export class Game {
       this.frostTime += dt;
       if (this.frostTime >= 6) this.achievements.unlock('frost_walker');
     }
+    // 拨芯：这条成就量的是**拨着芯**走了多久，不是"按过几次"——它想奖励的是那种
+    // "把火压住慢慢摸过去"的走法，蹭两下不算。累计那一步在 `Player.update` 里
+    // （只有真的拨着才算秒数），这里只管到线了发一条。
+    if (this.player.wickTime >= WICK.achieveSeconds) this.achievements.unlock('wickwalk');
   }
 
   private resolveGrounds(dt: number): void {
@@ -3027,6 +3039,43 @@ export class Game {
     const a = this.rng.angle();
     const d = this.rng.range(2, p.radius * 0.9);
     this.particles.ember(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7, '#ffd9a0');
+  }
+
+  /**
+   * 「拨芯」（`KeyC` / 手机右下角那枚按钮）：把灯芯拨小一格，或者拨回来。
+   *
+   * 它翻的是 `player.wickOn`，真正逐帧往下算的是 `Player.update` 里那一段
+   * （几个乘数怎么插值、为什么拨小快拨回来慢，都写在 `data/wick.ts`）。
+   * 这里只做三件"属于这一层"的事：翻开关、给玩家一句看得见的反馈、把它记进图鉴。
+   *
+   * 为什么飘字是必要的：拨芯改的是**画面**（火矮下去、光晕收进去），
+   * 可玩家按下键的那一瞬间低头看的是 HUD 或者怪——一个明确的"拨芯 · 微光"比"画面暗了一点"更结实。
+   * 两次飘字用两种颜色（冷蓝 / 暖黄），和火本身亮不亮是同一个语言。
+   */
+  private toggleWick(): void {
+    const p = this.player;
+    p.wickOn = !p.wickOn;
+    this.floaters.label(
+      p.x,
+      p.y - 34,
+      p.wickOn ? '拨芯 · 微光' : '拨芯 · 复明',
+      p.wickOn ? WICK.color : '#ffd24e',
+      15,
+    );
+    this.audio.play('ui');
+    this.codex.discover('mechanic', 'wick');
+    // 第一次拨小给一张说明卡。这个动作的收益与代价都不在"按下去的那一瞬"——
+    // 它按下去的瞬间只是画面暗了一下，真正省下来的油要过十几秒才看得见，
+    // 真正丢掉的东西（看得见的范围、索敌范围）更是要撞上一次才知道。
+    // 所以它和分灯 / 燃爆一样值得讲一次：一张卡换玩家知道自己在做什么。
+    if (p.wickOn) {
+      this.showTip(
+        'verb:wick',
+        '拨芯 · 把火压小',
+        '灯芯拨到底：看得近一半、打得轻三成五，换来的是一桶油多烧近两倍。' +
+          '赶路、绕开怪群的时候拨小，动手之前拨回来（再按一下 C / 再点一下右下角的「拨芯」）。',
+      );
+    }
   }
 
   /**
@@ -3786,12 +3835,15 @@ export class Game {
     nova: boolean,
     lamp = false,
     aim: { x: number; y: number } | null = null,
+    dim = false,
   ): void {
     this.inputSnapshot.moveX = moveX;
     this.inputSnapshot.moveY = moveY;
     this.inputSnapshot.dash = dash;
     this.inputSnapshot.nova = nova;
     if (lamp) this.inputSnapshot.lamp = true;
+    // 拨芯和分灯一样是"按下那一帧"的一次性输入，所以只在自己为真时写进去（不清零）。
+    if (dim) this.inputSnapshot.dim = true;
     // 手动瞄准（触屏）：方向 + 力度合成一个向量，传 null 就是"没在瞄"（自动瞄准照旧）
     this.inputSnapshot.aim = !!aim;
     this.inputSnapshot.aimX = aim?.x ?? 0;

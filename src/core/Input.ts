@@ -20,6 +20,10 @@ const KEYMAP: KeyMap = {
   KeyQ: 'nova',
   KeyJ: 'nova',
   KeyE: 'lamp',
+  // 拨芯（见 InputState.dim 与 data/wick.ts）：**按一下翻一格**，不是按住。
+  // 选 C 是为了左手不离开 WASD 也够得到，而且离 Q / E 那对"当前要决定的事"够远——
+  // 它是一个"这一段路我打算暗着走"的持续状态，不该跟"这一下要放什么"挤在一起。
+  KeyC: 'dim',
   Escape: 'pause',
   KeyP: 'pause',
   Tab: 'sheet',
@@ -71,7 +75,7 @@ export class Input {
   private held = new Set<string>();
   private pressedThisFrame = new Set<string>();
   private releasedThisFrame = new Set<string>();
-  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false, pick: 0, reroll: false, confirm: false };
+  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false, dim: false, pick: 0, reroll: false, confirm: false };
   pointer: PointerState = { x: 0, y: 0, active: false };
   private listeners: Array<() => void> = [];
   private enabled = true;
@@ -197,6 +201,7 @@ export class Input {
     s.pause = this.wasPressed('pause');
     s.sheet = this.wasPressed('sheet');
     s.lamp = this.wasPressed('lamp');
+    s.dim = this.wasPressed('dim');
     // 数字键折成一个数：下游只问"选了第几张"，不该看见四个布尔
     let pick = 0;
     for (let i = 1; i <= 4; i += 1) if (this.wasPressed(`pick${i}`)) pick = i;

@@ -36,6 +36,12 @@ export class TouchControls {
   private nova = false;
   /** 分灯是一次性动作（按下就放，不需要按住），所以只记"这一帧按过" */
   private lampQueued = false;
+  /**
+   * 拨芯：也是一次性动作（按一下翻一格），但翻完的那个状态**留在游戏里**——
+   * 这一枚按钮自己不记状态（"现在拨着没有"以 `player.wickOn` 为准，HUD 每帧照它画按钮），
+   * 这里只负责把"这一帧有人按过"这一个事实交出去。
+   */
+  private wickQueued = false;
   /** 手动瞄准：手指正按着的那一根（identifier），起点与当前方向（见 bindAim） */
   private aimId = -1;
   private aimOn = false;
@@ -104,6 +110,7 @@ export class TouchControls {
     this.bindButton('[data-action="dash"]', 'dash', 12);
     this.bindButton('[data-action="nova"]', 'nova', 22);
     this.bindLampButton('[data-action="lamp"]', 16);
+    this.bindWickButton('[data-action="wick"]', 10);
     this.bindAim();
   }
 
@@ -189,6 +196,28 @@ export class TouchControls {
     this.aimOn = false;
     this.aimX = 0;
     this.aimY = 0;
+  }
+
+  /**
+   * 拨芯按钮：和分灯一样是"按下就放"，但它翻的是一个**开关**。
+   * 震一下（10ms，比别的最轻）：这一下改的是接下来十几秒的走法，
+   * 手指该知道"它收下了"；可它又不是那三枚"按下去就有一发"的东西，所以不该震得像它们那么重。
+   */
+  private bindWickButton(selector: string, buzz: number): void {
+    const btn = this.root.querySelector(selector) as HTMLElement | null;
+    if (!btn) return;
+    const press = (e: TouchEvent) => {
+      this.wickQueued = true;
+      this.buzz(buzz);
+      e.preventDefault();
+    };
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') {
+        this.wickQueued = true;
+        this.buzz(buzz);
+      }
+    });
   }
 
   /**
@@ -307,6 +336,7 @@ export class TouchControls {
     dash: boolean;
     nova: boolean;
     lamp: boolean;
+    dim: boolean;
     aim: boolean;
     aimX: number;
     aimY: number;
@@ -322,6 +352,10 @@ export class TouchControls {
     if (this.lampQueued) {
       target.lamp = true;
       this.lampQueued = false;
+    }
+    if (this.wickQueued) {
+      target.dim = true;
+      this.wickQueued = false;
     }
   }
 }

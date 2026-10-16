@@ -13,6 +13,7 @@ import { LANTERNS } from '../data/lanterns';
 import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { GRAZE } from '../data/graze';
+import { WICK } from '../data/wick';
 import { HUNT } from '../data/hunt';
 import { MINE } from '../data/mines';
 import { POUR } from '../data/pour';
@@ -297,6 +298,26 @@ export function codexCatalog(): CodexEntry[] {
       ['停手之后', `${GRAZE.decayDelay} 秒才开始回落，每秒掉 ${GRAZE.decay} 点`],
     ],
     extra: `同一瞬间最多按 ${GRAZE.rateCap} 只怪的权重封顶——被三面围住已经很危险了，再多几只也只是同一件事。`,
+  });
+  // 拨芯：和掠影一样是"每时每刻都在发生、但界面上一句话讲不清"的东西——
+  // 它改的是四个数（光、亮、火、油），所以这一条把四个数并排写出来，玩家一眼看得到"这笔账"。
+  out.push({
+    kind: 'mechanic',
+    id: 'wick',
+    name: '拨芯',
+    blurb: '把灯芯拨小：看得近、打得轻，换一桶油多烧很久。灯火第一次由你决定烧多旺。',
+    color: WICK.color,
+    icon: '🌒',
+    rows: [
+      ['怎么用', '按 C（手机：右下角的「拨芯」）翻一格；再按一下拨回来'],
+      ['灯火半径', `×${WICK.lightMult}（满油 320px → 160px，脚下 ${WICK.minRadius}px 永远看得见）`],
+      ['亮度', `×${WICK.glowMult}（火真的变小、光晕收进去）`],
+      ['火力', `×${WICK.damageMult}（索敌距离本来就跟着灯火走，这里再压一道）`],
+      ['灯油耗率', `×${WICK.oilMult}（1.8%/秒 → 0.63%/秒：一桶油从 55 秒变成 158 秒）`],
+      ['拨小 / 拨回来', `${WICK.spanDown} 秒 / ${WICK.spanUp} 秒（躲要快、烧旺要慢）`],
+      ['不影响的', '地里的伏灯、地上的弃灯照旧亮着——拨的是你自己那根芯'],
+    ],
+    extra: '拨着芯硬打是明确亏的（火力与视野都缩），它的用处是"这一段路我打算暗着走过去"。',
   });
   out.push({
     kind: 'mechanic',

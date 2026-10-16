@@ -418,7 +418,11 @@ export class EnemySystem {
     e.huntSpeed = 1;
     if (hunt) {
       const want = Math.min(e.speed * (1 + (playerDist - HUNT.near) / HUNT.span), HUNT.ceiling);
-      e.huntSpeed = Math.max(1, Math.min(HUNT.mult, want / e.speed));
+      // ⚠ `e.speed` 有可能是 0（台架里那种"站着不动的假人"）：`0 / 0` 是 NaN，
+      // 而 NaN 一旦落到速度上，这只怪的坐标会在**同一帧**变成 NaN，接着它的每一处几何判断
+      // （掠影的距离、接触判定）都跟着是 NaN——掠影那条账会被一帧污染成 NaN 一直挂到结算上。
+      // 速度本来就是 0 的怪不该被"循灯"催着走，保持 1（不加速）就是它该有的样子。
+      e.huntSpeed = e.speed > 0 ? Math.max(1, Math.min(HUNT.mult, want / e.speed)) : 1;
       speedMul *= e.huntSpeed;
       // 只有真的在"赶路"的那几只冒火星：玩家得看得出它为什么突然快起来了
       if (e.huntSpeed > 1.001 && Math.random() < dt * 6) {

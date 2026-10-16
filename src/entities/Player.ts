@@ -6,6 +6,7 @@ import type { ParticleSystem } from './Particle';
 import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
 import { GRAZE } from '../data/graze';
+import { WICK } from '../data/wick';
 import { POUR } from '../data/pour';
 import { NOVA } from '../data/nova';
 
@@ -117,6 +118,18 @@ export class Player {
   pyreMods = { damageMult: 1, lightMult: 1 };
   brightness = 1;
   lightRadius = 300;
+  /**
+   * 「拨芯」（见 `data/wick.ts`）：`wickOn` 是这个开关本身（玩家按一下翻一格），
+   * `wick` 是这一帧"拧到哪儿了"（0 = 全开，1 = 拨到底）。
+   *
+   * 为什么要两个数：状态是一格一格的（开 / 关），可**画面**不该一格一格地跳——
+   * 灯芯被拨小是有过程的，几个乘数按 `wick` 插值，玩家看到的是"火矮下去"，
+   * 而不是"啪"地换了一张画面。速度差（拨小快、拨回来慢）写在 data/wick.ts 里。
+   */
+  wickOn = false;
+  wick = 0;
+  /** 本局拨着芯累计走了多少秒（成就 `wickwalk` 用）。 */
+  wickTime = 0;
   /** 局外解锁带来的灯火半径倍率（与灯台余温、地形各自独立） */
   baseLightMult = 1;
   /**
@@ -239,6 +252,9 @@ export class Player {
     this.addPassive(model.passive, 1);
     this.oil = 1;
     this.brightness = 1;
+    this.wickOn = false;
+    this.wick = 0;
+    this.wickTime = 0;
     this.terrainSlow = 1;
     this.terrainOil = 1;
     this.terrainLight = 1;
@@ -448,6 +464,9 @@ export class Player {
     if (this.novaBuffTimer > 0) s *= 1 + this.flags.novaBuff;
     if (this.overburnGlow > 0) s *= 1 + this.flags.overburnDamage;
     if (this.blazeTimer > 0) s *= 1 + GRAZE.blazeDamage;
+    // 「拨芯」压在最外一层：爆灯、灯焰高涨、低油增伤那些加成也一起跟着缩——
+    // 拨小的是**这一盏灯**，它打出去的一切都该按同一个比例小下去。
+    s *= 1 - (1 - WICK.damageMult) * this.wick;
     return s;
   }
 
@@ -570,6 +589,19 @@ export class Player {
       else this.orbit.hitCooldown.set(k, nv);
     }
 
+    // 「拨芯」：先把灯芯拧到位，再拿它去算油、光、火（见 data/wick.ts）。
+    // 两个速度不一样：拨小要立刻见效（危险来了先隐下去再想别的），拨回来慢一点。
+    const wickTarget = this.wickOn ? 1 : 0;
+    const wickSpan = wickTarget > this.wick ? WICK.spanDown : WICK.spanUp;
+    const wickStep = dt / wickSpan;
+    this.wick = clamp(this.wick + clamp(wickTarget - this.wick, -wickStep, wickStep), 0, 1);
+    if (this.wick > 0.5) this.wickTime += dt;
+    // 三个乘数都写成"从 1 插到那一头"：`wick = 0` 时它们**恰好是 1**，
+    // 也就是说没拨芯的时候，这一版和上一版逐位相同（不是"看着差不多"）。
+    const burnKeep = 1 - (1 - WICK.oilMult) * this.wick;
+    const glowKeep = 1 - (1 - WICK.glowMult) * this.wick;
+    const lightKeep = 1 - (1 - WICK.lightMult) * this.wick;
+
     // Oil decay / burning：灯焰高涨时火大，油也烧得快（见 data/graze.ts）
     this.oil = Math.max(
       0,
@@ -579,21 +611,25 @@ export class Player {
           this.curseOilMult *
           this.terrainOil *
           (this.blazeTimer > 0 ? GRAZE.blazeOil : 1) *
+          burnKeep *
           dt,
     );
     if (this.oil <= 0) {
       this.hp -= 3 * dt;
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
     }
-    this.brightness = Math.min(1.25, (0.35 + this.oilFrac * 0.65) * (this.blazeTimer > 0 ? 1.12 : 1));
+    this.brightness = Math.min(1.25, (0.35 + this.oilFrac * 0.65) * (this.blazeTimer > 0 ? 1.12 : 1)) * glowKeep;
     // 灯焰高涨会把火撩大：照得更远、也更亮——但"亮 = 引怪"是同一条规则，
     // 所以这一阵子的代价是实打实的：你会被更多东西看见。
-    this.lightRadius =
+    this.lightRadius = Math.max(
+      WICK.minRadius,
       (96 + this.oilFrac * 224) *
-      this.pyreMods.lightMult *
-      this.terrainLight *
-      this.baseLightMult *
-      (this.blazeTimer > 0 ? GRAZE.blazeLight : 1);
+        this.pyreMods.lightMult *
+        this.terrainLight *
+        this.baseLightMult *
+        (this.blazeTimer > 0 ? GRAZE.blazeLight : 1) *
+        lightKeep,
+    );
 
     // Movement
     let mvx = input.moveX;

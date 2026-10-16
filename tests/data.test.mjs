@@ -22,7 +22,7 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -172,6 +172,29 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(arrival.margin > 0 && arrival.margin < 120,
     `margin 是"灯外再留一小圈"，不是"再推远一大截"（实际 ${arrival.margin}）`);
   assert.ok(arrival.min + arrival.margin < arrival.max, '近端（地板 + 留白）要留得下远边界，不然带子会翻过来');
+
+  // ── 「拨芯」的调参表（v69）：这一张管着"把火压住"到底划不划算，
+  // 所以除了"都是正数"，还要钉住那四个乘数之间的**关系**——它们是一条账，
+  // 改任何一个而不管另外三个，这个动作就会变成"要么必按、要么永远别按"。
+  // （表里有一个 `color` 是配色不是数，单独跳过。）
+  const wick = data.wick;
+  assert.ok(wick, '构建产物应导出拨芯调参表');
+  for (const [k, v] of Object.entries(wick)) {
+    if (k === 'color') continue;
+    assert.equal(typeof v, 'number', `wick.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `wick.${k} 应当是正数（实际 ${v}）`);
+  }
+  for (const k of ['lightMult', 'glowMult', 'damageMult', 'oilMult']) {
+    assert.ok(wick[k] < 1, `拨到底的 ${k} 必须小于 1：拨芯要真的改变点什么才有这个动词（实际 ${wick[k]}）`);
+  }
+  // 省下来的油要明显大于削掉的伤害，否则这笔交换怎么算都亏；但又不能省到"零代价"。
+  assert.ok(wick.oilMult < wick.damageMult, '省下的油该比削掉的火力实在——不然这个动作没有理由存在');
+  assert.ok(wick.damageMult < 1 && wick.damageMult > 0.4, '火力是这一版的代价之一：削得动，但不该直接哑掉');
+  assert.ok(wick.lightMult >= 0.35 && wick.lightMult <= 0.6, '灯火半径砍掉四到六成：看得见的变化要一眼看出来');
+  assert.ok(wick.minRadius > 0 && wick.minRadius < 96, '半径地板要低于"油尽时那 96px"：它只是防瞎，不是白送一圈');
+  assert.ok(wick.spanDown < wick.spanUp, '拨小要快过拨回来（躲得及时、烧旺得慢）');
+  assert.ok(wick.spanDown >= 0.15 && wick.spanUp <= 0.8, '两个时长都该是"一眼看得出来在变"的那个量级（0.1 秒级 = 啪一下换画面）');
+  assert.ok(wick.achieveSeconds >= 30, '成就那条线不该是"顺手按两下就解了"');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

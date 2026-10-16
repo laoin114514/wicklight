@@ -307,6 +307,81 @@ async function main() {
   expect(lampState.oil < oilBeforeLamp, '分灯扣的是自己的灯油（油就是光）', `${oilBeforeLamp.toFixed(3)} → ${lampState.oil}`);
   expect(lampState.cd > 0 && lampState.ready === false, '分完灯要进冷却，冷却中不该报可用', JSON.stringify(lampState));
 
+  // ── 3a2b. 拨芯（C）：真按键 → 火真的矮下去（像素量出来）、油烧得更慢、油条挂牌子 ──
+  // 这一版第一次把"灯火烧多旺"交给玩家，而它的四个乘数住在代码的不同角落——
+  // 离线测试钉的是数，这里钉的是"这一条链子真的接上了"：键盘 → 主循环 → 玩家 → 画面。
+  const wickRead = () =>
+    page.evaluate(() => {
+      const p = window.__WICKLIGHT__.game.player;
+      return {
+        on: p.wickOn,
+        wick: +p.wick.toFixed(2),
+        r: Math.round(p.lightRadius),
+        bright: +p.brightness.toFixed(3),
+        chip: document.querySelector('.bar--oil')?.classList.contains('is-dim') ?? null,
+      };
+    });
+  const lit0 = await page.evaluate(() => window.__PROBE__.canvasStats());
+  const wick0 = await wickRead();
+  await page.keyboard.press('KeyC');
+  await sleep(650);
+  const lit1 = await page.evaluate(() => window.__PROBE__.canvasStats());
+  const wick1 = await wickRead();
+  expect(wick1.on === true && wick1.wick === 1, '按 C 拨芯：灯芯该拨到底', JSON.stringify(wick1));
+  expect(
+    Math.abs(wick1.r - wick0.r * 0.5) <= 2,
+    '拨芯把灯火半径砍掉一半（索敌范围也跟着缩）',
+    `半径 ${wick0.r} → ${wick1.r}`,
+  );
+  expect(wick1.bright < wick0.bright * 0.6, '亮度跟着掉（火是真的矮下去了）', `${wick0.bright} → ${wick1.bright}`);
+  expect(
+    lit1.litFrac < lit0.litFrac * 0.6,
+    '画面真的暗下去：被照亮的那一片少掉六成以上（这是这个动作真正的代价）',
+    `litFrac ${lit0.litFrac} → ${lit1.litFrac}，mean ${lit0.mean} → ${lit1.mean}`,
+  );
+  expect(wick1.chip === true, '灯油条上挂起「拨芯」的牌子', JSON.stringify(wick1));
+  await shot('03j-wick');
+
+  // 拨回来：火要真的回到原来那个量级。
+  // ⚠ 这里不能拿"半径 == 拨芯之前那个数"去比：这几秒钟里油一直在烧，灯火半径本来就跟着油在掉
+  //   （320px → 160px 与 300px → 150px 都是"拨掉一半"）。要比的是**拨芯消掉的那一半回来了**。
+  await page.keyboard.press('KeyC');
+  await sleep(750);
+  const wickBack = await wickRead();
+  expect(
+    wickBack.on === false && wickBack.wick === 0 && wickBack.r > wick1.r * 1.7 && wickBack.bright > wick1.bright * 1.7,
+    '再按一下拨回来：灯火回到原样（半径与亮度都回到没拨的那个量级）',
+    JSON.stringify(wickBack) + ` 拨芯时 ${JSON.stringify(wick1)}`,
+  );
+  expect(wickBack.chip === false, '油条上的「拨芯」牌子收起来', JSON.stringify(wickBack));
+
+  // 油耗：同一个人、同样站着不动 1 秒，拨着芯烧的油该只有三成五。
+  // 先把场上的东西清掉再量：捡到一滴油都会让这 1 秒的读数失真（这一条量的是"烧掉多少"）。
+  const burnOf = async () => {
+    await page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      g.enemies.clear();
+      g.pickups.clear();
+      g.player.oil = 0.6;
+    });
+    const a = await page.evaluate(() => window.__WICKLIGHT__.game.player.oil);
+    await sleep(1000);
+    const b = await page.evaluate(() => window.__WICKLIGHT__.game.player.oil);
+    return a - b;
+  };
+  const burnFull = await burnOf();
+  await page.keyboard.press('KeyC');
+  await sleep(650);
+  const burnDim = await burnOf();
+  const burnRatio = burnDim / burnFull;
+  expect(
+    Math.abs(burnRatio - 0.35) < 0.08,
+    '拨着芯每秒烧掉的油是原来的三成五（一桶油从 55 秒变成 158 秒）',
+    `实测 ${burnRatio.toFixed(3)}（${burnDim.toFixed(4)} / ${burnFull.toFixed(4)}）`,
+  );
+  await page.keyboard.press('KeyC'); // 拨回来，后面的检查照旧
+  await sleep(650);
+
   // ── 3a3. 掠影：贴着危险擦过去算数、不挨打，脚边那圈符文真的画出来了 ──
   // 这一版新加的核心规则，所以用真键盘 + 真像素验一遍，而不是只跑离线测试。
   /**
@@ -2563,6 +2638,42 @@ async function main() {
     '手机上点「分灯」真的放得下一盏灯（触摸路径不是摆设）',
   );
   await mobile.screenshot({ path: join(SHOTS, '17-mobile-lamp.png') });
+
+  // 手机上那**第四**枚圆按钮「拨芯」：它是四枚里唯一的开关，所以除了"点得中、不压芯片"，
+  // 还要真的按下一次、看到那个开关翻过去（触摸路径同样不能是摆设）。
+  const wickBtn = await mobile.evaluate(() => {
+    const el = document.querySelector('.touch-btn--wick');
+    const b = el.getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2, w: Math.round(b.width), h: Math.round(b.height) };
+  });
+  expect(wickBtn.w >= 48 && wickBtn.h >= 48, '拨芯按钮够大（拇指点得中）', JSON.stringify(wickBtn));
+  const wickBtnLayout = await mobile.evaluate(() => window.__PROBE__.layout('.touch-btn--wick'));
+  expect(wickBtnLayout.issues.length === 0, '拨芯按钮布局正常', wickBtnLayout.issues.join('; '));
+  const wickClash = await mobile.evaluate(() => [
+    ...window.__PROBE__.overlaps('.touch-btn--wick', '.touch-btn--lamp'),
+    ...window.__PROBE__.overlaps('.touch-btn--wick', '#touch-stick'),
+    ...window.__PROBE__.overlaps('.touch-btn--wick', '.hud__combo'),
+    ...window.__PROBE__.overlaps('.touch-btn--wick', '.hud__pyre'),
+    ...window.__PROBE__.overlaps('.touch-btn--wick', '.hud__bounty'),
+  ]);
+  expect(wickClash.length === 0, '拨芯按钮不压摇杆 / 别的按钮 / 底部连杀 / 右侧芯片', wickClash.join('; '));
+  const wickBefore = await mobile.evaluate(() => window.__WICKLIGHT__.game.player.wickOn);
+  await mobile.touchscreen.tap(wickBtn.x, wickBtn.y);
+  await sleep(400);
+  const wickMobile = await mobile.evaluate(() => {
+    const p = window.__WICKLIGHT__.game.player;
+    return {
+      on: p.wickOn,
+      on2: document.querySelector('.touch-btn--wick')?.classList.contains('is-active') ?? null,
+      chip: document.querySelector('.bar--oil')?.classList.contains('is-dim') ?? null,
+    };
+  });
+  expect(wickMobile.on === !wickBefore, '手机上点「拨芯」真的把开关翻过去了（触摸路径不是摆设）', JSON.stringify(wickMobile));
+  expect(wickMobile.on2 === true, '拨芯按钮亮起来（它同时是开关和指示灯）', JSON.stringify(wickMobile));
+  expect(wickMobile.chip === true, '手机上拨芯之后油条也挂上牌子和冷色', JSON.stringify(wickMobile));
+  await mobile.screenshot({ path: join(SHOTS, '17b-mobile-wick.png') });
+  await mobile.touchscreen.tap(wickBtn.x, wickBtn.y); // 拨回来，后面的检查照旧
+  await sleep(400);
 
   // 「倾灯」的手动瞄准（v63）：手指按住**屏幕右侧**拖着，这一瓢就往指的方向飞，松手还给自动瞄准。
   // ⚠ 派发真的 touchstart/touchmove：主循环每一帧都会用真实（键鼠 / 触摸）输入覆盖 `setInput`，
