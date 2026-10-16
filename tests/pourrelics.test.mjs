@@ -147,8 +147,8 @@ test('倾灯这套：正好四件、一族一件、四个数各归一件，而�
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
   // ×v77：「伏灯」那四件（灯阵 / 接火 / 香饵 / 绊线）各补一件，于是变成各 15 件；
-  // ×v78：「旋灯」那四件（张网 / 标灯 / 榨油 / 缠网）各补一件，于是现在是各 16 件
-  assert.deepEqual(counts, { flame: 16, lamp: 16, oil: 16, shade: 16 }, '四族应各 16 件');
+  // ×v78：「旋灯」那四件（张网 / 标灯 / 榨油 / 缠网）各补一件，于是现在是各 17 件
+  assert.deepEqual(counts, { flame: 17, lamp: 17, oil: 17, shade: 17 }, '四族应各 17 件');
   // 装上也真的不炸：四件同时在身上，五个数都得到身上
   const p = build(game, Object.keys(LINE));
   assert.ok(p.flags.pourStacks > 0 && p.flags.pourSpread > 0 && p.flags.pourLife > 0, '前三个数该上身');

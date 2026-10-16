@@ -23,6 +23,8 @@ const POUR_RELIC_NAME = { pourstoke: '浇油', pourladle: '大瓢', pourgather: 
 const MINE_RELIC_NAME = { minerack: '灯阵', minelink: '接火', minebait: '香饵', minetrip: '绊线' };
 /** 「旋灯」这条线四件遗物的名字（v78，见 3a8b / 手机那段）。 */
 const VORTEX_RELIC_NAME = { vortexnet: '张网', vortexmark: '标灯', vortexpress: '榨油', vortexsnare: '缠网' };
+/** 「弃灯」这条线四件遗物的名字（v83，见 3a8c / 手机那段）。 */
+const LAMP_RELIC_NAME = { lampburst: '焚灯', lampshade: '灯罩', lampember: '拾灯', lamphaze: '灯晕' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -464,6 +466,55 @@ async function main() {
     const g = window.__WICKLIGHT__.game;
     hud.clearCards(); // 别让这张卡飘到后面那些检查的画面上
     g.player.removeRelic('wickveil');
+    g.player.recomputeStats();
+  });
+
+  // ── 3a2b0b. 「弃灯」这条线（v83）：一次都没分过灯的人拿到那四件，同样得先被讲一次 ──
+  // 和拨芯那一句一模一样的坑：焚灯 / 灯罩 / 拾灯 / 灯晕全部只长在**你按 E 分出去的那盏灯**身上，
+  // 一次都不分，它们在手里就是四张废牌。而这一句还得多讲一件事：**摆在哪一边**
+  // （台架上量过：摆在追兵本来就要路过的线上几乎一点都不省，拐个弯才买得到那两三秒）。
+  // 这里量真浏览器里那**一张卡**（字、尺寸、位置），并且走主循环那一遍 0.75 秒的扫描。
+  // ⚠ 这一段要先把"已经分过灯"这件事抹掉：前面 3a2 已经按过一次 E，图鉴里早就有 `mechanic:lamp` 了
+  //   （这一版刚刚把那条记录挪到"分出去的那一刻"）。所以存档里那条与内存里那个集合都要摘掉——
+  //   `codex.has` 读的是内存里那个 Set，只删存档不管用。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.tips = (g.save.tips ?? []).filter((k) => k !== 'relic:lamp-family');
+    g.save.codex = (g.save.codex ?? []).filter((k) => k !== 'mechanic:lamp');
+    g.codex.known.delete('mechanic:lamp');
+    g.lampHintDone = false;
+    g.player.addRelic('lampburst');
+  });
+  await sleep(1000); // 扫描是每 0.75 秒一遍，走主循环
+  const lampTip = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const el = [...document.querySelectorAll('.toast--tip')].pop();
+    const r = el?.getBoundingClientRect();
+    return {
+      knows: g.codex.has('mechanic', 'lamp'), // 前置条件：这一局还没分过灯
+      text: (el?.innerText ?? '').replace(/\n/g, ' '),
+      recorded: (g.save.tips ?? []).includes('relic:lamp-family'),
+      w: Math.round(r?.width ?? 0),
+      h: Math.round(r?.height ?? 0),
+      left: Math.round(r?.left ?? 0),
+      right: Math.round(r?.right ?? 0),
+    };
+  });
+  expect(lampTip.knows === false, '这一条的前提是真的：还没分过灯，图鉴里还没有「弃灯」', JSON.stringify(lampTip.knows));
+  expect(lampTip.recorded, '拿到那四件里的头一件、又没分过灯：该主动弹一张说明卡', lampTip.text);
+  expect(/弃灯/.test(lampTip.text) && /按 E/.test(lampTip.text), '那张卡上写着怎么用（按 E）', lampTip.text);
+  expect(/方向/.test(lampTip.text), '还得讲清"摆在哪一边"——这一族一半的账在这儿', lampTip.text);
+  expect(
+    lampTip.w > 0 && lampTip.h > 0 && lampTip.left >= 0 && lampTip.right <= 1280,
+    '这张说明卡有尺寸、也在视口里',
+    JSON.stringify(lampTip),
+  );
+  await shot('03j0b-lamp-family-tip');
+  await page.evaluate(() => {
+    const hud = window.__WICKLIGHT__.hud;
+    const g = window.__WICKLIGHT__.game;
+    hud.clearCards(); // 别让这张卡飘到后面那些检查的画面上
+    g.player.removeRelic('lampburst');
     g.player.recomputeStats();
   });
 
@@ -1384,6 +1435,89 @@ async function main() {
     delete window.__SAVED_WEAPONS2__;
   });
   await sleep(200);
+
+  // ── 3a8c. 「弃灯」这条线（四件遗物，v83）：把"这盏灯摆在哪一边"这笔账也读出来 ──
+  // 分灯（E）是这一局里最老的一个动词，可到 v82 为止它是唯一一个"有教学卡、有手机按钮、
+  // 有代价，却一件遗物都没有"的机制。这一版照老规矩一族一件补上四件，都挂在
+  // **它被吃掉的那一帧**或者**它亮着的那几秒**上。
+  // 离线单测（tests/lamprelics.test.mjs）量的是四个数各自生效；台架（tools/bench-lamp.mjs）量的
+  // 是它到底买到了什么——灯摆在"追兵本来就要路过"的那条线上一点用都没有（挡住 0.0s），
+  // 拐弯甩在身后才买到 3 秒多（见 README「已知取舍」）。
+  // 这里量的是**界面读不读得出来**：手里有这一族的时候，构筑总览要多出「弃灯」那一栏，
+  // 四件连条件一起写出来，而且真分下去一盏之后，"本局分了几盏"要跟着动。
+  const lampFamIds = ['lampburst', 'lampshade', 'lampember', 'lamphaze'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, lampFamIds);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const lampFamLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(lampFamLayout.hOverflow === 0, '加了弃灯那四件，总览仍没被撑出横向滚动', `hOverflow=${lampFamLayout.hOverflow}`);
+  expect(lampFamLayout.issues.length === 0, '带满四件弃灯遗物的构筑总览布局正常', lampFamLayout.issues.join('; '));
+  await page.evaluate(() => document.querySelector('.lo-lamp')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const lampFamBlock = await page.evaluate(() => window.__PROBE__.layout('.lo-lamp'));
+  expect(lampFamBlock.count === 1, '挂着这一族的遗物时，构筑总览多出「弃灯」那一栏', JSON.stringify(lampFamBlock));
+  expect(lampFamBlock.issues.length === 0, '「弃灯」栏滚得进视野、也不越界', lampFamBlock.issues.join('; '));
+  // 这一局在前面那段（按 E 分灯）里已经分过一盏了，所以这里量的是"真账"：先读一眼现在几盏，
+  // 再分一盏，看这个数有没有跟着动——不是拿一个写死的 1 去对。
+  const lampBefore = await page.evaluate(() => window.__WICKLIGHT__.game.lampCount);
+  const lampFamText = await page.evaluate(() => document.querySelector('.lo-lamp')?.textContent ?? '');
+  for (const bit of [
+    `弃灯 · 本局分了 ${lampBefore} 盏`,
+    '灯罩 引怪 +40% · 多亮 4s',
+    '焚灯 被吃掉时炸 120px / 34 伤害',
+    '拾灯 每只回 0.60%（一盏封顶 60%）',
+    '灯晕 光里慢 30%',
+  ]) {
+    expect(lampFamText.includes(bit), `「弃灯」栏写出「${bit}」`, lampFamText.slice(-260));
+  }
+  expect(!/undefined|NaN/.test(lampFamText), '「弃灯」栏没有缺字段', lampFamText);
+  await shot('03l6-lamp-family');
+  const codexLampFam = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:lamp');
+    return { text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    Object.values(LAMP_RELIC_NAME).every((n) => codexLampFam.text.includes(n)),
+    '图鉴的「弃灯」条目里点出了这四件遗物',
+    codexLampFam.text.slice(-200),
+  );
+  // 真分一盏下去：那一栏上的"本局分了几盏"得跟着动（不是一个只会写 0 的框）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  const planted = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const lamps = g.lamps.length;
+    g.lampCd = 0;
+    g.player.oil = g.player.oilMax;
+    const ok = g.tryPlantLamp();
+    return { ok, lamps, after: g.lamps.length, count: g.lampCount, state: g.state };
+  });
+  expect(
+    planted.ok && planted.after === planted.lamps + 1 && planted.count === lampBefore + 1,
+    '这一栏量的是真账：真的分下去一盏',
+    JSON.stringify({ ...planted, lampBefore }),
+  );
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const lampAfter = await page.evaluate(() => document.querySelector('.lo-lamp')?.textContent ?? '');
+  expect(lampAfter.includes(`本局分了 ${lampBefore + 1} 盏`), `分完一盏之后，那一栏写成「本局分了 ${lampBefore + 1} 盏」`, lampAfter.slice(-200));
+  // 收尾：把这一盏灯与塞进去的四件拿走，别让后面的段落量到别人的账
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    g.lamps.length = 0;
+    g.lampCount = 0;
+    g.lampBest = 0;
+    g.lampOilBack = 0;
+    for (const id of ids) g.player.removeRelic(id);
+    g.player.recomputeStats();
+  }, lampFamIds);
+  await sleep(150);
 
   // ── 3a9. 倾灯：把灯火本身倒出去 ──
   // 到 v58 为止灯油只是一条"捡得越多越亮"的曲线（它同时是火力、视野、亮度）。
@@ -3869,21 +4003,23 @@ async function main() {
   // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
   // （燎灯那四件），v76 是**第三**行（倾灯那四件）——三族买的是同一桶油，所以都住在这一栏里。
   // v77 又加了一栏「伏灯」（那一族买的是"位置"，所以它有自己的一栏，不长在灯火里），
-  // v78 再加一栏「旋灯」（同一个理由：它买的是"你决定它们站在哪儿"）。
+  // v78 再加一栏「旋灯」（同一个理由：它买的是"你决定它们站在哪儿"），
+  // v83 补上最后一栏「弃灯」（分灯到 v82 为止一件遗物都没有）。
   // 窄屏横带上最容易出事的正是"多一行 / 多一栏把面板撑出横向溢出"，所以这里也量一次
   // （和桌面那条同一个做法：那几栏在滚动容器里，先滚进视野再量）。
-  // 为了把"最坏情况"量出来，**五族二十件全塞上**：窄屏上那几栏最长就是这样。
+  // 为了把"最坏情况"量出来，**六族二十四件全塞上**：窄屏上那几栏最长就是这样。
   const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
   const mAuraFamily = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
   const mPourFamily = ['pourstoke', 'pourladle', 'pourgather', 'pourward'];
   const mMineFamily = ['minerack', 'minelink', 'minebait', 'minetrip'];
   const mVortexFamily = ['vortexnet', 'vortexmark', 'vortexpress', 'vortexsnare'];
-  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily, ...mMineFamily, ...mVortexFamily];
+  const mLampFamily = ['lampburst', 'lampshade', 'lampember', 'lamphaze'];
+  const mFamAll = [...mFamily, ...mAuraFamily, ...mPourFamily, ...mMineFamily, ...mVortexFamily, ...mLampFamily];
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.addRelic(id);
     g.player.recomputeStats();
-  }, mTwelve);
+  }, mFamAll);
   // 手里也得有伏灯与旋灯：那两栏只在"有这件武器（或者挂着这一族的遗物）"时才画
   await mobile.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -3942,32 +4078,55 @@ async function main() {
   expect(mobileVortex.count === 1, '手机上也有「旋灯」那一栏', JSON.stringify(mobileVortex));
   expect(mobileVortex.issues.length === 0, '手机横带上「旋灯」栏不越界', mobileVortex.issues.join('; '));
   expect(mobileVortex.hOverflow === 0, '多出「旋灯」那一栏也没把手机上的总览撑出横向滚动', `hOverflow=${mobileVortex.hOverflow}`);
+  // 「弃灯」那一栏在最下面
+  await mobile.evaluate(() => document.querySelector('.lo-lamp')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const mobileLamp = await mobile.evaluate(() => {
+    const lp = window.__PROBE__.layout('.lo-lamp');
+    const panel = window.__PROBE__.layout('.panel--loadout');
+    return {
+      count: lp.count,
+      issues: lp.issues,
+      hOverflow: panel.hOverflow,
+      text: document.querySelector('.lo-lamp')?.textContent ?? '',
+    };
+  });
+  expect(mobileLamp.count === 1, '手机上也有「弃灯」那一栏', JSON.stringify(mobileLamp));
+  expect(mobileLamp.issues.length === 0, '手机横带上「弃灯」栏不越界', mobileLamp.issues.join('; '));
+  expect(mobileLamp.hOverflow === 0, '多出「弃灯」那一栏也没把手机上的总览撑出横向滚动', `hOverflow=${mobileLamp.hOverflow}`);
   const LIGHT_NAMES = { ...RELIC_NAME, ...AURA_RELIC_NAME, ...POUR_RELIC_NAME };
-  const OWN_NAMES = { ...MINE_RELIC_NAME, ...VORTEX_RELIC_NAME };
+  const OWN_NAMES = { ...MINE_RELIC_NAME, ...VORTEX_RELIC_NAME, ...LAMP_RELIC_NAME };
   expect(
-    mTwelve.every((id) => id in OWN_NAMES || LIGHT_NAMES[id]),
-    '这一条的前提：二十件遗物的名字都登记在案（少一件这一条就量不全）',
-    mTwelve.join('/'),
+    mFamAll.every((id) => id in OWN_NAMES || LIGHT_NAMES[id]),
+    '这一条的前提：二十四件遗物的名字都登记在案（少一件这一条就量不全）',
+    mFamAll.join('/'),
   );
   expect(
-    mTwelve.every((id) => {
-      const where = id in VORTEX_RELIC_NAME ? mobileVortex.text : id in MINE_RELIC_NAME ? mobileMine.text : mobileSheet.text;
+    mFamAll.every((id) => {
+      const where =
+        id in VORTEX_RELIC_NAME
+          ? mobileVortex.text
+          : id in MINE_RELIC_NAME
+            ? mobileMine.text
+            : id in LAMP_RELIC_NAME
+              ? mobileLamp.text
+              : mobileSheet.text;
       return where.includes(OWN_NAMES[id] ?? LIGHT_NAMES[id]);
     }),
-    '手机上也把五族二十件遗物连条件一起写出来了',
-    `${mobileSheet.text.slice(-160)} | ${mobileMine.text.slice(-160)} | ${mobileVortex.text.slice(-160)}`,
+    '手机上也把六族二十四件遗物连条件一起写出来了',
+    `${mobileSheet.text.slice(-160)} | ${mobileMine.text.slice(-160)} | ${mobileVortex.text.slice(-160)} | ${mobileLamp.text.slice(-160)}`,
   );
   await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
   await mobile.click('[data-act="sheet-close"]');
   await sleep(300);
-  // 收尾：把塞进去的二十件拿掉、把借来的那两把武器还回去（后面的检查照旧）
+  // 收尾：把塞进去的二十四件拿掉、把借来的那两把武器还回去（后面的检查照旧）
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.relics.delete(id);
     if (!window.__SAVED_MINE__) g.player.weapons.delete('mine');
     if (!window.__SAVED_VORTEX__) g.player.weapons.delete('vortex');
     g.player.recomputeStats();
-  }, mTwelve);
+  }, mFamAll);
 
   await mobile.click('[data-act="resume"]');
   await sleep(400);

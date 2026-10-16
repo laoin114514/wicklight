@@ -20,13 +20,15 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
+  // `lamp`（v83）也是同一类（分灯的代价 / 冷却 / 寿命 / 引怪半径 / 被吃掉时炸多大一圈），
+  // 单独按数值校验（见下面那一段）。
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）；
   // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套；
   // `newWeaponPool` / `starterWeapons` 也是名单（见下面那一段）；
   // `pacts`（v79）与 `fire`（v80）都是**包**：一张表 + 几个纯函数（合并 / 定价 / 解锁 / 价格阶梯），
   // 所以它们也跳过去——跳过去之后在下面按各自的形状单独校验。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts' || name === 'fire' || name === 'pad') continue;
+    if (name === 'lamp' || name === 'lampFamily' || name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts' || name === 'fire' || name === 'pad') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -37,6 +39,19 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   // `aura`（v73）与 `wick` 同一类：一张"名字 → 数"的调参表（外加一个音效名），不是条目列表。
   // 它这一版只有一个门槛数（一次脉冲烤到几只解成就），所以要盯的是它**不许被调松**。
+  // ── 「分灯」那一套（v83）：它是一张"名字 → 数"的调参表，所以按形状与关系校验 ──
+  // 这一族最容易悄悄写坏的地方是**两个半径的关系**：亮芯（`radius`）比引怪圈（`lure`）小，
+  // "亮着的一小圈"和"会被引过来的一大片"是两件事；写反了画面上完全看不出来，
+  // 只会变成"灯亮着，怪却从旁边走过去"。
+  const lamp = data.lamp;
+  assert.ok(lamp, '构建产物应导出分灯的调参表');
+  assert.ok(lamp.radius < lamp.lure, `亮芯半径该小于引怪半径（${lamp.radius} vs ${lamp.lure}）`);
+  assert.ok(lamp.snuffR < lamp.radius, `"被啃掉"的距离该小于亮芯半径（${lamp.snuffR} vs ${lamp.radius}）`);
+  assert.ok(lamp.life > lamp.cooldown, `寿命该比冷却长，否则场上永远只能亮一盏（${lamp.life} vs ${lamp.cooldown}）`);
+  assert.ok(lamp.cost * lamp.emberCap < lamp.cost, '「拾灯」的封顶必须留一道口子：收得回来，但收不回本');
+  assert.ok(lamp.crowd >= 6, `「空城」的门槛不该是"顺手就够"（实际 ${lamp.crowd}）`);
+  assert.ok(lamp.shade === undefined, '「灯罩」的两个数该叫 lureBonus / spanBonus');
+
   const aura = data.aura;
   assert.ok(aura, '构建产物应导出燎灯的调参表');
   assert.ok(aura.crowd >= 6, `「照单全收」的门槛不该是"顺手就够"（实际 ${aura.crowd}）`);
@@ -152,6 +167,17 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   for (const id of data.wickFamily) {
     assert.ok(typeof id === 'string' && id.length > 0, `wickFamily 里有非法 id（${id}）`);
     assert.ok(relicIds.has(id), `wickFamily 里的 ${id} 查不回任何遗物`);
+  }
+
+  // `lampFamily`（v83）是同一类名单：`Game.scanLampFamily` 靠它认"手里有没有这一族的四件"。
+  // 它比拨芯那一份更需要对着内容校验：那份名单是从 `mods` 里**认出来**的（不是手抄的 id 列表），
+  // 所以这里对着"改了那五个数里任何一个的遗物"再数一遍——名单跟内容一漂，
+  // 说明卡就会在错的时机弹（或者干脆不弹），而这件事在画面上完全看不出来。
+  const lampMods = ['lampSpan', 'lampLure', 'lampBurst', 'lampEmber', 'lampSnare'];
+  const lampOwners = data.relics.filter((r) => lampMods.some((k) => k in r.mods)).map((r) => r.id).sort();
+  assert.deepEqual([...data.lampFamily].sort(), lampOwners, 'lampFamily 名单要和"改这几个数的遗物"完全一致');
+  for (const id of data.lampFamily) {
+    assert.ok(relicIds.has(id), `lampFamily 里的 ${id} 查不回任何遗物`);
   }
 
   // ── 掠影 / 灯焰高涨的调参表：全是正数，而且几条关系必须成立 ──

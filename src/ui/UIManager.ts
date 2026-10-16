@@ -17,6 +17,7 @@ import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
+import { LAMP } from '../data/lamp';
 import { PACTS, PACT_MAP, pactEmberMult } from '../data/pacts';
 import { FocusRing } from '../core/Focus';
 import type { Game, GameState, UIHost } from '../core/Game';
@@ -596,6 +597,7 @@ export class UIManager implements UIHost {
     const graze = this.grazeBlock();
     const mineBlock = this.mineBlock();
     const vortexBlock = this.vortexBlock();
+    const lampBlock = this.lampBlock();
 
     const b = g.bounties.state;
     const bounty = b
@@ -647,6 +649,7 @@ export class UIManager implements UIHost {
             ${graze}
             ${mineBlock ? `<h4>伏灯</h4>${mineBlock}` : ''}
             ${vortexBlock ? `<h4>旋灯</h4>${vortexBlock}` : ''}
+            ${lampBlock ? `<h4>弃灯</h4>${lampBlock}` : ''}
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
@@ -823,6 +826,44 @@ export class UIManager implements UIHost {
       </div>`;
   }
 
+  /**
+   * 构筑总览里的「弃灯」栏（v83）：本局分了几盏、**一次引走了最多几只**、收回来多少油，
+   * 以及身上那四件遗物到底改了哪个数。
+   *
+   * 为什么单开一栏：这一族买的是一段**很难自己感觉到**的东西——几秒钟的转身余地。
+   * 不写出来的话，玩家只会看到"按了 E，然后什么都没发生"。所以这里把两个真正发生的数
+   * 摆在最前面：**引走了几只**（`lampBest`，在灯被吃掉的那一帧点的人头）与**收回来多少油**。
+   *
+   * 什么时候才画：这一局分过灯、或者身上挂着这一族的遗物——和伏灯 / 旋灯同一条规矩
+   * （没碰过这件事的玩家读到"本局分了 0 盏"是占地方）。
+   */
+  private lampBlock(): string {
+    const g = this.game;
+    const f = g.player.flags;
+    const fam: string[] = [];
+    if (f.lampLure || f.lampSpan) {
+      fam.push(`灯罩 引怪 +${Math.round(f.lampLure * 100)}% · 多亮 ${f.lampSpan.toFixed(0)}s`);
+    }
+    if (f.lampBurst) fam.push(`焚灯 被吃掉时炸 ${LAMP.burstRadius}px / ${LAMP.burstDamage} 伤害`);
+    if (f.lampEmber) {
+      fam.push(`拾灯 每只回 ${(f.lampEmber * 100).toFixed(2)}%（一盏封顶 ${Math.round(LAMP.emberCap * 100)}%）`);
+    }
+    if (f.lampSnare) fam.push(`灯晕 光里慢 ${Math.round(f.lampSnare * 100)}%`);
+    if (!g.lampCount && !fam.length) return '';
+    const score = [g.lampBest > 1 ? `一次引走 ${g.lampBest} 只` : '', g.lampOilBack > 0 ? `收回来 ${(g.lampOilBack * 100).toFixed(1)}% 油` : '']
+      .filter(Boolean)
+      .join(' · ');
+    return `<div class="lo-bounty lo-lamp" style="--c:#ffca7a">
+        <b>🕯️ 弃灯 · 本局分了 ${g.lampCount} 盏</b>
+        <span>${score || '这一局还没引到过东西'}</span>
+        <span>${
+          fam.length
+            ? `弃灯这套：${fam.join(' · ')}`
+            : `引怪 ${LAMP.lure}px、亮 ${LAMP.life}s，被啃到 ${LAMP.snuffR}px 以内就灭——它是一盏灯，摆在哪一边才是你的活`
+        }</span>
+      </div>`;
+  }
+
   private grazeBlock(): string {
     const g = this.game;
     const p = g.player;
@@ -897,6 +938,8 @@ export class UIManager implements UIHost {
         <div><span>最强一击</span><b>${num(g.maxHit)}</b></div>
         <div><span>燃爆</span><b>${g.novaCount} 次</b></div>
         ${g.lampCount > 0 ? `<div><span>分灯</span><b>${g.lampCount} 盏</b></div>` : ''}
+        ${g.lampBest > 1 ? `<div><span>一盏灯引来</span><b>${g.lampBest} 只</b></div>` : ''}
+        ${g.lampOilBack > 0 ? `<div><span>拾灯收回</span><b>${(g.lampOilBack * 100).toFixed(1)}% 油</b></div>` : ''}
         ${g.mineCount > 0 ? `<div><span>伏灯</span><b>${g.mineCount} 颗</b></div>` : ''}
         ${g.mineChainBest > 1 ? `<div><span>最长一串</span><b>${g.mineChainBest} 颗</b></div>` : ''}
         ${g.mineMothHits > 0 ? `<div><span>灯上的蛾</span><b>${g.mineMothHits} 只</b></div>` : ''}

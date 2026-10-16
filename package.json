@@ -15,6 +15,7 @@
     "playtest": "npm run build && node tools/playtest.mjs",
     "bench": "npm run build && node tools/bench-waves.mjs",
     "bench:weapons": "npm run build && node tools/bench-weapons.mjs",
+    "bench:lamp": "npm run build && node tools/bench-lamp.mjs",
     "perf": "npm run build && node tools/perf.mjs",
     "mobileperf": "npm run build && node tools/mobileperf.mjs",
     "viewportcheck": "npm run build && node tools/viewportcheck.mjs"

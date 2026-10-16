@@ -1327,6 +1327,9 @@ body.is-touch .hud__wave { display: none; }
 .lo-mine b { font-variant-numeric: tabular-nums; }
 /* 「旋灯」那一栏：和伏灯同一种东西的另一面（一个量"路铺得怎么样"，一个量"网撒得怎么样"） */
 .lo-vortex b { font-variant-numeric: tabular-nums; }
+/* 「弃灯」那一栏（v83）：和上面两栏同一种东西（"这一局这件事做得怎么样"），
+   它的数也全是计数（几盏 / 引走几只 / 收回几成油）。 */
+.lo-lamp b { font-variant-numeric: tabular-nums; }
 /* 「深宵之约」那一栏（v79）：玩家自己选的代价。每一条一块，颜色跟着那条走——
    它们和夜咒是并列的两种"这一局更难了"，但夜咒是关给的（红）、这一套是自己选的（那条自己的色）。 */
 .lo-pact { padding: 6px 9px; margin-bottom: 5px; border-radius: 8px; background: rgba(255, 255, 255, 0.035); border-left: 2px solid var(--c, #8fa7ff); }

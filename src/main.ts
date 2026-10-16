@@ -20,7 +20,7 @@ import { BackGuard } from './ui/BackGuard';
 import { WakeLock } from './core/WakeLock';
 import { WEAPONS as weapons, NEW_WEAPON_POOL as newWeaponPool, STARTER_WEAPONS as starterWeapons } from './data/weapons';
 import { AURA as aura } from './data/aura';
-import { RELICS as relics, TRIBES as tribes, WICK_FAMILY_IDS as wickFamily } from './data/relics';
+import { LAMP_FAMILY_IDS as lampFamily, RELICS as relics, TRIBES as tribes, WICK_FAMILY_IDS as wickFamily } from './data/relics';
 import { PASSIVES as passives } from './data/upgrades';
 import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies, NORMAL_ENEMIES as normalEnemies } from './data/enemies';
@@ -35,6 +35,7 @@ import { POUR as pour } from './data/pour';
 import { NOVA as nova } from './data/nova';
 import { EMBERWIND as emberwind } from './data/emberwind';
 import { HUNT } from './data/hunt';
+import { LAMP as lamp } from './data/lamp';
 import { ARRIVAL } from './data/arrival';
 import { PACTS, PACT_MAP, PACT_EMBER_EACH, noPacts, pactEmberMult, pactMods, pactsUnlocked } from './data/pacts';
 import { STAGES as stages } from './data/stages';
@@ -90,8 +91,12 @@ function boot(): void {
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
     data: {
       weapons, newWeaponPool, starterWeapons, relics, passives, curses, bounties, tribes, meta,
-      graze, mines, vortex, pour, nova, emberwind, wick, wickFamily, aura,
+      graze, mines, vortex, pour, nova, emberwind, wick, wickFamily, lampFamily, aura,
       hunt: HUNT, arrival: ARRIVAL,
+      // 「分灯」那一套（v83）：一张"名字 → 数"的调参表（代价 / 冷却 / 寿命 / 引怪半径 /
+      // 被吃掉时炸多大一圈……），和 `mines` / `vortex` 同一类。台架（`tools/bench-lamp.mjs`）
+      // 与测试都从这里取那**一份**真话——引怪半径这种数，两处各写一份迟早会漂。
+      lamp,
       // 「深宵之约」这一套（v79）：表和那几个纯函数一起放进来——测试要对着它断"七条各改了哪个数"，
       // 而 `pactMods / pactEmberMult / pactsUnlocked` 是这套规则唯一的三条真话，
       // 让测试自己再抄一遍就等于把那三条真话抄成六条。

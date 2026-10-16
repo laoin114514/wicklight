@@ -141,7 +141,7 @@ test('旋灯这套：正好四件、一族一件、五个数各归一件，而�
   // 一族一件：四族等量，第二档共鸣（5 件）的门槛才一直是那个数
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 16, lamp: 16, oil: 16, shade: 16 }, '四族应各 16 件');
+  assert.deepEqual(counts, { flame: 17, lamp: 17, oil: 17, shade: 17 }, '四族应各 17 件');
   // 装上也真的不炸：四件同时在身上，五个数都得到身上
   const p = build(game, Object.keys(LINE));
   assert.ok(p.flags.vortexSpread > 0 && p.flags.vortexTime > 0 && p.flags.vortexMark > 0, '前三个数该上身');

@@ -19,6 +19,7 @@ import { MINE } from '../data/mines';
 import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { VORTEX } from '../data/vortex';
+import { LAMP } from '../data/lamp';
 import { PACTS, PACT_EMBER_EACH, pactEmberMult } from '../data/pacts';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
 import { WEAPONS } from '../data/weapons';
@@ -476,6 +477,29 @@ export function codexCatalog(): CodexEntry[] {
       ],
     });
   }
+  // 「弃灯」（v83）：分灯是 v1 就有的动词，可到 v82 为止**没有任何一个界面**讲清楚过
+  // "它管多大一片、能亮多久、被吃掉会怎么样"——玩家只能自己猜。
+  // 这一页的数全部从 `data/lamp.ts` 现取：那一份是这套规则唯一的真话，改调参图鉴不会跟着漂。
+  out.push({
+    kind: 'mechanic',
+    id: 'lamp',
+    name: '弃灯',
+    blurb: '把一小罐灯油点在地上：它照亮一圈，并把附近的黑暗引过去——黑暗去扑它，你就多出几秒。',
+    color: '#ffca7a',
+    icon: '🕯️',
+    rows: [
+      ['怎么用', '按 E（手机：右下角的「分灯」）在原地放下一盏，冷却 ' + LAMP.cooldown + ' 秒'],
+      ['代价', `灯油 ${Math.round(LAMP.cost * 100)}%（油要有 ${Math.round(LAMP.minOil * 100)}% 才分得出来）——油就是光，光就是命`],
+      ['能亮多久', `${LAMP.life} 秒（比冷却长，所以场上可以同时亮着两盏）`],
+      ['引怪半径', `${LAMP.lure}px：这一圈里**正在追你**的怪会改朝那盏灯走`],
+      ['谁来、谁不来', '吹灯客（它有自己的目标）与回声（它追的是你一秒前站的地方）不跟灯走——那两种性格不会被抹平'],
+      ['被吃掉', `任何一只怪凑到 ${LAMP.snuffR}px 以内就把它啃掉（人越多灭得越快）`],
+      ['最有用的那一刻', '把它摆在你**不打算去**的那个方向：追兵回头走进那盏灯的光里，你往另一边去'],
+      ['不影响的', '拨芯拨的是你自己那根芯——地里的伏灯、地上的弃灯照旧亮着'],
+      ['专为它准备的遗物', `焚灯（被啃掉的那一帧炸开 ${LAMP.burstRadius}px / ${LAMP.burstDamage} 伤害，顺带点着）· 灯罩（引怪半径 +${Math.round(LAMP.lureBonus * 100)}%、多亮 ${LAMP.spanBonus} 秒）· 拾灯（被啃掉时朝它走着的每一只回 ${(LAMP.emberBack * 100).toFixed(1)}% 油）· 灯晕（它光里的移速 -${Math.round(LAMP.snare * 100)}%）——一族一件`],
+    ],
+    extra: '台架上量过（`npm run bench:lamp`）：它的价值**完全**取决于灯与追兵路线之间的夹角。站着不动把它摆在脚下，追兵走过来顺手就把它啃了（活不到三秒）；人来人往地跑起来，"被引走"的秒数才真的攒得出来。它不是盾，是一个**路标**——这一句话得自己撞一次才记得住。',
+  });
   // 「深宵之约」（v79）：这一条不是敌人身上的规则，也不是某件武器——它是**玩家自己选的难度**。
   // 放它进来的理由和 `hunt` 那一页一样：它在 HUD 上、在选择屏上、在结算的余烬里都会出现，
   // 那它就该有一个地方能读到"这几条到底各改了什么、值多少"（数值从 `data/pacts.ts` 现取）。

@@ -43,6 +43,7 @@ import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
+import { LAMP } from '../data/lamp';
 import { PACTS, PACT_MAP, noPacts, pactEmberMult, pactMods, pactsUnlocked, type PactMods } from '../data/pacts';
 import { FIRE_LINES, FIRE_MAP } from '../data/meta';
 import { PAD_HINT, PAD_TIP } from './Gamepad';
@@ -52,7 +53,7 @@ import { EMBERWIND } from '../data/emberwind';
 import { ENEMY_MAP } from '../data/enemies';
 import { ARRIVAL } from '../data/arrival';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
-import { RELICS, RELIC_MAP, TRIBES, WICK_FAMILY_IDS } from '../data/relics';
+import { LAMP_FAMILY_IDS, RELICS, RELIC_MAP, TRIBES, WICK_FAMILY_IDS } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
 import { PASSIVES, PASSIVE_MAP, baseStats, type PlayerStats } from '../data/upgrades';
 import { WEAPON_MAP } from '../data/weapons';
@@ -92,29 +93,6 @@ const GRID_STEP = 150;
 /** 墙体精灵外扩：投影往右下偏 (6, 8)，2px 描边还有一半在框外，留 12px 富余。 */
 const WALL_SPRITE_PAD = 12;
 
-/**
- * 「分灯」：把一小罐灯油点在地上，照亮一小圈，并把附近的黑暗引过去。
- * 它是一次**取舍**而不是一次免费的控制：油就是光，光就是命——
- * 分出一点油，换几秒钟"黑暗去扑那盏灯、而不是扑你"。
- */
-const LAMP_COST = 0.14;
-const LAMP_COOLDOWN = 7;
-const LAMP_LIFE = 11;
-/** 亮芯的半径：它是一盏小灯，固定大小（不跟你手上的灯火一起变大） */
-const LAMP_RADIUS = 152;
-/**
- * 引怪的半径，同时也是"被照亮的那一大片"的半径。
- *
- * 一开始这里只画了一圈虚线（半径 430），截图一看全是错：844×390 的横屏高的一半才 195，
- * 那么大一个圆只有两条几乎笔直的弧落在屏幕里，看着像画面撕裂，不像"警戒线"。
- * 改成让**光照本身**说明这一片：亮芯之外再补一圈很淡的大光，
- * 于是"亮着的地方 = 会引怪的地方"成了同一条规则，不用再解释。
- */
-const LAMP_LURE = 340;
-/** 少于这个油量不让分：油见底本来就要开始掉血，别让玩家把自己点死 */
-const LAMP_MIN_OIL = 0.2;
-/** 怪凑到这么近就把灯吃掉（人越多，灯灭得越快） */
-const LAMP_SNUFF_R = 34;
 
 interface WallSprite {
   canvas: HTMLCanvasElement;
@@ -187,6 +165,9 @@ const SOURCE_LABEL: Record<string, { name: string; color: string }> = {
   // 玩家这一侧的三个非武器来源（见 creditDamage）
   nova: { name: '燃爆', color: '#ffb14e' },
   lantern: { name: '灯火', color: '#ffd98a' },
+  // 「焚灯」（v83）：弃灯被吃掉那一下炸出来的伤害。它不是武器（那盏灯早就分出去了），
+  // 所以单起一行——结算里看到「弃灯」这两个字，玩家才知道那笔账是从哪儿来的。
+  lamp: { name: '弃灯', color: '#ffb14e' },
   other: { name: '其他', color: '#8fa7ff' },
 };
 
@@ -542,6 +523,18 @@ export class Game {
   lampCdMax = 0;
   /** 本局分过几盏灯（结算用） */
   lampCount = 0;
+  /**
+   * 本局"灯被吃掉的那一刻，有几只正朝它走"的累计只数，以及一次最多的那一回。
+   *
+   * 为什么要记在灯**被吃掉**的那一帧（而不是每帧数一数圈里有几只）：这一族的两件事都发生在那一刻——
+   * 「拾灯」按这个数回油、「空城」按这个数解成就。按帧数的话，"同一只怪在圈里站了十秒"
+   * 会被算十次，那个数就没法用来记账了。数的是**这一盏灯真的引到了几只**，
+   * 和「榨油」数"这一网真的打到几只"、伏灯数"这一颗真的炸到几只"是同一条口径。
+   */
+  lampLured = 0;
+  lampBest = 0;
+  /** 本局「拾灯」一共把多少油收回来（占油桶比例，结算里报） */
+  lampOilBack = 0;
   /** 还没教过「分灯」时，开局安静下来之后弹那张说明卡（秒，<0 = 不用弹） */
   private lampTipIn = -1;
   /**
@@ -568,6 +561,8 @@ export class Game {
   private frameCooldowns = { hurt: 0 };
   /** 「拨芯」这条线那句"要你先按 C"讲过了没有（见 `scanWickFamily`）。 */
   private wickHintDone = false;
+  /** 「弃灯」这一族那一次说明卡讲过没有（见 `scanLampFamily`） */
+  private lampHintDone = false;
   private emberTimer = 0;
   private moteTimer = 0;
   private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, dim: false, aim: false, aimX: 0, aimY: 0 };
@@ -760,6 +755,9 @@ export class Game {
     this.lampCd = 0;
     this.lampCdMax = 0;
     this.lampCount = 0;
+    this.lampLured = 0;
+    this.lampBest = 0;
+    this.lampOilBack = 0;
     this.mines.length = 0;
     this.mineCount = 0;
     this.mineChainBest = 0;
@@ -1118,6 +1116,7 @@ export class Game {
       this.syncCodex();
       this.scanEncounters();
       this.scanWickFamily();
+      this.scanLampFamily();
     }
     this.light.begin();
     this.particles.update(dt);
@@ -1142,8 +1141,10 @@ export class Game {
         this.showTip(
           'verb:lamp',
           '分灯 · 把黑暗引开',
-          '按 E（手机上点右下角的「分灯」）在原地点一盏小灯：它照亮一小圈，并把附近的黑暗引过去。' +
-            '油就是光，所以这是拿自己的亮换几秒喘息；凑上来的怪会把它吃掉。',
+          '按 E（手机上点右下角的「分灯」）在原地点一盏小灯：它照亮一圈，并把附近这一圈黑暗引过去。' +
+            '油就是光，所以这是拿自己的亮换几秒喘息；凑上来的怪会把它吃掉。' +
+            '最有用的那一刻是**拐弯的时候**——把它留在你不打算去的那个方向，追兵回头去扑它，你往另一边走' +
+            '（台架上量过：直线跑、灯落在追兵的路线上，几乎一点没省；拐一个弯，追兵要晚两三秒才贴上你）。',
         );
       }
     }
@@ -1448,15 +1449,23 @@ export class Game {
     if (this.state !== 'playing') return false;
     if (this.lampCd > 0) return false;
     const p = this.player;
-    if (p.oil < LAMP_MIN_OIL) {
+    if (p.oil < LAMP.minOil) {
       this.hud?.toast('🪫 灯油不够分灯（要两成）');
       return false;
     }
-    p.oil = Math.max(0, p.oil - LAMP_COST);
-    this.lamps.push({ x: p.x, y: p.y, life: LAMP_LIFE, maxLife: LAMP_LIFE });
-    this.lampCd = LAMP_COOLDOWN;
-    this.lampCdMax = LAMP_COOLDOWN;
+    p.oil = Math.max(0, p.oil - LAMP.cost);
+    // 「灯罩」（遗物）：多亮 4 秒。寿命与冷却**不一起动**——冷却留在原地，
+    // 于是这一件买的是「场上能同时亮着两盏、每一盏都站得更久」，而不是「分得更勤」。
+    const life = LAMP.life + p.flags.lampSpan;
+    this.lamps.push({ x: p.x, y: p.y, life, maxLife: life });
+    this.lampCd = LAMP.cooldown;
+    this.lampCdMax = LAMP.cooldown;
     this.lampCount += 1;
+    // 第一次真的分出一盏就把图鉴「机制」那一章的条目记上（和伏灯 / 旋灯 / 倾灯一样：条目里的数是现取的）。
+    // ⚠ 这一句从前挂在"灯被吃掉、而且圈里有人"那一帧上：结果是**分了灯但没人来吃**的玩家
+    //   图鉴里永远没有这一条（也就永远会被下面那句"你还没分过灯"的说明卡再说一次）。
+    //   动词只要用出来了就算用出来了，判据不该挂在"别人配不配合"上。
+    this.codex.discover('mechanic', 'lamp');
     this.audio.play('lamp');
     this.particles.burst(p.x, p.y - 6, 14, '#ffca7a', { speed: 120, size: 2.6, life: 0.6 });
     this.hud?.toast('🕯️ 分灯 · 黑暗会朝它去');
@@ -1467,23 +1476,75 @@ export class Game {
    * 地上的弃灯：寿命到了就熄；有怪凑近会被"吃掉"（提前熄）。
    * 人越多灯灭得越快——一群人扑上来时它只能顶一两秒，
    * 所以它是"买几秒空间"，不是"清场"。
+   *
+   * 「弃灯」这一族（v83）全部挂在这一段上，因为**它被吃掉的那一瞬间**是这个机制唯一的结果时刻：
+   * 在此之前它只是一盏亮着的灯，在此之后它什么都不是。所以「焚灯」的爆炸、「拾灯」的回油
+   * 都结算在这一帧（用 `l.life > 0.35` 那个闸门保证只结算一次），
+   * 而「灯晕」是持续效果，只要它亮着，被它引着的怪就一直慢（每帧续一次）。
    */
   private updateLamps(dt: number): void {
     if (this.lampCd > 0) this.lampCd = Math.max(0, this.lampCd - dt);
     if (!this.lamps.length) return;
+    const p = this.player;
+    const f = p.flags;
+    const lureR = this.lampLureR;
     for (let i = this.lamps.length - 1; i >= 0; i -= 1) {
       const l = this.lamps[i];
       l.life -= dt;
+      // 「灯晕」：走到这盏灯的光里的怪，脚就沉下去。判据和"它追不追这盏灯"完全一样
+      // （引怪圈内 + 不是吹灯客/回声那两种有自己目标的性格），只是把它再慢一档——
+      // 走的是 `applySlow` 那条共用的减速账，所以和霜印那 0.5 倍撞在一起时不会把人家顶回快的。
+      if (f.lampSnare > 0) {
+        this.enemies.forEach((e) => {
+          if (e.def.behavior === 'quench' || e.def.behavior === 'echo') return;
+          if (Math.hypot(e.x - l.x, e.y - l.y) > lureR) return;
+          applySlow(e, LAMP.snareSpan, 1 - f.lampSnare);
+        });
+      }
       let snuffed = false;
       this.enemies.forEach((e) => {
         if (snuffed) return;
         const dx = e.x - l.x;
         const dy = e.y - l.y;
-        if (dx * dx + dy * dy <= LAMP_SNUFF_R * LAMP_SNUFF_R) snuffed = true;
+        if (dx * dx + dy * dy <= LAMP.snuffR * LAMP.snuffR) snuffed = true;
       });
       if (snuffed && l.life > 0.35) {
         l.life = 0.35;
         this.particles.burst(l.x, l.y - 10, 12, '#b6a6ff', { speed: 90, size: 2.4, life: 0.5 });
+        // 这一盏灯**真的引来了几只**：引怪圈里那些正在朝它走的（吹灯客与回声本来就不跟灯走）。
+        // 数一帧就够——它是"点清人数"，不是"数秒"。
+        let lured = 0;
+        this.enemies.forEach((e) => {
+          if (e.def.behavior === 'quench' || e.def.behavior === 'echo') return;
+          if (Math.hypot(e.x - l.x, e.y - l.y) <= lureR) lured += 1;
+        });
+        if (lured > 0) {
+          this.lampLured += lured;
+          if (lured > this.lampBest) this.lampBest = lured;
+          if (this.lampBest >= LAMP.crowd) this.achievements.unlock('lamp_crowd');
+        }
+        // 「拾灯」：引来的每一只回一口油，一盏最多收回它自己代价的六成
+        // （封顶的算术在 `data/lamp.ts` 里：引到 12 只回本一半，全引满也只是把这一瓢收回来）。
+        if (f.lampEmber > 0 && lured > 0) {
+          const want = lured * f.lampEmber;
+          const cap = LAMP.cost * LAMP.emberCap;
+          const back = Math.min(want, cap);
+          p.oil = Math.min(p.oilMax, p.oil + p.oilMax * back);
+          this.lampOilBack += back;
+          this.floaters.label(l.x, l.y - 26, `+${(back * 100).toFixed(1)}% 油`, '#ffd24e', 13);
+        }
+        // 「焚灯」：它本来就只打算把它们引过来——被啃掉的那一下就是收网。
+        // 挂着 `source: 'lamp'`（不是某件武器）：这笔账在结算里不该算到枪管头上。
+        if (f.lampBurst > 0) {
+          const caught = this.blast(l.x, l.y, LAMP.burstRadius, LAMP.burstDamage, {
+            knockback: 120,
+            burn: LAMP.burstBurn,
+            spark: '#ff9d2e',
+            sparkCount: 22,
+            source: 'lamp',
+          });
+          if (caught >= LAMP.burstCrowd) this.achievements.unlock('lamp_burst');
+        }
       }
       if (this.rng.next() < dt * 4) this.particles.ember(l.x + this.rng.range(-6, 6), l.y - 16, '#ffc46b');
       if (l.life > 0) continue;
@@ -1492,8 +1553,13 @@ export class Game {
     }
   }
 
+  /** 这一盏弃灯眼下能引到多远（「灯罩」加宽的那一圈）。引怪、灯晕、结算三处共用同一个数。 */
+  private get lampLureR(): number {
+    return LAMP.lure * (1 + this.player.flags.lampLure);
+  }
+
   /** 最近的弃灯（黑暗被它引走时用）。没有就返回 null。 */
-  nearestLamp(x: number, y: number, maxDist = LAMP_LURE): DroppedLamp | null {
+  nearestLamp(x: number, y: number, maxDist: number = LAMP.lure): DroppedLamp | null {
     let best: DroppedLamp | null = null;
     let bestD = maxDist * maxDist;
     for (const l of this.lamps) {
@@ -1514,7 +1580,7 @@ export class Game {
 
   /** 现在能不能分灯（冷却好了、油够、在打）。 */
   get lampReady(): boolean {
-    return this.state === 'playing' && this.lampCd <= 0 && this.player.oil >= LAMP_MIN_OIL;
+    return this.state === 'playing' && this.lampCd <= 0 && this.player.oil >= LAMP.minOil;
   }
 
   private updateShrines(): void {
@@ -1761,7 +1827,7 @@ export class Game {
       fog: (x, y, r) => this.addGround(x, y, r, 8, 0, 'mud'),
       // 吹灯客的目标：最近的亮灯台，或者你刚放下的那盏弃灯（谁近扑谁）
       pyreTarget: (x, y) => this.nearestLitOrLamp(x, y, 1600),
-      lureTarget: (x, y) => this.nearestLamp(x, y),
+      lureTarget: (x, y) => this.nearestLamp(x, y, this.lampLureR),
       // 灯蛾扑的是**光**：地上的伏灯也算（只有上弦之后的那颗才算"亮着"）。
       // ⚠ 「香饵」（遗物）改的就是这个距离，而**只有这里**能改：Enemy 那边原来抄了一份
       //   同样的 380（`MINE_LURE`），v77 删掉了——两处真话只要有一处没跟上，就会出现
@@ -2385,6 +2451,33 @@ export class Game {
       '拨芯 · 这件要你先按 C',
       '遮光 / 暗火 / 夜步 / 守芯这四件只在把灯芯拨小的时候生效：按 C（手机点右下角的「拨芯」）' +
         '把火压住——看得近一半、打得轻三成五，换来的是一桶油多烧近两倍；再按一下拨回来。',
+    );
+  }
+
+  /**
+   * 「弃灯」这条线（v83）：那四件（焚灯 / 灯罩 / 拾灯 / 灯晕）**全部**长在你按 E 分出去的那盏灯上——
+   * 一次都不分，它们在手里就是四张废牌，而这和「拨芯」那四件要你先按 C 是同一个坑。
+   * 拨芯那一句讲的是"按 C"，这一句必须多讲一件事：**摆在哪一边**。
+   * 台架上量过（`bench:lamp`）——灯落在追兵本来就要路过的那条线上（站着不动把它摆在脚下、
+   * 或者直线跑着往身后一丢）几乎一点都不省；拐个弯甩在身后，追兵要晚两三秒才贴上你。
+   * 所以这一句不是"有这个按钮"，而是"这个按钮的用法"。
+   *
+   * 判据和拨芯那一句一模一样：**已经用过这个动词的人不用再听**（图鉴里有了 `mechanic:lamp`）。
+   */
+  private scanLampFamily(): void {
+    if (this.lampHintDone) return;
+    if (this.codex.has('mechanic', 'lamp')) {
+      this.lampHintDone = true;
+      return;
+    }
+    if (!LAMP_FAMILY_IDS.some((id) => this.player.relics.has(id))) return;
+    this.lampHintDone = true;
+    this.showTip(
+      'relic:lamp-family',
+      '弃灯 · 这四件长在那盏灯上',
+      '焚灯 / 灯罩 / 拾灯 / 灯晕都围着你按 E 分出去的那盏灯转——一次都不分，它们在手里就是四张废牌。' +
+        '按 E（手机：右下角的「分灯」）放下一盏，摆在**你不打算去**的那个方向：追兵回头去扑它，你往另一边走。' +
+        '台架上量过：灯落在追兵本来就要路过的线上几乎一点不省，拐个弯才买得到那两三秒。',
     );
   }
 
@@ -4998,9 +5091,10 @@ export class Game {
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
       // 两盏灯：亮芯（看得见的那盏）+ 一大圈很淡的光（"这一片都会被引过去"）
-      this.light.addLight(l.x, l.y, LAMP_RADIUS * (0.4 + 0.6 * fade), 0.85 * fade, 0.05);
-      this.light.addLight(l.x, l.y, LAMP_LURE * (0.55 + 0.45 * fade), 0.2 * fade, 0);
-      this.light.addGlow(l.x, l.y, LAMP_RADIUS * 0.9 * fade, 0.45 * fade);
+      // 「灯罩」加宽的那一圈也一起照亮：亮着的地方 = 会引怪的地方，这条对齐是这套牌的门面
+      this.light.addLight(l.x, l.y, LAMP.radius * (0.4 + 0.6 * fade), 0.85 * fade, 0.05);
+      this.light.addLight(l.x, l.y, this.lampLureR * (0.55 + 0.45 * fade), 0.2 * fade, 0);
+      this.light.addGlow(l.x, l.y, LAMP.radius * 0.9 * fade, 0.45 * fade);
     }
     ctx.restore();
   }

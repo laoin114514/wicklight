@@ -87,6 +87,16 @@ export interface RelicMods {
   overburnEase?: number;
   /** 「爆灯」之后的短时减伤（0.45 = 少挨四成五） */
   overburnGuard?: number;
+  /** 「分灯」那盏灯能多亮几秒（4 = 十一秒变十五秒） */
+  lampSpan?: number;
+  /** 「分灯」的引怪半径加成（0.4 = 从 340px 到 476px） */
+  lampLure?: number;
+  /** 「分灯」那盏灯被吃掉时炸开一圈（1 = 开） */
+  lampBurst?: number;
+  /** 「分灯」被引到灯前的每一只回多少油（占油桶比例，0.006 = 0.6%） */
+  lampEmber?: number;
+  /** 「分灯」引着的怪走在它的光里时慢多少（0.3 = 移速 -30%） */
+  lampSnare?: number;
   /** 拨着芯时的减伤（0.25 = 少挨两成五） */
   wickGuard?: number;
   /** 拨着芯时每次命中添的灼烧层数（1 = 一层，和烈焰鞭同一把尺子） */
@@ -253,6 +263,23 @@ export const RELICS: RelicDef[] = [
   { id: 'vortexpress', tribe: 'oil', name: '榨油', blurb: '「旋灯」收网打到的每一只回 0.4% 灯油——拢得越多，这一网收回来的越多。', icon: '🫙', color: '#ffd24e', rarity: 'common', price: 55, mods: { vortexHarvest: 0.004 } },
   { id: 'vortexsnare', tribe: 'shade', name: '缠网', blurb: '「旋灯」圈里的敌人移速 -35%——除了往里拽，还让他们走不动。', icon: '🌀', color: '#9a8cff', rarity: 'rare', price: 70, mods: { vortexSnare: 0.35 } },
 
+  // ── 「弃灯」这条线（v83）：把"分灯"这个最老的动词接成一套牌 ──
+  // 分灯（v1 就有：按 E 把一小罐油点在地上，附近的黑暗会被它引过去）到 v82 为止是**唯一**
+  // 有教学卡、有手机按钮、有代价、却一件遗物都没有的机制。它不是弱，是**没有选择长在它身上**：
+  // 什么时候分、分在哪儿、分了之后往哪边走，本来应该是一笔账，可没人替它出价。
+  // 四件照老规矩**一族一件**，各改一个数，凑起来才是同一句话：
+  //   **它被吃掉那一下该有结果**（焚灯，焰火族：炸开一圈，伤害 34 / 半径 120 并点上两层灼烧）、
+  //   **一网能罩多宽、亮多久**（灯罩，长明族：引怪半径 +40%、多亮 4 秒）、
+  //   **引来的这几只值多少油**（拾灯，灯油族：被吃掉时朝它走着的每一只回 0.6% 油，一封顶六成）、
+  //   **被它牵着走的那几只好不好走**（灯晕，暗影族：走在它的光里移速 -30%）。
+  // 四条都长在同一个动作上——"把它摆在我打算离开的那个方向"，这也正是台架量出来的那件事：
+  // 分灯买到的秒数**完全**取决于灯与追兵路线之间的夹角，摆在脚下（人往前跑、追兵顺着同一条线
+  // 走过来）几乎等于白放，摆在侧面才划算。所以这一族不打算把它变强，而是让它**值得多想一秒**。
+  { id: 'lampburst', tribe: 'flame', name: '焚灯', blurb: '「分灯」那盏灯被吃掉时炸开一圈：伤害 34、半径 120，并给圈里的人点上两层灼烧——它本来就只打算引它们过来。', icon: '🔥', color: '#ff7a2f', rarity: 'rare', price: 75, mods: { lampBurst: 1 } },
+  { id: 'lampshade', tribe: 'lamp', name: '灯罩', blurb: '「分灯」引怪半径 +40%（340 → 476px）、多亮 4 秒（11 → 15 秒）——一盏灯照得更宽，也站得更久。', icon: '🏮', color: '#ffe27a', rarity: 'rare', price: 75, mods: { lampLure: 0.4, lampSpan: 4 } },
+  { id: 'lampember', tribe: 'oil', name: '拾灯', blurb: '「分灯」被吃掉的那一刻，正在朝它走的每一只回 0.6% 灯油（一盏最多收回代价的六成）——引的人越多，这盏灯越便宜。', icon: '🫗', color: '#ffd24e', rarity: 'common', price: 55, mods: { lampEmber: 0.006 } },
+  { id: 'lamphaze', tribe: 'shade', name: '灯晕', blurb: '朝弃灯走的那几只走在它的光里，移速 -30%——灯替你拖住的那几秒，就是你拉开的那几步。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { lampSnare: 0.3 } },
+
   // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
   // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。
   // 动词本身还不是打法——要成为打法，得有东西回答四个问题：
@@ -275,6 +302,16 @@ export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map
  * 这份名单是**从 `mods` 里认出来的**，不是手抄的 id 列表：以后再加一件（或者把某一件挪走）
  * 不用改两处，`Game.scanWickFamily` 与 `tests/wickrelics.test.mjs` 都读它。
  */
+/**
+ * 「弃灯」这条线上的四件（v83）：它们的条件都是同一件事——**你分出去的那盏灯**。
+ *
+ * 和 `WICK_FAMILY_IDS` 同一个做法：从 `mods` 里认出来，不是手抄一张 id 名单。
+ * 以后再加一件（或者某一件被别人挪走）不用改两处。
+ */
+export const LAMP_FAMILY_IDS: string[] = RELICS.filter((r) =>
+  (['lampSpan', 'lampLure', 'lampBurst', 'lampEmber', 'lampSnare'] as const).some((k) => k in r.mods),
+).map((r) => r.id);
+
 export const WICK_FAMILY_IDS: string[] = RELICS.filter((r) =>
   (['wickGuard', 'wickEmber', 'wickStride', 'wickThrift'] as const).some((k) => k in r.mods),
 ).map((r) => r.id);
