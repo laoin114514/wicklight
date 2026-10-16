@@ -108,6 +108,14 @@ test('拨芯这套：正好四件、一族一件，而且除它们之外没人�
   const keys = ['wickGuard', 'wickEmber', 'wickStride', 'wickThrift'];
   const family = RELICS().filter((r) => keys.some((k) => k in r.mods));
   assert.equal(family.length, 4, `这条线就是四件（实际 ${family.length}：${family.map((r) => r.name).join('/')}）`);
+  // 名单是从 `mods` 里认出来的那一份：`Game.scanWickFamily` 与测试读的是同一个来源，
+  // 以后加一件（或挪走一件）不用改两处。
+  const ids = globalThis.window.__WICKLIGHT__.data.wickFamily;
+  assert.deepEqual(
+    [...ids].sort(),
+    family.map((r) => r.id).sort(),
+    '导出的名单要与"改这几个数的遗物"完全一致',
+  );
   const tribes = family.map((r) => r.tribe).sort();
   assert.deepEqual(
     tribes,
@@ -274,4 +282,44 @@ test('四件共用同一个门槛：插值过半才算，拨到一半不是', as
   assert.ok(!/遮蔽|遮光/.test(html) || html.includes('遮光'), '面板该能正常画出来');
   assert.ok(html.includes('遮光') && html.includes('减伤 25%'), '拿了遮光就该在「灯火」那一栏写出来');
   assert.ok(!html.includes('暗火'), '没拿的那三件不该凭空出现');
+});
+
+test('拨芯这套：第一次拿到它、又没按过 C 的时候，要主动讲一次"要你先按 C"', async (t) => {
+  const game = await open(t, 'hint');
+  const { hud } = globalThis.window.__WICKLIGHT__;
+  const p = game.player;
+  const tips = () => game.save.tips ?? [];
+  // 提示卡挂在 `toastRoot` 上（不是屏幕正中那块面板）：这里只读那几张卡的 innerHTML
+  const cardText = () =>
+    hud.toastRoot.children
+      .filter((c) => String(c.className).includes('toast--tip'))
+      .map((c) => c.innerHTML)
+      .join(' | ');
+
+  // 开局什么都没有：不该讲
+  run(game, 50);
+  assert.ok(!tips().includes('relic:wick-family'), '还没拿到那四件，不该讲这一句');
+
+  p.addRelic('wickveil');
+  tank(game);
+  run(game, 50); // 那一遍扫描是每 0.75 秒一次
+  assert.ok(tips().includes('relic:wick-family'), '拿到了、又没按过 C：该把"它只在拨着芯时生效"讲一次');
+  const html = cardText();
+  assert.ok(html.includes('拨芯') && html.includes('按 C'), '那张卡上要写着怎么用（按 C）', html.slice(0, 200));
+
+  // 讲过一次就不再讲（`showTip` 自己写进存档）
+  const again = game.showTip('relic:wick-family', 'x', 'y');
+  assert.equal(again, false, '同一条只讲一次');
+
+  // 已经按过 C 的人不用再听：这一句本来就是给"还不知道有这件事"的人讲的
+  const game2 = await open(t, 'hint-known');
+  const p2 = game2.player;
+  game2.save.tips = (game2.save.tips ?? []).filter((k) => k !== 'relic:wick-family');
+  tapC(game2); // 先自己发现拨芯
+  run(game2, 30);
+  assert.ok(game2.save.codex.includes('mechanic:wick'), '按过 C 就该记进图鉴了');
+  p2.addRelic('wickember');
+  tank(game2);
+  run(game2, 60);
+  assert.ok(!(game2.save.tips ?? []).includes('relic:wick-family'), '已经知道拨芯的人不该再吃一张说明卡');
 });

@@ -48,7 +48,7 @@ import { EMBERWIND } from '../data/emberwind';
 import { ENEMY_MAP } from '../data/enemies';
 import { ARRIVAL } from '../data/arrival';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
-import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
+import { RELICS, RELIC_MAP, TRIBES, WICK_FAMILY_IDS } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
 import { PASSIVES, PASSIVE_MAP, baseStats, type PlayerStats } from '../data/upgrades';
 import { WEAPON_MAP } from '../data/weapons';
@@ -543,6 +543,8 @@ export class Game {
   private curseGoldMult = 1;
   private slowmoScale = 0.35;
   private frameCooldowns = { hurt: 0 };
+  /** 「拨芯」这条线那句"要你先按 C"讲过了没有（见 `scanWickFamily`）。 */
+  private wickHintDone = false;
   private emberTimer = 0;
   private moteTimer = 0;
   private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, dim: false, aim: false, aimX: 0, aimY: 0 };
@@ -1042,6 +1044,7 @@ export class Game {
       this.codexTimer = 0.75;
       this.syncCodex();
       this.scanEncounters();
+      this.scanWickFamily();
     }
     this.light.begin();
     this.particles.update(dt);
@@ -2233,6 +2236,32 @@ export class Game {
         parts.filter(Boolean).join('　'),
       );
     });
+  }
+
+  /**
+   * 「拨芯」这条线（遮光 / 暗火 / 夜步 / 守芯）：四件只在**拨着芯**的时候生效，
+   * 所以第一次拿到它们、而玩家**还没按过 C** 的时候，这件事值得讲一次——
+   * 不讲的话，抽到的那件在他手里就是一张废牌（README 的「已知取舍」写着这个代价）。
+   *
+   * 量在"有没有这件遗物"而不是"在哪儿拿到的"：遗物的入口有五处（精英掉落、商店、祭坛、熔铸、旧灯），
+   * 逐处去挂等于把同一句话抄五遍，将来漏一处也没人看得出来。这里每 0.75 秒扫一遍遗物表
+   * （和 `scanEncounters` 同一个节拍、同一处调用），拿没拿到由名单自己说。
+   * 反过来，"已经按过 C 的人"不用再听这一句——他早就知道按一下会发生什么。
+   */
+  private scanWickFamily(): void {
+    if (this.wickHintDone) return;
+    if (this.codex.has('mechanic', 'wick')) {
+      this.wickHintDone = true;
+      return;
+    }
+    if (!WICK_FAMILY_IDS.some((id) => this.player.relics.has(id))) return;
+    this.wickHintDone = true;
+    this.showTip(
+      'relic:wick-family',
+      '拨芯 · 这件要你先按 C',
+      '遮光 / 暗火 / 夜步 / 守芯这四件只在把灯芯拨小的时候生效：按 C（手机点右下角的「拨芯」）' +
+        '把火压住——看得近一半、打得轻三成五，换来的是一桶油多烧近两倍；再按一下拨回来。',
+    );
   }
 
   /** 弹一张提示卡（同一条只弹一次，之后写进存档）。 */

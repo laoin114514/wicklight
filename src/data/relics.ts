@@ -164,6 +164,16 @@ export const RELICS: RelicDef[] = [
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 
+/**
+ * 「拨芯」这条线上的四件（见上面那一段）：它们的条件都是同一个 `player.dimmed`。
+ *
+ * 这份名单是**从 `mods` 里认出来的**，不是手抄的 id 列表：以后再加一件（或者把某一件挪走）
+ * 不用改两处，`Game.scanWickFamily` 与 `tests/wickrelics.test.mjs` 都读它。
+ */
+export const WICK_FAMILY_IDS: string[] = RELICS.filter((r) =>
+  (['wickGuard', 'wickEmber', 'wickStride', 'wickThrift'] as const).some((k) => k in r.mods),
+).map((r) => r.id);
+
 export const RARITY_LABEL: Record<RelicRarity, string> = { common: '普通', rare: '稀有', epic: '史诗' };
 
 /**

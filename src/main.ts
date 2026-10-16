@@ -9,7 +9,7 @@ import { setupOrientation } from './ui/Orientation';
 import { BackGuard } from './ui/BackGuard';
 import { WakeLock } from './core/WakeLock';
 import { WEAPONS as weapons } from './data/weapons';
-import { RELICS as relics, TRIBES as tribes } from './data/relics';
+import { RELICS as relics, TRIBES as tribes, WICK_FAMILY_IDS as wickFamily } from './data/relics';
 import { PASSIVES as passives } from './data/upgrades';
 import { CURSES as curses } from './data/curses';
 import { ENEMIES as enemies, NORMAL_ENEMIES as normalEnemies } from './data/enemies';
@@ -63,7 +63,7 @@ function boot(): void {
     // graze / mines / vortex / pour / nova / wick 也放进来：掠影、伏灯、旋灯、倾灯、爆灯、拨芯那几串调参值
     // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
-    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova, emberwind, hunt: HUNT, arrival: ARRIVAL, wick },
+    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova, emberwind, hunt: HUNT, arrival: ARRIVAL, wick, wickFamily },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

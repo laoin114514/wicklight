@@ -20,15 +20,26 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
 
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
-  // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
+  // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）；
+  // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
       assert.ok(item.id && typeof item.id === 'string', `${name} 有 item 缺少 id`);
       assert.ok(item.name && item.blurb, `${name}.${item.id} 缺少名称或说明`);
     }
+  }
+
+  // `wickFamily` 是**导出的 id 名单**（拨芯这条线）：每个 id 都要真的能查回一件遗物，
+  // 而且那份名单要和"改这几个数的遗物"完全一致——名单跟内容漂了，`Game.scanWickFamily`
+  // 就会给错的时机弹说明卡（或者干脆永远不弹）。
+  const relicIds = new Set(data.relics.map((r) => r.id));
+  assert.ok(data.wickFamily.length > 0, 'wickFamily 名单不该是空的');
+  for (const id of data.wickFamily) {
+    assert.ok(typeof id === 'string' && id.length > 0, `wickFamily 里有非法 id（${id}）`);
+    assert.ok(relicIds.has(id), `wickFamily 里的 ${id} 查不回任何遗物`);
   }
 
   // ── 掠影 / 灯焰高涨的调参表：全是正数，而且几条关系必须成立 ──

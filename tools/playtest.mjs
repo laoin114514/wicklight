@@ -309,6 +309,49 @@ async function main() {
   expect(lampState.oil < oilBeforeLamp, '分灯扣的是自己的灯油（油就是光）', `${oilBeforeLamp.toFixed(3)} → ${lampState.oil}`);
   expect(lampState.cd > 0 && lampState.ready === false, '分完灯要进冷却，冷却中不该报可用', JSON.stringify(lampState));
 
+  // ── 3a2b0. 拨芯这条线（v72）：还没按过 C 的人第一次拿到那四件，得先被讲一次 ──
+  // README 的「已知取舍」里挂着这条线的代价：从不按 C 的人，抽到这四件等于什么都没抽到
+  // （48 件里有 4 件对一部分人不存在）。v72 补的不是数值，而是**把条件说出来**——
+  // 拿到手的那一刻讲一次。离线测试量的是"讲没讲"，这里量真浏览器里那**一张卡**
+  // （字、位置、尺寸），而且要走主循环里那一遍 0.75 秒的扫描（不是直接调那个函数）。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.tips = (g.save.tips ?? []).filter((k) => k !== 'relic:wick-family');
+    g.wickHintDone = false;
+    g.player.addRelic('wickveil');
+  });
+  await sleep(1000); // 扫描是每 0.75 秒一遍，走主循环
+  const wickTip = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const el = [...document.querySelectorAll('.toast--tip')].pop();
+    const r = el?.getBoundingClientRect();
+    return {
+      knows: g.codex.has('mechanic', 'wick'), // 前置条件：这一局还没按过 C
+      text: (el?.innerText ?? '').replace(/\n/g, ' '),
+      recorded: (g.save.tips ?? []).includes('relic:wick-family'),
+      w: Math.round(r?.width ?? 0),
+      h: Math.round(r?.height ?? 0),
+      left: Math.round(r?.left ?? 0),
+      right: Math.round(r?.right ?? 0),
+    };
+  });
+  expect(wickTip.knows === false, '这一条的前提是真的：还没按过 C，图鉴里还没有「拨芯」', JSON.stringify(wickTip.knows));
+  expect(wickTip.recorded, '拿到那四件里的头一件、又没按过 C：该主动弹一张说明卡', wickTip.text);
+  expect(/拨芯/.test(wickTip.text) && /按 C/.test(wickTip.text), '那张卡上写着怎么用（按 C）', wickTip.text);
+  expect(
+    wickTip.w > 0 && wickTip.h > 0 && wickTip.left >= 0 && wickTip.right <= 1280,
+    '这张说明卡有尺寸、也在视口里',
+    JSON.stringify(wickTip),
+  );
+  await shot('03j0-wick-family-tip');
+  await page.evaluate(() => {
+    const hud = window.__WICKLIGHT__.hud;
+    const g = window.__WICKLIGHT__.game;
+    hud.clearCards(); // 别让这张卡飘到后面那些检查的画面上
+    g.player.removeRelic('wickveil');
+    g.player.recomputeStats();
+  });
+
   // ── 3a2b. 拨芯（C）：真按键 → 火真的矮下去（像素量出来）、油烧得更慢、油条挂牌子 ──
   // 这一版第一次把"灯火烧多旺"交给玩家，而它的四个乘数住在代码的不同角落——
   // 离线测试钉的是数，这里钉的是"这一条链子真的接上了"：键盘 → 主循环 → 玩家 → 画面。
@@ -440,6 +483,22 @@ async function main() {
     codexWick.text.includes('遮光') && codexWick.text.includes('守芯'),
     '图鉴的「拨芯」条目里点出了这四件遗物',
     codexWick.text.slice(-180),
+  );
+
+  // 反过来（v72）：**已经按过 C 的人**不该再吃"要你先按 C"那张卡——他早就知道按一下会发生什么。
+  // 这里把"讲过了没有"的开关和记录都清掉、四件又都在身上，再扫一遍：图鉴那条 `mechanic:wick` 自己会拦住它。
+  const wickNoRepeat = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.save.tips = (g.save.tips ?? []).filter((k) => k !== 'relic:wick-family');
+    g.wickHintDone = false;
+    const knows = g.codex.has('mechanic', 'wick');
+    g.scanWickFamily();
+    return { knows, recorded: (g.save.tips ?? []).includes('relic:wick-family') };
+  });
+  expect(
+    wickNoRepeat.knows && wickNoRepeat.recorded === false,
+    '已经按过 C 的人不该再吃一张「要你先按 C」',
+    JSON.stringify(wickNoRepeat),
   );
 
   // 收尾：这一局要还原（后面还有别的检查在跑，不能让这四件留在身上，也不能让灯芯留在拨小的状态）
