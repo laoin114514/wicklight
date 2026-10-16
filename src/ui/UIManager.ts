@@ -18,13 +18,27 @@ import { POUR } from '../data/pour';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { PACTS, PACT_MAP, pactEmberMult } from '../data/pacts';
+import { FocusRing } from '../core/Focus';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
 import type { Difficulty, MetaNodeDef, UpgradeOffer, WeaponStats } from '../types';
 
+/**
+ * 「第几张」那几块面板：它们的选项本来就用**数字键 / 脸键**直接挑（见 Game.panelHotkeys），
+ * 所以焦点环在这几块上不出现——同一个位置两套挑法（"环挪到第 3 张"和"按 3 = 第 3 张"）
+ * 只会互相打架。其余十几屏没有这套热键，环就是它们的键盘 / 手柄入口。
+ */
+const PICK_STATES: ReadonlySet<GameState> = new Set<GameState>(['levelup', 'shop', 'shrine', 'curse']);
+
 export class UIManager implements UIHost {
   private root: HTMLElement;
+  /** 焦点环（v82）：把屏幕上那些按钮接给键盘与手柄，见 core/Focus.ts。 */
+  private focus = new FocusRing();
+  /** 上一次画的是哪一屏：焦点环靠它分辨"换屏"与"原地重画"（见 showScreen）。 */
+  private focusState: GameState | null = null;
+  /** 这一次 `show` 是不是同一屏的原地重画（showScreen 里算好，show 里用掉）。 */
+  private focusSame = false;
   private screen!: HTMLElement;
   private offers: UpgradeOffer[] = [];
   private rerolls = 0;
@@ -67,6 +81,10 @@ export class UIManager implements UIHost {
   }
 
   showScreen(state: GameState): void {
+    // 焦点环要知道"这是换了屏，还是同一屏原地重画"：换了屏环收掉，原地重画按身份找回原处
+    // （见 FocusRing.attach）。'select' 那一屏是个好例子——挑灯火 / 挑难度都是原地重画。
+    this.focusSame = this.focusState === state;
+    this.focusState = state;
     this.screen.className = 'screen';
     switch (state) {
       case 'menu': this.menu(); break;
@@ -92,6 +110,9 @@ export class UIManager implements UIHost {
   private show(html: string, cls = ''): void {
     this.screen.className = `screen is-visible ${cls}`;
     this.screen.innerHTML = html;
+    // 每画一屏都重新收一遍焦点环能落到的东西（换屏 / 重画面板之后环要回到原处或就地夹住，
+    // 见 FocusRing.attach）；那三块"第几张"的面板直接关掉环，理由见上面 PICK_STATES。
+    this.focus.attach(this.screen, !PICK_STATES.has(this.game.state), this.focusSame);
   }
 
   private on(sel: string, fn: (el: HTMLElement) => void): void {
@@ -121,7 +142,7 @@ export class UIManager implements UIHost {
           <div class="menu-main">
             <button class="btn btn--primary btn--hero" data-act="play">
               <span class="btn__glyph">✦</span>
-              <span class="btn__label">开始冒险</span>
+              <span class="btn__label">开始冒险<span class="key">回车</span></span>
               <span class="btn__sub">幽林 → 长夜之城</span>
             </button>
             <div class="menu-runs">
@@ -178,6 +199,31 @@ export class UIManager implements UIHost {
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
   }
 
+  // ─────────────────── 焦点环（v82）───────────────────
+
+  /**
+   * 这一帧的方向意图（战斗之外由 main.ts 每帧调一次）。
+   * `now` 是秒；"按住会自己走"那个节奏在 FocusRing 里（先 0.35 秒、之后每 0.11 秒一格）。
+   */
+  focusMove(now: number, dx: number, dy: number): boolean {
+    return this.focus.move(now, dx, dy);
+  }
+
+  /** 按下环上那一项。环还没亮（或者这一屏没有可点的东西）就返回假，交给面板自己的主按钮。 */
+  focusActivate(): boolean {
+    return this.focus.activate();
+  }
+
+  /** `Esc` / `Ⓑ`：这一屏有"返回"就按它。 */
+  focusBack(): boolean {
+    return this.focus.backAction();
+  }
+
+  /** 环现在在第几项（-1 = 还没亮）。测试与调试用：屏幕上那圈光是画出来的，读不到就只能问它。 */
+  get focusIndex(): number {
+    return this.focus.index;
+  }
+
   /**
    * 结算面板上的**主按钮**，交给键盘走：死亡 = 再点一盏、通关 = 挑战无尽之夜。
    *
@@ -186,18 +232,26 @@ export class UIManager implements UIHost {
    * （其中"挑战无尽之夜"还要先把 `endless` 这个界面自己的开关拨上去）——
    * 面板的班次该由面板自己交代。
    *
-   * 只认这两块：商店那颗"继续前进"是另一回事。它意味着"我买完了"，而这里意味着
-   * "我读完了"——同一颗回车在两处各自表示什么，得说清楚，不然迟早有人在补给站里
+   * v82 起它也认**主菜单**（开始冒险）与**选灯火**（点燃灯芯）：手柄没有指针，
+   * 而手柄玩家的第一件事就是把这一局点起来——`Start` / 回车在这两屏上按下去
+   * 正是那颗主按钮（`Ⓐ` 也行，见 main.ts 里那一段）。
+   *
+   * 只认这两处（结算 / 菜单 / 选灯火）：商店那颗"继续前进"是另一回事。它意味着"我买完了"，
+   * 而这里意味着"我读完了"——同一颗回车在两处各自表示什么，得说清楚，不然迟早有人在补给站里
    * 习惯性按下回车，然后带着一钱包金币上了下一关。
    */
   panelPrimary(): boolean {
-    if (this.game.state === 'dead') {
+    if (this.game.state === 'dead' || this.game.state === 'menu') {
       this.game.openMenu('select');
       return true;
     }
     if (this.game.state === 'victory') {
       this.endless = true;
       this.openSelect();
+      return true;
+    }
+    if (this.game.state === 'select') {
+      this.game.newRun(this.selectedLantern, this.selectedDifficulty, this.endless, null, [...this.selectedPacts]);
       return true;
     }
     return false;
@@ -259,7 +313,7 @@ export class UIManager implements UIHost {
         </div>
         <div class="row-actions">
           <button class="btn" data-act="back">返回</button>
-          <button class="btn btn--primary" data-act="start">点燃灯芯</button>
+          <button class="btn btn--primary" data-act="start">点燃灯芯<span class="key">回车</span></button>
         </div>
       </div>
     `);
@@ -1006,8 +1060,9 @@ export class UIManager implements UIHost {
     const stage = STAGES[Math.min(g.stageIndex + 1, STAGES.length - 1)];
     const cards = g.curseOffers
       .map(
-        (c) => `
+        (c, i) => `
       <button class="curse-card" data-curse="${c.id}" style="--accent:${c.color}">
+        ${this.hotkey(i)}
         <div class="curse-card__icon">${c.icon}</div>
         <div class="curse-card__name">${c.name}</div>
         <div class="curse-card__blurb">${c.blurb}</div>

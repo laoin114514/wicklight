@@ -2501,6 +2501,7 @@ export class Game {
       if (this.state === 'levelup') this.pickOffer(pick - 1);
       else if (this.state === 'shrine') this.pickShrine(pick - 1);
       else if (this.state === 'shop') this.pickShopItem(pick - 1);
+      else if (this.state === 'curse') this.pickCurse(pick - 1);
     }
     if (reroll) {
       if (this.state === 'levelup') this.reroll();
@@ -2511,10 +2512,11 @@ export class Game {
   /**
    * 面板热键：直接走**第几张**（0 起）。
    *
-   * 三个入口（升级卡 / 祭坛供物 / 商店商品）长得一样，是因为它们回答的是同一个问题：
-   * "这块面板上的第 n 个按钮是哪个"。做成三个方法而不是一个通用的"点第 n 个"，
-   * 是因为它们按下去之后走的路完全不同——一张卡改数值、一件供物换代价、一件商品花钱——
-   * 而每一条路都已经有一个名字了（`chooseUpgrade` / `chooseShrine` / `buyShop`），
+   * 四个入口（升级卡 / 祭坛供物 / 商店商品 / 夜咒条款）长得一样，是因为它们回答的是同一个问题：
+   * "这块面板上的第 n 个按钮是哪个"。做成四个方法而不是一个通用的"点第 n 个"，
+   * 是因为它们按下去之后走的路完全不同——一张卡改数值、一件供物换代价、一件商品花钱、
+   * 一条咒换下一关的规矩——
+   * 而每一条路都已经有一个名字了（`chooseUpgrade` / `chooseShrine` / `buyShop` / `chooseCurse`），
    * 这里只是把"第几张"翻译成那个名字，不复制任何规则。
    *
    * 返回真假：没选成（不在那块面板上 / 那个位置没有东西）就是假——测试要能分辨
@@ -2540,6 +2542,21 @@ export class Game {
     if (this.state !== 'shop') return false;
     if (!this.shopItems[index]) return false;
     return this.buyShop(index);
+  }
+
+  /**
+   * 夜咒岔口按第 n 条（v82）。
+   *
+   * 它是四块"打断战斗"的面板里**最后一块**接上键盘的：升级卡 / 祭坛 / 商店在 v68 就接上了，
+   * 而这一块一直只能点——偏偏它挑的是"带着哪一条咒走完下一关"，不可逆，
+   * 而且它紧跟在补给站后面（连着两块面板都要把手从 WASD 上拿开）。
+   */
+  pickCurse(index: number): boolean {
+    if (this.state !== 'curse') return false;
+    const c = this.curseOffers[index];
+    if (!c) return false;
+    this.chooseCurse(c.id);
+    return true;
   }
 
   private resolveProjectiles(dt: number): void {

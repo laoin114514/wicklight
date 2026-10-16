@@ -5,11 +5,13 @@ import { Input } from './core/Input';
 import {
   Gamepad,
   PAD_AIM_DEAD as PAD_AIM,
+  PAD_NAV_DEAD as PAD_NAV,
   PAD_BUTTON as PAD_BUTTON_MAP,
   PAD_DEADZONE as PAD_DEAD,
   PAD_HINT,
   PAD_TIP,
 } from './core/Gamepad';
+import { FocusRing, NAV_OVERLAP_TOLERANCE, NAV_REPEAT_DELAY, NAV_REPEAT_EVERY, pickNearest } from './core/Focus';
 import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
@@ -74,6 +76,14 @@ function boot(): void {
     // 手柄那个类本身也交给测试：映射表（哪个键是哪件事）可以脱离浏览器单量——
     // 喂一只假手柄进去就行，不用真的插一只手柄（CI 里也没有）。
     Gamepad,
+    // 焦点环那一套（v82）：类 + 导航打分（纯函数）+ 那两个重复节奏常量。
+    // 同理——"往下该挑哪一项"是这一套里最容易出错又最看不出来的地方，
+    // 做成能脱离浏览器单量的纯函数，才有得测。
+    FocusRing,
+    pickNearest,
+    NAV_OVERLAP_TOLERANCE,
+    NAV_REPEAT_DELAY,
+    NAV_REPEAT_EVERY,
     // 供测试/调试读取的静态数据表（无副作用）
     // graze / mines / vortex / pour / nova / wick 也放进来：掠影、伏灯、旋灯、倾灯、爆灯、拨芯那几串调参值
     // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
@@ -91,9 +101,9 @@ function boot(): void {
       // 「薪火」（v80）：那三条可重复的梯子 + 价格函数。同样是一个**包**（表 + 纯函数），
       // `tests/data.test.mjs` 那张列表也要把它跳过去——理由和上面 `pacts` 那一段一样。
       fire: { FIRE_LINES, FIRE_LEVELS_TOTAL, fireCost },
-      // 手柄那一套（v81）：映射表 + 那两个常量（死区、瞄准死区）+ 两段文案。
+      // 手柄那一套（v81）：映射表 + 那三个常量（走位死区、瞄准死区、菜单导航死区）+ 两段文案。
       // 测试要对着它断"哪个键是哪件事"，而这段文案只该有一份（HUD 那行提示与那张卡共用）。
-      pad: { PAD_BUTTON: PAD_BUTTON_MAP, PAD_DEADZONE: PAD_DEAD, PAD_AIM_DEAD: PAD_AIM, PAD_HINT, PAD_TIP },
+      pad: { PAD_BUTTON: PAD_BUTTON_MAP, PAD_DEADZONE: PAD_DEAD, PAD_AIM_DEAD: PAD_AIM, PAD_NAV_DEAD: PAD_NAV, PAD_HINT, PAD_TIP },
     },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
@@ -132,9 +142,14 @@ function boot(): void {
         game.state === 'levelup' ||
         game.state === 'shop' ||
         game.state === 'shrine' ||
+        game.state === 'curse' ||
         game.state === 'dead' ||
         game.state === 'victory';
-      const ps = pad.poll(panelMode ? 'panel' : 'run');
+      // 剩下那十几屏（主菜单 / 选灯火 / 图鉴 / 档案 / 成就 / 设置 / 解锁树 / 今日灯芯）是第三种情境：
+      // 手柄在那儿要的是"挪焦点 + 按下 + 返回"（v82），而不是走位或"第几张"。
+      // 战斗 / 暂停 / 构筑总览仍旧走 `run`——那三处 Start 是暂停、Back 是构筑总览，是老规矩。
+      const runKeys = game.state === 'playing' || game.state === 'paused' || game.state === 'loadout';
+      const ps = pad.poll(panelMode ? 'panel' : runKeys ? 'run' : 'menu');
       game.setPadState(ps ? { connected: true, id: ps.id } : null);
       // 两只手可以同时搭在键盘和手柄上（有人就是这么玩的）：两边的走位加起来再归一，
       // 不然"手柄推一半 + 键盘按一下"会跑出一个人的 1.5 倍速
@@ -175,14 +190,33 @@ function boot(): void {
         : ps?.aim ?? input.aimVector(game.renderer.width, game.renderer.height);
       game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova, snap.lamp, aim, snap.dim);
       if (st.pause || ps?.pause) {
-        if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
+        // Esc / Start 在那三处是"暂停开关"（老规矩，不动）；在别的屏上它是"返回"——
+        // 图鉴 / 设置 / 档案那几屏的返回钮本来就要用鼠标点，而键盘和手柄到这儿就断了
+        if (runKeys) game.togglePause();
+        else ui.focusBack();
       }
+      // 手柄 Ⓑ：战斗之外 = 返回（战斗 / 暂停 / 总览里它是分灯 —— 那条路走 `snap.lamp`）
+      if (ps?.back && !runKeys) ui.focusBack();
       if (st.sheet || ps?.sheet) game.toggleSheet();
-      // 面板热键（见 InputState 上那一整段）：三块会打断战斗的面板——升级卡 / 祭坛 / 商店——
+      // 面板热键（见 InputState 上那一整段）：四块会打断战斗的面板——升级卡 / 祭坛 / 商店 / 夜咒——
       // 都能用键盘走完，手不必从 WASD 上拿开。规则全在 `Game.panelHotkeys` 里，
       // 这里只把这一帧的键盘状态交过去；回车那一下换的是面板，归界面管。
       game.panelHotkeys(st.pick || (ps?.pick ?? 0), st.reroll || !!ps?.reroll);
-      if (st.confirm || ps?.confirm) ui.panelPrimary();
+      // 焦点环（v82）：战斗之外，方向键 / 十字键 / 左摇杆挪环。战斗里方向键照旧是走位
+      // （`st.navX` 只是同一份按住状态的另一份读数，见 Input.update）。
+      //
+      // **每一帧都要调**，哪怕是 (0,0)：环靠"这一帧的方向和上一帧不一样"来区分
+      // "新的一下"与"还按着"（见 FocusRing.move）。只在有方向时调，松手那几帧就没人告诉它，
+      // 于是"哒、哒"两下同方向的轻点——间隔 60~70ms，远不到 0.35 秒的重复门槛——
+      // 第二下会被当成"还按着"而吃掉。（用人手在菜单里连点两下就是这么快。）
+      if (game.state !== 'playing') {
+        ui.focusMove(performance.now() / 1000, st.navX || (ps?.nav.dx ?? 0), st.navY || (ps?.nav.dy ?? 0));
+      }
+      // 回车 / Ⓐ / Start：先按焦点上那一项；环还没亮（或者这一屏没有可点的东西）就交给
+      // 面板自己的"主按钮"（结算 / 主菜单 / 选灯火那三处，见 UIManager.panelPrimary）。
+      if (st.confirm || ps?.activate || ps?.confirm) {
+        if (!ui.focusActivate()) ui.panelPrimary();
+      }
       game.update(dt);
       // 战斗里 HUD 整块跟着走；其他界面（暂停 / 结算 / 菜单）也要推卡片与公告的计时，
       // 不然"按了返回键 · 已暂停"这种排队上屏的消息会一直等在那里

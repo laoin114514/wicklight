@@ -2708,8 +2708,11 @@ async function main() {
     JSON.stringify(curseChoice),
   );
   await shot('07d-curse-choice');
+  // v82：这一块是四块"打断战斗"的面板里最后一块接上键盘的——卡上要写着按哪个键
+  const curseChips = await page.evaluate(() => [...document.querySelectorAll('[data-curse] .hotkey')].map((e) => e.textContent.trim()));
+  expect(curseChips.join(',') === '1,2,3', '夜咒卡上写着"按哪个键"', curseChips.join(','));
 
-  // 挑回报最高的那一条，落地的夜咒必须就是它挑的
+  // 挑回报最高的那一条，落地的夜咒必须就是它挑的（鼠标那条老路）
   const picked = curseChoice.ids[curseChoice.ids.length - 1];
   await page.click(`[data-curse="${picked}"]`);
   await sleep(900);
@@ -2730,6 +2733,40 @@ async function main() {
   expect(curse.hasCurse && curse.curseId === picked, '落地的夜咒正是玩家挑的那条', `${curse.curseId} vs ${picked}`);
   expect(curse.chipVisible, 'HUD 显示夜咒芯片');
   await shot('07b-curse-hud');
+
+  // 键盘也能在岔口上拿主意：再走一遍"打完这一关 → 补给站 → 岔口"（岔口只有这一处，
+  // 想量第二次就得真的再过一关），这一遍不碰鼠标，只按数字键
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.gold = 200;
+    g.onStageComplete();
+  });
+  await page.waitForFunction(() => window.__WICKLIGHT__.game.state === 'shop', null, { timeout: 8000 }).catch(() => {});
+  await page.click('[data-act="leave"]');
+  await page.waitForFunction(() => window.__WICKLIGHT__.game.state === 'curse', null, { timeout: 8000 }).catch(() => {});
+  const curseAgain = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return {
+      state: g.state,
+      ids: [...document.querySelectorAll('[data-curse]')].map((c) => c.dataset.curse),
+      chips: [...document.querySelectorAll('[data-curse] .hotkey')].map((e) => e.textContent.trim()),
+    };
+  });
+  expect(curseAgain.state === 'curse' && curseAgain.ids.length === 3, '再过一关还是三条夜咒', JSON.stringify(curseAgain));
+  // 按中间那一条：不挑最高回报，量的是"按下的键对应哪张卡"本身
+  const keyedCurse = curseAgain.ids[1];
+  await page.keyboard.press('Digit2');
+  await sleep(900);
+  const curseByKey = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    return { state: g.state, curse: g.curse?.id ?? null, gold: g.curseGoldMult, offers: g.curseOffers.length };
+  });
+  expect(
+    curseByKey.curse === keyedCurse,
+    `岔口上按 2 带走的是第二张夜咒（该是 ${keyedCurse}，实际 ${curseByKey.curse}）`,
+    JSON.stringify(curseByKey),
+  );
+  expect(curseByKey.state === 'playing' && curseByKey.offers === 0, '键盘选完夜咒就回到战场，那三条也收走了', JSON.stringify(curseByKey));
 
   // ── 7. 祭坛 ──
   const shrineOk = await page.evaluate(() => {
@@ -4078,6 +4115,192 @@ async function main() {
   const rmKept = await freshPage.evaluate(() => window.__WICKLIGHT__.game.settings.data.reduceMotion);
   expect(rmKept === false, '玩家自己关掉"减少动态效果"之后，系统偏好不再覆盖存档', String(rmKept));
   await freshCtx.close();
+
+  // ── 12. 焦点环（v82）：键盘 / 手柄也能把这十几屏走完 ──
+  // 这一条量的是**那一圈光真的画出来了、而且按下的确实是它圈住的那一项**——
+  // 离线那套（tests/focus.test.mjs）量的是"往下该挑哪一项"的打分，量不到 DOM。
+  await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
+  await sleep(420);
+  const ringOff = await page.evaluate(() => ({
+    idx: window.__WICKLIGHT__.ui.focusIndex,
+    marks: document.querySelectorAll('.screen .is-focus').length,
+  }));
+  expect(ringOff.idx === -1 && ringOff.marks === 0, '菜单刚画出来时环还没亮（一按方向才亮，手机上不该看见它）', JSON.stringify(ringOff));
+
+  await page.keyboard.press('ArrowDown');
+  await sleep(240);
+  const ringOn = await page.evaluate(() => {
+    const el = document.querySelector('.screen .is-focus');
+    const r = el ? el.getBoundingClientRect() : null;
+    return {
+      idx: window.__WICKLIGHT__.ui.focusIndex,
+      marks: document.querySelectorAll('.screen .is-focus').length,
+      act: el?.dataset?.act ?? null,
+      label: (el?.textContent ?? '').replace(/\s+/g, '').slice(0, 16),
+      w: r ? Math.round(r.width) : 0,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      outline: el ? getComputedStyle(el).outlineWidth : null,
+    };
+  });
+  expect(ringOn.marks === 1 && ringOn.act === 'play', '第一次按方向：环亮在第一个可点的东西上（开始冒险）', JSON.stringify(ringOn));
+  expect(ringOn.w > 0 && ringOn.outline === '2px', '那一圈光是画出来的（2px 描边），而且没把面板撑出滚动', JSON.stringify(ringOn));
+  expect(ringOn.overflow <= 1, '环不占布局（outline 不参与排版）', String(ringOn.overflow));
+  await shot('18-focus-menu');
+
+  // 回车 = 按下环上那一项：主菜单 →（开始冒险）→ 选灯火
+  await page.keyboard.press('Enter');
+  await sleep(380);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'select', '回车按下的是环上那一项（开始冒险 → 选灯火）');
+
+  // 选灯火那一屏是**网格**（四张灯火卡 + 三档难度 + 返回 / 点燃灯芯）：一路往下挪，
+  // 到底了往右一格——「点燃灯芯」就在「返回」右边那一格（几何上没有东西在「返回」下面）。
+  // 量的是"环真的按几何走"，所以这里不做任何"直接把环设到第 N 项"的捷径，只按键。
+  const ringWhere = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.screen .is-focus');
+      return {
+        act: el?.dataset?.act ?? null,
+        sig: el ? (el.dataset.lantern ? `lantern:${el.dataset.lantern}` : el.dataset.diff ? `diff:${el.dataset.diff}` : el.dataset.act ?? '?') : null,
+        r: Math.round(el?.getBoundingClientRect().width ?? 0),
+        i: window.__WICKLIGHT__.ui.focusIndex,
+        marks: document.querySelectorAll('.screen .is-focus').length,
+      };
+    });
+  const walkTo = async (act, tries = 10) => {
+    const seen = [];
+    for (let i = 0; i < tries; i += 1) {
+      const at = await ringWhere();
+      seen.push(at.sig);
+      if (at.act === act) return { ...at, seen };
+      await page.keyboard.press('ArrowDown');
+      await sleep(150);
+    }
+    // 往下到头了（这一列下面什么都没有）：往右一格找那颗主按钮
+    await page.keyboard.press('ArrowRight');
+    await sleep(150);
+    const at = await ringWhere();
+    return { ...at, seen: [...seen, '→', at.sig] };
+  };
+  const walked = await walkTo('start');
+  expect(walked.act === 'start', '方向键能一路挪到「点燃灯芯」上（往下走到底，再往右一格）', JSON.stringify(walked));
+  expect(walked.r > 0 && walked.marks === 1, '环圈住的是那颗主按钮，而且整屏只有一圈光', JSON.stringify(walked));
+  await shot('18b-focus-select');
+  await page.keyboard.press('Enter');
+  await sleep(1500);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'playing', '回车点起来这一局（键盘全程不碰鼠标）');
+
+  // 主菜单右边那一列账目（图鉴 / 档案 / 成就 / 设置）也能用环 + 回车走进去，`Esc` 走回来。
+  // 那一列在右边：往下亮出「开始冒险」，往右跨一列到「生涯档案」，再往下就是「图鉴」。
+  await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
+  await sleep(420);
+  const crossed = await page.evaluate(() => ({ idx: window.__WICKLIGHT__.ui.focusIndex, marks: document.querySelectorAll('.screen .is-focus').length }));
+  expect(crossed.idx === -1 && crossed.marks === 0, '换了一屏：环收掉了（不会留在上一屏的第 4 项上）', JSON.stringify(crossed));
+  const menuPath = [];
+  const stepTo = async (code) => {
+    await page.keyboard.press(code);
+    await sleep(160);
+    const at = await ringWhere();
+    menuPath.push(`${code}:${at.sig}@${at.i}`);
+    return at;
+  };
+  expect((await stepTo('ArrowDown')).act === 'play', '往下：环亮在「开始冒险」上（那一颗最宽，占着左列）');
+  expect((await stepTo('ArrowDown')).act === 'endless', '再往下：同一列里正下方那一颗（不是并排偏右的「每日灯芯」）');
+  expect((await stepTo('ArrowUp')).act === 'play', '往回往上：回到同一列上面那一颗');
+  expect((await stepTo('ArrowRight')).act === 'meta', '往右：跨到右列那一项上');
+  const codexAt = await stepTo('ArrowDown');
+  expect(codexAt.act === 'codex', '再往下：右列里的「图鉴」', menuPath.join(' '));
+  await page.keyboard.press('Enter');
+  await sleep(400);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'codex', '回车进图鉴（这一屏从前只能用鼠标点）');
+  // Esc = 返回：图鉴 / 设置 / 档案那几屏的返回钮从前只能用鼠标点，而键盘和手柄到这儿就断了
+  await page.keyboard.press('Escape');
+  await sleep(400);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'menu', 'Esc 在图鉴上 = 返回主菜单');
+
+  // 设置那一屏：三条开关 + 一排画质（低 / 中 / 高）+ 返回。
+  // 环从第一条开关往下走，落在**画质那一排的「高」**上——那一排三格是横着排的，
+  // 而「高」正好在开关那一列的正下方（这一条正是"同列优先"那条规则量出来的样子）。
+  // 再往左一格到「中」，按下回车：画质真的要动，而环要**留在「中」那一格**上
+  // （点一下整屏都会重画，环掉回第一项的话玩家就迷路了）。
+  await page.evaluate(() => {
+    window.__WICKLIGHT__.game.settings.set('quality', 'high');
+    window.__WICKLIGHT__.ui.showScreen('settings');
+  });
+  await sleep(300);
+  const segWalk = [];
+  for (let i = 0; i < 8; i += 1) {
+    const at = await page.evaluate(() => {
+      const el = document.querySelector('.screen .is-focus');
+      return { q: el?.dataset?.quality ?? null, t: el?.dataset?.toggle ?? null, i: window.__WICKLIGHT__.ui.focusIndex };
+    });
+    segWalk.push(`${at.t ? `开关:${at.t}` : at.q ? `画质:${at.q}` : '-'}@${at.i}`);
+    if (at.q) break;
+    await page.keyboard.press('ArrowDown');
+    await sleep(150);
+  }
+  const onHigh = await page.evaluate(() => {
+    const el = document.querySelector('.screen .is-focus');
+    return { q: el?.dataset?.quality ?? null, value: window.__WICKLIGHT__.game.settings.data.quality, marks: document.querySelectorAll('.screen .is-focus').length };
+  });
+  expect(onHigh.q === 'high' && onHigh.value === 'high', '方向键能挪到画质那一排上，而且落在开关那一列正下方的「高」上', `${segWalk.join(' ')} | ${JSON.stringify(onHigh)}`);
+  await page.keyboard.press('ArrowLeft');
+  await sleep(160);
+  const onMedium = await page.evaluate(() => document.querySelector('.screen .is-focus')?.dataset?.quality ?? null);
+  expect(onMedium === 'medium', '往左一格：环到「中」上（那一排一共三格）', String(onMedium));
+  await page.keyboard.press('Enter');
+  await sleep(300);
+  const segAfter = await page.evaluate(() => {
+    const el = document.querySelector('.screen .is-focus');
+    return { q: el?.dataset?.quality ?? null, value: window.__WICKLIGHT__.game.settings.data.quality, marks: document.querySelectorAll('.screen .is-focus').length };
+  });
+  expect(segAfter.value === 'medium', '按下回车真的把画质切到「中」', JSON.stringify(segAfter));
+  expect(segAfter.q === 'medium' && segAfter.marks === 1, '整屏重画之后环还留在「中」那一格上', JSON.stringify(segAfter));
+  await shot('18c-focus-settings');
+
+  // 手柄：十字键挪环、Ⓐ 按下、Start = 那颗主按钮（菜单那一屏）
+  await page.evaluate(() => {
+    window.__WICKLIGHT__.game.goMenu();
+    window.__PAD__ = { buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] };
+    navigator.getGamepads = () => [
+      { id: 'Playwright Pad (STANDARD GAMEPAD)', index: 0, connected: true, buttons: window.__PAD__.buttons, axes: window.__PAD__.axes },
+    ];
+  });
+  await sleep(320);
+  await page.evaluate(() => { window.__PAD__.buttons[13] = { pressed: true, value: 1 }; }); // 十字键下
+  await padFrames(4);
+  await page.evaluate(() => { window.__PAD__.buttons[13] = { pressed: false, value: 0 }; });
+  await padFrames(2);
+  const padRing = await page.evaluate(() => {
+    const el = document.querySelector('.screen .is-focus');
+    return { act: el?.dataset?.act ?? null, idx: window.__WICKLIGHT__.ui.focusIndex, label: (el?.textContent ?? '').replace(/\s+/g, '').slice(0, 16) };
+  });
+  expect(padRing.act === 'play' && padRing.idx === 0, '手柄十字键也能把环亮出来（而且亮在「开始冒险」上）', JSON.stringify(padRing));
+  await page.evaluate(() => { window.__PAD__.buttons[0] = { pressed: true, value: 1 }; }); // Ⓐ
+  await padFrames(4);
+  await page.evaluate(() => { window.__PAD__.buttons[0] = { pressed: false, value: 0 }; });
+  await padFrames(3);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'select', 'Ⓐ 按下环上那一项（开始冒险）');
+  // Ⓑ 在战斗之外 = 返回（战斗里它才是分灯）：选灯火那一屏上按一下该回到主菜单
+  await page.evaluate(() => { window.__PAD__.buttons[1] = { pressed: true, value: 1 }; }); // Ⓑ
+  await padFrames(4);
+  await page.evaluate(() => { window.__PAD__.buttons[1] = { pressed: false, value: 0 }; });
+  await padFrames(4);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'menu', 'Ⓑ 在选灯火那一屏 = 返回主菜单（战斗里它才是分灯）');
+  // Start = 那一屏的主按钮（换屏之后环还没亮，所以走的是 `panelPrimary` 那条路）：
+  // 主菜单 →「开始冒险」→ 选灯火 →「点燃灯芯」。手柄一路只按键，一次都没碰键鼠
+  const padStart = async () => { await page.evaluate(() => { window.__PAD__.buttons[9] = { pressed: true, value: 1 }; }); await padFrames(4); };
+  const padRelease = async () => { await page.evaluate(() => { window.__PAD__.buttons[9] = { pressed: false, value: 0 }; }); await padFrames(3); };
+  await padStart();
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'select', 'Start 在主菜单上 = 「开始冒险」');
+  await padRelease();
+  await padStart();
+  await padRelease();
+  await padFrames(3);
+  expect((await page.evaluate(() => window.__WICKLIGHT__.game.state)) === 'playing', 'Start 在选灯火那一屏 = 「点燃灯芯」（手柄也能自己开一局）');
+  await shot('18d-focus-pad');
+  // 拔掉：别把后面几条（还要用键盘 / 鼠标）拖下水
+  await page.evaluate(() => { delete navigator.getGamepads; });
+  await padFrames(2);
 
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));

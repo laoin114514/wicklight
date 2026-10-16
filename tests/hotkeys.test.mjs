@@ -231,6 +231,35 @@ test('热键：商店按第 n 件买第 n 件、R 刷新，且只认自己的那
   assert.equal(game.gold, gold, '不在商店里时 R 不该扣金币刷新商品');
 });
 
+test('热键：夜咒岔口按第 n 条（这一块是最后一块接上键盘的）', async (t) => {
+  const { game } = await open(t, 'curse');
+  game.openCurseChoice(1);
+  assert.equal(game.state, 'curse', '离开补给站会停在夜咒岔口上');
+  const offers = game.curseOffers;
+  assert.ok(offers.length >= 3, `三条候选才量得出"按的是第三条"（实际 ${offers.length} 条）`);
+  const pick = offers[2];
+
+  // 战场上按 3：一条咒都不该被选走（这一条尤其不能漏——咒是"带着走完下一关"的不可逆选择）
+  game.state = 'playing';
+  assert.equal(game.panelHotkeys(3, false), undefined, '不在夜咒岔口时按 3 什么都不做');
+  assert.equal(game.state, 'playing', '状态没被顶到别处去');
+  assert.equal(game.curseOffers.length, offers.length, '候选还在（没被顺手拿走一条）');
+
+  game.state = 'curse';
+  // 走的是**面板热键那条路**（`pick` 折成一个数交过来），不是直接调 pickCurse——
+  // 少了这一条，"数字键接没接上夜咒岔口"量不到（路由那一句删掉也照样绿）
+  game.panelHotkeys(3, false);
+  assert.equal(game.state, 'playing', '选完就该回到战场（带着那条咒走下一关）');
+  // 挑好的那一条立刻就落到下一关上了（`chooseCurse` 记下它、`continueStage` 当场开下一关，
+  // 那一关的咒与金币倍率就是这张卡上写的数）
+  assert.equal(game.curse?.id, pick.id, `按 3 带走的该是第三条「${pick.name}」（${pick.id}）`);
+  assert.equal(game.curseGoldMult, pick.goldMult, '这一关的金币倍率就是那条咒说的数');
+  assert.equal(game.curseOffers.length, 0, '候选清空（不能回来再挑一次）');
+  // 越界 / 重复按：什么都选不动，也不该把已经上身的那条咒换掉
+  assert.equal(game.pickCurse(0), false, '候选清空之后什么都选不动了');
+  assert.equal(game.curse?.id, pick.id, '已经上身的那条咒还在（没被越界那一下顶掉）');
+});
+
 test('热键：结算面板的回车走"主按钮"，别处按了不该有动作', async (t) => {
   const { game, ui } = await open(t, 'confirm');
   assert.equal(game.state, 'playing');

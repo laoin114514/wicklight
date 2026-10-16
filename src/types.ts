@@ -379,6 +379,18 @@ export interface InputState {
   pick: number;
   reroll: boolean;
   confirm: boolean;
+  /**
+   * 焦点环的方向（v82）：**只有方向键**（WASD 不算），而且和 `moveX/moveY` 是同一份按住状态。
+   *
+   * 为什么是两个字段而不是复用 `moveX/moveY`：战斗里方向键是走位，战斗之外它是"挪焦点"——
+   * 同一份按住状态，两种用法按状态分家（见 main.ts 里那一段）。做成**按住**而不是边沿，
+   * 是因为"按住会自己走"那个节奏（先 0.35 秒、之后每 0.11 秒一格）归 `FocusRing` 管，
+   * 这里只回答"这一帧玩家往哪个方向按着"——**含这一帧刚按下的那一下**：
+   * 一帧 16.7ms（手机档 30fps 是 33ms），而一次轻点只要 20~40ms，只看按住状态会把它整块吃掉
+   * （见 `Input.update` 里那一段）。
+   */
+  navX: number;
+  navY: number;
 }
 
 export interface PointerState {

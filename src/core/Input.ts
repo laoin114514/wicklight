@@ -6,13 +6,16 @@ interface KeyMap {
 
 const KEYMAP: KeyMap = {
   KeyW: 'up',
-  ArrowUp: 'up',
   KeyS: 'down',
-  ArrowDown: 'down',
   KeyA: 'left',
-  ArrowLeft: 'left',
   KeyD: 'right',
-  ArrowRight: 'right',
+  // 方向键和 WASD 是**两个动作名**，虽然它们在战斗里干的是同一件事（走位）：
+  // 战斗之外方向键还要挪焦点环（v82），而 WASD 不挪——一份按住状态两种用法，
+  // 名字分开之后 `Input.update` 才能把两份都算出来（见 InputState.navX/navY）。
+  ArrowUp: 'navUp',
+  ArrowDown: 'navDown',
+  ArrowLeft: 'navLeft',
+  ArrowRight: 'navRight',
   Space: 'dash',
   KeyK: 'dash',
   ShiftLeft: 'dash',
@@ -82,7 +85,7 @@ export class Input {
   private held = new Set<string>();
   private pressedThisFrame = new Set<string>();
   private releasedThisFrame = new Set<string>();
-  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false, dim: false, pick: 0, reroll: false, confirm: false };
+  state: InputState = { moveX: 0, moveY: 0, navX: 0, navY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false, dim: false, pick: 0, reroll: false, confirm: false };
   pointer: PointerState = { x: 0, y: 0, active: false };
   private listeners: Array<() => void> = [];
   private enabled = true;
@@ -200,8 +203,23 @@ export class Input {
 
   update(): void {
     const s = this.state;
-    s.moveX = (this.isHeld('right') ? 1 : 0) - (this.isHeld('left') ? 1 : 0);
-    s.moveY = (this.isHeld('down') ? 1 : 0) - (this.isHeld('up') ? 1 : 0);
+    // 方向键在两个动作名上都有：走位这一份把它算进去（战斗里它和 WASD 一样），
+    // 焦点环那一份单独留着（战斗之外用它挪环）。
+    //
+    // 每一份都算上**这一帧按下的那一下**（`wasPressed`），不只是"按住"：
+    // 一帧是 16.7ms（手机档 30fps 就是 33ms），而"啪"地轻点一下只要 20~40ms——
+    // 那一下完全可能整帧落在 keydown 与 keyup 之间，只看按住状态就等于把这次输入吃了。
+    // 真机上表现为"偶尔按了没反应"，而它又不常出现（要正好卡在帧缝里），最难查的就是这种。
+    // 边沿只在这一帧里算一次（`endFrame` 清掉），所以不存在"按住时每帧都被当成新按下的"。
+    const right = this.isHeld('right') || this.isHeld('navRight') || this.wasPressed('navRight');
+    const left = this.isHeld('left') || this.isHeld('navLeft') || this.wasPressed('navLeft');
+    const down = this.isHeld('down') || this.isHeld('navDown') || this.wasPressed('navDown');
+    const up = this.isHeld('up') || this.isHeld('navUp') || this.wasPressed('navUp');
+    s.moveX = (right ? 1 : 0) - (left ? 1 : 0);
+    s.moveY = (down ? 1 : 0) - (up ? 1 : 0);
+    // 焦点环那一份**只有方向键**（WASD 不算，见 InputState.navX 上那一段）
+    s.navX = (this.isHeld('navRight') || this.wasPressed('navRight') ? 1 : 0) - (this.isHeld('navLeft') || this.wasPressed('navLeft') ? 1 : 0);
+    s.navY = (this.isHeld('navDown') || this.wasPressed('navDown') ? 1 : 0) - (this.isHeld('navUp') || this.wasPressed('navUp') ? 1 : 0);
     s.dash = this.isHeld('dash');
     s.nova = this.isHeld('nova') || this.isHeld('novaAlt');
     s.focus = this.isHeld('focus');

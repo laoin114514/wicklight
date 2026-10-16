@@ -30,6 +30,13 @@ export const PAD_DEADZONE = 0.18;
  */
 export const PAD_AIM_DEAD = 0.25;
 
+/**
+ * 菜单导航（焦点环）用的死区，比走位那个大得多：菜单上"手搭在摇杆上"是个**静止动作**——
+ * 玩家一边看面板一边把拇指放在杆上，回中不准的杆会一直报 0.2~0.3，那个量级够把环一格一格推走。
+ * 45% 的意思是"真的要往那边推"，而走位那边 18% 已经够灵敏（那是连续量，漂一点看不出来）。
+ */
+export const PAD_NAV_DEAD = 0.45;
+
 /** 标准布局（Standard Gamepad）的那几个按钮号——写下来是因为它们是**约定**，不是随手挑的数。 */
 export const PAD_BUTTON = {
   a: 0,
@@ -90,9 +97,27 @@ export interface PadSnapshot {
   reroll: boolean;
   /** 面板上选了第几张（0 = 这一帧没选）。 */
   pick: number;
+  /**
+   * 焦点环的方向（v82）：十字键 + 左摇杆，**按住**给方向（-1 / 0 / 1），
+   * "按住会自己走"那个节奏归 `FocusRing`（它才知道环现在在哪一格）。
+   * 战斗里这个字段没人用（那时候左摇杆是走位，走位读的是 `moveX/moveY`）。
+   */
+  nav: { dx: number; dy: number };
+  /** Ⓐ 按下的那一帧（战斗之外 = "按下焦点上那一项"；战斗里它是冲刺，见 `dash`）。 */
+  activate: boolean;
+  /** Ⓑ 按下的那一帧（战斗之外 = "返回上一屏"；战斗里它是分灯，见 `lamp`）。 */
+  back: boolean;
 }
 
-export type PadMode = 'run' | 'panel';
+/**
+ * 三种情境（见文件头第三条）：
+ *   · `run`：战斗 / 暂停 / 构筑总览——走位、冲刺、分灯、拨芯、Start 暂停、Back 构筑；
+ *   · `panel`：「第几张」那几块（升级 / 商店 / 祭坛 / 夜咒）——脸键 = 第 1~4 张、LB / RB = 第 5 / 6 件、
+ *     Start = 确认、Back = 重掷；
+ *   · `menu`（v82）：其余那十几屏（主菜单 / 选灯火 / 图鉴 / 档案 / 成就 / 设置 / 解锁树 / 结算……）——
+ *     脸键 = 按下焦点 / 返回，Start = 确认（那几屏的"主按钮"），方向键 / 左摇杆挪焦点环。
+ */
+export type PadMode = 'run' | 'panel' | 'menu';
 
 /** 摇杆读数 → 死区过滤后的二维向量（走位与瞄准共用这一条，只是死区不一样）。 */
 export function stickVector(x: number | undefined, y: number | undefined, dead: number): { x: number; y: number } {
@@ -169,6 +194,10 @@ export class Gamepad {
     }
     const aimRaw = stickVector(axes[2], axes[3], PAD_AIM_DEAD);
     const aimLen = Math.hypot(aimRaw.x, aimRaw.y);
+    // 菜单导航：十字键 + 左摇杆（摇杆要推出 PAD_NAV_DEAD 才算数，见那个常量上那一段）
+    const navStick = stickVector(axes[0], axes[1], PAD_NAV_DEAD);
+    const navDx = (dpadX !== 0 ? dpadX : Math.abs(navStick.x) > 0 ? Math.sign(navStick.x) : 0);
+    const navDy = (dpadY !== 0 ? dpadY : Math.abs(navStick.y) > 0 ? Math.sign(navStick.y) : 0);
 
     const startEdge = edge(PAD_BUTTON.start);
     const backEdge = edge(PAD_BUTTON.back);
@@ -187,6 +216,9 @@ export class Gamepad {
     this.wasConnected = true;
 
     const run = mode === 'run';
+    // 「第几张」只在升级 / 商店 / 祭坛那三块上有意义（见 Gamepad 文件头第三条）：
+    // 其它屏幕（菜单 / 结算 / 图鉴……）上四个脸键是"按下焦点 / 返回"，不是"第 n 张"。
+    const pickMode = mode === 'panel';
     return {
       id,
       connected: true,
@@ -200,8 +232,11 @@ export class Gamepad {
       pause: run && startEdge,
       sheet: run && backEdge,
       confirm: !run && startEdge,
-      reroll: !run && backEdge,
-      pick: run ? 0 : pick,
+      reroll: pickMode && backEdge,
+      pick: pickMode ? pick : 0,
+      nav: { dx: navDx, dy: navDy },
+      activate: edge(PAD_BUTTON.a),
+      back: edge(PAD_BUTTON.b),
     };
   }
 

@@ -140,12 +140,27 @@ export function installDomStubs(opts = {}) {
       return true;
     }
     getBoundingClientRect() { return { left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720, x: 0, y: 0 }; }
-    querySelector() { return new FakeElement('div'); }
-    querySelectorAll() { return []; }
+    // 同 `querySelectorAll`：默认给一个空元素；`opts.backElement` 塞进来之后
+    // `[data-act="back"]` 查得到它（焦点环的"返回"与界面自己挂的返回处理器都走这一条）。
+    querySelector(sel) {
+      return backElement && String(sel).includes('data-act="back"') ? backElement : new FakeElement('div');
+    }
+    // 默认什么都没有——`innerHTML` 在这个桩件里只是一根字符串，解析不出元素来。
+    // 要量"焦点环在真主循环里怎么走"的测试可以拿 `opts.focusables` 塞一份名单进来
+    // （每一项是一块矩形 + 一点 dataset），于是 `FocusRing.attach` 收得到东西，
+    // 那条路就不用只靠浏览器那条实测了。
+    querySelectorAll() { return focusables; }
     closest() { return null; }
     setPointerCapture() {}
     releasePointerCapture() {}
     focus() {}
+    // 真的派发一次 click：`click()` 是浏览器上"程序化点一下"的入口，
+    // 焦点环（v82）走的就是这条路——桩件里没有它，那条路在离线就整条走不通
+    // （而离线能走通才是这个项目的一贯做法）。
+    click() {
+      if (!this._listeners?.get('click')) return;
+      this.dispatchEvent({ type: 'click' });
+    }
     getContext(kind) {
       if (kind !== '2d') return null;
       if (!this._ctx) {
@@ -162,6 +177,25 @@ export function installDomStubs(opts = {}) {
   }
 
   const CanvasClass = opts.canvasClass ?? FakeCanvas;
+
+  /** `opts.backElement`：{ box, dataset }——这一屏的"返回"那颗。 */
+  const backElement = opts.backElement
+    ? (() => {
+        const el = new FakeElement('button');
+        Object.assign(el.dataset, { act: 'back', ...(opts.backElement.dataset ?? {}) });
+        const box = opts.backElement.box;
+        el.getBoundingClientRect = () => ({ left: box.x, top: box.y, right: box.x + box.w, bottom: box.y + box.h, width: box.w, height: box.h, x: box.x, y: box.y });
+        return el;
+      })()
+    : null;
+
+  /** `opts.focusables`：[{ box: {x,y,w,h}, dataset }]——焦点环能落到的那几项。 */
+  const focusables = (opts.focusables ?? []).map(({ box, dataset = {} }) => {
+    const el = new FakeElement('button');
+    Object.assign(el.dataset, dataset);
+    el.getBoundingClientRect = () => ({ left: box.x, top: box.y, right: box.x + box.w, bottom: box.y + box.h, width: box.w, height: box.h, x: box.x, y: box.y });
+    return el;
+  });
 
   const registry = new Map();
   const getElement = (id) => {
@@ -324,6 +358,8 @@ export function installDomStubs(opts = {}) {
     dispatch,
     history: historyStub,
     FakeElement,
+    focusables,
+    backElement,
     FakeCanvas,
     getElement,
     /** 推进模拟时间并执行一帧 */

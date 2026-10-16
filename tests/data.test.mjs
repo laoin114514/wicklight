@@ -124,6 +124,12 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
     pad.PAD_AIM_DEAD > pad.PAD_DEADZONE && pad.PAD_AIM_DEAD < 0.5,
     `瞄准死区该比走位大、又没大到推不动（${pad.PAD_DEADZONE} → ${pad.PAD_AIM_DEAD}）`,
   );
+  // 菜单导航（v82）那个死区还要更大：菜单上"手搭在摇杆上"是个**静止动作**，回中不准的杆会一直报
+  // 0.2~0.3，那个量级够把焦点环一格一格推走。小了（比如跟瞄准一个数）菜单就会自己翻页。
+  assert.ok(
+    pad.PAD_NAV_DEAD > pad.PAD_AIM_DEAD && pad.PAD_NAV_DEAD < 0.8,
+    `菜单导航死区该比瞄准还迟钝、又不至于推不动（${pad.PAD_AIM_DEAD} → ${pad.PAD_NAV_DEAD}）`,
+  );
   // 底部那行说明：写的是手柄的键，不能混着键盘的键——接了手柄的人看"空格冲刺"是没有用的。
   assert.equal(typeof pad.PAD_HINT, 'string', '底部那行说明该是个字符串');
   for (const key of ['摇杆', 'Ⓐ', 'Ⓨ', 'Start', 'Back']) {

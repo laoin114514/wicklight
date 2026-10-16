@@ -180,6 +180,34 @@ test('映射：摇杆与十字键走位、两个动作键、两个动词键、�
   assert.equal(g.poll('run').pick, 0, '战斗里没有"第几张"这回事（按了不该有副作用）');
   pad.up(4);
 
+  // 菜单导航（v82）：十字键 / 左摇杆按住给方向，脸键是"按下焦点 / 返回"（不是"第几张"）
+  assert.deepEqual(g.poll('menu').nav, { dx: 0, dy: 0 }, '没推就是没方向');
+  pad.down(15);
+  assert.deepEqual(g.poll('menu').nav, { dx: 1, dy: 0 }, '十字键右 = 往右一格');
+  pad.up(15);
+  pad.stick(0.3, 0);
+  assert.deepEqual(g.poll('menu').nav, { dx: 0, dy: 0 }, '手搭在摇杆上（走位那边算在动，菜单上不算）');
+  pad.stick(1, 0);
+  assert.deepEqual(g.poll('menu').nav, { dx: 1, dy: 0 }, '推到底才算"往右"');
+  pad.stick(0, 0);
+  pad.down(0);
+  assert.equal(g.poll('menu').activate, true, '菜单上 Ⓐ = 按下焦点上那一项');
+  assert.equal(g.poll('menu').activate, false, '按住不放不该连着按（边沿）');
+  pad.up(0).down(1);
+  // 同一次按下两个字段一起读：`poll` 会把"上一帧按着什么"更新掉，第二遍 poll 就读不到边沿了
+  const menuBack = g.poll('menu');
+  assert.equal(menuBack.back, true, '菜单上 Ⓑ = 返回上一屏');
+  assert.equal(menuBack.pick, 0, '菜单上脸键是「按下焦点 / 返回」，不是「第几张」（那一套只在升级 / 商店 / 祭坛上有）');
+  pad.up(1);
+  // 战斗里同一次按下是另一件事（冲刺 / 分灯）——两个字段各自表达一件事，用哪个看状态
+  pad.down(0);
+  const msRun = g.poll('run');
+  assert.equal(msRun.dash && msRun.activate, true, '战斗里 Ⓐ 既是冲刺、也是"按下"');
+  pad.up(0).down(1);
+  const msRun2 = g.poll('run');
+  assert.equal(msRun2.lamp && msRun2.back, true, '战斗里 Ⓑ 既是分灯、也是"返回"');
+  pad.up(1);
+
   // 拔掉：没有手柄就是"什么都没有按"
   assert.equal(new Gamepad(() => []).poll('run'), null, '没接手柄时该返回 null（调用方按"没有"处理）');
   // 拔掉再插上：边沿检测要归位（不然"插上那一刻按着的键"会被当成一次新按下）
@@ -317,6 +345,26 @@ test('结算屏：Start 就是那颗主按钮（不然手柄打到死就卡住�
   pad.down(9);
   frames(env, 3);
   assert.equal(game.state, 'select', 'Start = 那颗主按钮（阵亡 → 去选灯火）');
+  pad.up(9);
+});
+
+test('主菜单上：Start 就是那颗主按钮（手柄玩家的第一件事是把这一局点起来）', async (t) => {
+  const { env, game, plug } = await open(t, 'menu-main');
+  const pad = fakePad();
+  plug(pad);
+  frames(env, 2);
+  assert.equal(game.state, 'playing', '前提：这一局已经开打了（open 里开的那一局）');
+  game.goMenu();
+  assert.equal(game.state, 'menu');
+
+  pad.down(9);
+  frames(env, 3);
+  assert.equal(game.state, 'select', '主菜单上 Start → 去选灯火');
+  pad.up(9);
+  frames(env, 2);
+  pad.down(9);
+  frames(env, 3);
+  assert.equal(game.state, 'playing', '再按一下 Start → 这一局就点起来了');
   pad.up(9);
 });
 
