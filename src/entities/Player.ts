@@ -9,6 +9,13 @@ import { GRAZE } from '../data/graze';
 import { POUR } from '../data/pour';
 import { NOVA } from '../data/nova';
 
+/**
+ * 冲刺 / 燃爆按下缓冲的长度（秒）：冷却还差这么久以内按下的操作，冷却一转完就替他放出去。
+ * 冲刺 0.2 是"手比冷却早了半拍"的那一段；燃爆短一点，见 Player.dashBuffer 上那一段的解释。
+ */
+const DASH_BUFFER = 0.2;
+const NOVA_BUFFER = 0.15;
+
 export interface PlayerContext {
   enemies: EnemySystem;
   projectiles: ProjectileSystem;
@@ -112,6 +119,18 @@ export class Player {
   lightRadius = 300;
   /** 局外解锁带来的灯火半径倍率（与灯台余温、地形各自独立） */
   baseLightMult = 1;
+  /**
+   * 难度档位带来的**灯油进项**倍率（放松 1.35 / 标准 1 / 噩梦 0.75，由 Game 在开局时下发）。
+   *
+   * 它乘在"玩的时候一直在发生的那三条进项"上：击杀掉落、擦身回油、灯台余温。
+   * 为什么是进项、而且三条都要算：
+   *   · 「放松」的敌人**更少**（countMult 1.1 vs 标准 1.35），击杀掉落本来就跟着变少——
+   *     只放大掉落的话，越弱的档位反而越缺油，"灯油充足"这句承诺是反着的；
+   *   · 擦身回油与灯台余温是同一种"我靠本事补的油"，只算一条就等于告诉玩家
+   *     "这个档位只对某一种玩法生效"，而这三条本来就是一回事。
+   * 一次性的结算（悬赏奖励、开局补给、夜咒补油）不乘它：那些不是"进项"，是一次给的。
+   */
+  difficultyOilMult = 1;
   invuln = 0;
   dashTimer = 0;
   dashCd = 0;
@@ -120,8 +139,32 @@ export class Player {
   dashCdMax = 0;
   dashDirX = 0;
   dashDirY = 0;
+  /**
+   * 一共冲刺过几次。
+   *
+   * 给「余烬风」用：火种粘在身上时要靠**一次新的冲刺**抖掉，而 Game 只看得到
+   * "现在这一帧在不在冲刺里"（dashTimer > 0），分不清"刚起步的那一下"和"同一段冲刺的后半截"。
+   * 记一个只会往上加的数，比去比 dashTimer 的跳动干净，也测得住。
+   */
+  dashCount = 0;
   novaCd = 0;
   novaCdMax = 0;
+  /**
+   * 冲刺 / 燃爆的「按下缓冲」：冷却还差一点点的时候按下的那一下，先替他记着。
+   *
+   * 为什么要有这个东西：冷却剩 0.1 秒时按下冲刺，原来是什么都不会发生——
+   * 玩家看到的却是"我按了，人没动"。这不是难度，这是把玩家的操作丢了；
+   * 尤其在"贴脸了必须立刻走"的那一瞬间，玩家按下的时机本来就只差那么一点。
+   *
+   * 为什么两个数不一样：冲刺是位移，记久一点没关系（0.2 秒内到期的冷却，冲出去正好是他想要的）；
+   * 燃爆要花掉一桶油里的一大块，记忆得短一点——"我早就不想放了，它自己放出去"比"没按上"更糟。
+   * 都按**秒**算、跟着 dt 走，所以掉帧和 120Hz 上是同一段真实时间。
+   */
+  dashBuffer = 0;
+  novaBuffer = 0;
+  /** 上一帧这两个键是不是按着：用来认出"这一帧刚按下"（缓冲只对**按下的那一下**生效）。 */
+  private dashHeld = false;
+  private novaHeld = false;
   /** 燃爆流派：由 lanternId 决定，赋予一次燃爆完全不同的解法 */
   novaStyle = 'warden';
   private novaBuffTimer = 0;
@@ -208,12 +251,18 @@ export class Player {
     this.dashGraze = 0;
     this.metaMods = { moveSpeedMult: 1 };
     this.curseOilMult = 1;
+    this.difficultyOilMult = 1;
     this.invuln = 0;
     this.dashTimer = 0;
     this.dashCd = 0;
     this.dashCdMax = 0;
+    this.dashCount = 0;
     this.novaCd = 0;
     this.novaCdMax = 0;
+    this.dashBuffer = 0;
+    this.novaBuffer = 0;
+    this.dashHeld = false;
+    this.novaHeld = false;
     this.overburnGlow = 0;
     this.ashTimer = 0;
     this.refundLeft = 0;
@@ -556,11 +605,22 @@ export class Player {
     }
     this.moving = ml > 0.05;
 
-    if (input.dash && this.dashCd <= 0) {
+    // 「按下的那一下」先记进缓冲：冷却还差一点点的操作不算丢（见 dashBuffer 上那一段）。
+    // 只有"刚按下"这一帧算一次——按着不放本来就每帧都在尝试，不需要缓冲再替它记一遍。
+    if (input.dash && !this.dashHeld && this.dashCd > 0) this.dashBuffer = DASH_BUFFER;
+    if (input.nova && !this.novaHeld && this.novaCd > 0) this.novaBuffer = NOVA_BUFFER;
+    this.dashHeld = input.dash;
+    this.novaHeld = input.nova;
+    if (this.dashBuffer > 0) this.dashBuffer = Math.max(0, this.dashBuffer - dt);
+    if (this.novaBuffer > 0) this.novaBuffer = Math.max(0, this.novaBuffer - dt);
+
+    if ((input.dash || this.dashBuffer > 0) && this.dashCd <= 0) {
+      this.dashBuffer = 0;
       const d = Math.hypot(mvx, mvy) > 0.1 ? { x: mvx, y: mvy } : { x: Math.cos(this.angle), y: Math.sin(this.angle) };
       this.dashDirX = d.x;
       this.dashDirY = d.y;
       this.dashTimer = 0.18;
+      this.dashCount += 1;
       // 一次冲刺只认一次"穿弹幕"（见 Game.grazeDash）：不然往一片弹幕里冲一下，
       // 三颗子弹就是三次，攒了半天的表会被一次冲刺直接填满。
       this.dashGraze = 1;
@@ -616,7 +676,8 @@ export class Player {
     // ⚠ 这一发的伤害按**烧之前**的亮度算（damageScale 在这里先记下来）：
     //   油同时是"火力"和"弹药"，不先记下来的话，越舍得烧的那一发反而打得越轻——
     //   代价写在油上就够了，不该在同一发里扣两遍（这个反直觉的账是 v62 顺手修掉的）。
-    if (input.nova && this.novaCd <= 0) {
+    if ((input.nova || this.novaBuffer > 0) && this.novaCd <= 0) {
+      this.novaBuffer = 0;
       this.novaCd = Math.max(2.4, 6 - this.passiveLevel('haste') * 0.4);
       this.novaCdMax = this.novaCd;
       const castScale = this.damageScale;

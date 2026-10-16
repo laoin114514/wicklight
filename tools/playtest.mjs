@@ -1099,6 +1099,61 @@ async function main() {
   } else {
     fail('火海正烧着、怪被点着的那一帧存了下来', '采样器没抓到那一帧');
   }
+  // 倾灯的手动瞄准（桌面）：按住**鼠标右键**，指针指哪儿这一瓢就倒哪儿。
+  // 和手机那一段（`mobile` 里那一块）是同一件事的两条输入路：编码一样（方向 + 力度），
+  // 只是量"推了多远"的尺子不同（手指有自己的起点，鼠标没有，只能拿屏幕当行程）。
+  // ⚠ 这里派发的是**真的鼠标事件**（page.mouse）：主循环每帧都用真实输入覆盖 `game.setInput`，
+  //   从外面灌 `setInput` 打不过它（v62 在手机那条路上踩过）；顺带也证明右键没被浏览器
+  //   的右键菜单吃掉（画布上 preventDefault 了 contextmenu——游戏里右键是"瞄准"）。
+  const deskAim = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.grounds.length = 0;
+    p.oil = p.oilMax;
+    // 一只站在**右边**的怪：自动瞄准会锁它，所以"往左飞"只可能来自鼠标
+    const e = g.enemies.spawn('shade', p.x + 90, p.y, 1, 0);
+    e.hp = 1e6;
+    e.maxHp = 1e6;
+    e.speed = 0;
+    p.cooldowns.set('pour', 0.5); // 让那一瓢在按住右键之后才出去（不然它先按自动瞄准飞了）
+    return { cx: Math.round(window.innerWidth / 2), cy: Math.round(window.innerHeight / 2) };
+  });
+  await page.mouse.move(deskAim.cx - 260, deskAim.cy);
+  await page.mouse.down({ button: 'right' });
+  await sleep(700);
+  const deskHeld = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    const pour = window.__WICKLIGHT__.data.pour;
+    const unit = window.__WICKLIGHT__.data.weapons.find((w) => w.id === 'pour').levels[0];
+    const shots = (g.projectiles.all || []).filter((q) => q.active && q.poolRadius > 0);
+    // 指针停在离人 260px 处、屏幕高 H：力度 = 260 / (H × 0.45)，落点按 POUR.aimNear 插值
+    const pull = Math.min(1, 260 / (window.innerHeight * 0.45));
+    return {
+      shots: shots.length,
+      vx: shots[0] ? Math.round(shots[0].vx) : 0,
+      away: p.pourAim ? Math.round(p.pourAim.away) : -1,
+      range: Math.round(unit.range),
+      near: Math.round(unit.range * pour.aimNear),
+      want: Math.round(unit.range * (pour.aimNear + (1 - pour.aimNear) * pull)),
+    };
+  });
+  expect(deskHeld.shots >= 1, '按住右键时倾灯照常开火（它是自动开火的武器）', JSON.stringify(deskHeld));
+  expect(deskHeld.vx < -1, '这一瓢往指针指的方向飞（怪在右边，自动瞄准会让它往右）', JSON.stringify(deskHeld));
+  expect(
+    deskHeld.away > deskHeld.near && deskHeld.away < deskHeld.range && Math.abs(deskHeld.away - deskHeld.want) <= 4,
+    `按住右键时场上有落点标记，而且落点跟着指针推了多远走（${deskHeld.away}，期望 ≈ ${deskHeld.want}；近端 ${deskHeld.near} / 射程 ${deskHeld.range}）`,
+  );
+  await shot('03h-pour-aim-desktop');
+  await page.mouse.up({ button: 'right' });
+  await sleep(150);
+  expect(
+    await page.evaluate(() => window.__WICKLIGHT__.game.player.pourAim === null),
+    '一松开右键就还给自动瞄准（落点标记也收起来）',
+  );
+
   // 收尾：把这一段借走的东西还回去（武器、地上的火、敌人、导演、血上限）
   await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -1125,6 +1180,153 @@ async function main() {
     p.vy = 0;
     delete window.__POUR__;
     delete window.__SAVED_WEAPONS3__;
+  });
+  await sleep(200);
+
+  // ── 3a-2. 「余烬风」：不动血，动油 ──
+  // 这一版新加的险境，真实浏览器里要证明三件事：
+  //   ① 火种真的从**上风**一侧一排排飘过来（不是凭空刷在脸上）；
+  //   ② 逆着风跑会被糊上一层层的火；
+  //   ③ 一键冲刺（空格）当场把它抖干净——这是这个险境唯一的解。
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    const st = { log: [], shot: null };
+    window.__EMBER__ = st;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.grounds.length = 0;
+    p.stats.maxHp = 1e6;
+    p.hp = p.stats.maxHp;
+    p.oil = p.oilMax;
+    p.emberStacks = 0;
+    g.handleHazard('emberwind');
+    g.emberwindDirX = 1; // 风往东吹：往西（A 键）就是逆风
+    g.emberwindDirY = 0;
+    const c = document.querySelector('#game');
+    const tick = () => {
+      if (window.__EMBER__ !== st) return;
+      st.log.push({ stacks: g.emberStacks, motes: g.embers.length, oil: p.oil });
+      // 沾上第一层的那一帧存下来：那才是"身上带着火"的样子
+      if (!st.shot && g.emberStacks > 0) st.shot = c.toDataURL('image/png');
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.keyboard.down('a'); // 逆着风走
+  // ⚠ 这里要**等条件**（沾上第一层），不能等一个固定的时长：离线台架上第一层落在
+  // 1.2~2.1 秒（五颗种子），但浏览器里模拟时间的流速取决于帧率——模拟器上常常只有 30fps 上下，
+  // 固定 2.6 秒的窗口会时不时地什么都等不到（这一版就撞到过两次，红在"峰值 0 层"上）。
+  // 一阵风是 8 秒，等到 6 秒为止都是"还在这一阵风里"。
+  await page.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const t0 = performance.now();
+    while (g.emberStacks === 0 && performance.now() - t0 < 6000) await new Promise((r) => setTimeout(r, 50));
+  });
+  const emberHeld = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    const st = window.__EMBER__;
+    const west = g.embers.filter((m) => m.x < p.x - 200).length;
+    return {
+      dbg: {
+        pyreNear: g.emberPyreNear,
+        litPyres: g.level.pyres.filter((q) => q.lit).length,
+        nearestLit: Math.round(Math.min(...g.level.pyres.filter((q) => q.lit).map((q) => Math.hypot(q.x - p.x, q.y - p.y)), 1e9)),
+        px: Math.round(p.x), py: Math.round(p.y), stacksNow: p.emberStacks,
+      },
+      log: st.log,
+      shot: st.shot,
+      stacks: p.emberStacks,
+      peak: Math.max(0, ...st.log.map((r) => r.stacks)),
+      motes: g.embers.length,
+      west,
+      oil0: st.log[0]?.oil ?? -1,
+      oil: p.oil,
+      dir: [g.emberwindDirX, g.emberwindDirY],
+    };
+  });
+  await shot('03i-emberwind');
+  await page.keyboard.up('a');
+  expect(emberHeld.motes > 0, '余烬风起风之后场上真的飘着火种', `motes=${emberHeld.motes}`);
+  expect(
+    emberHeld.dir[0] === 1 && emberHeld.dir[1] === 0 && emberHeld.west > 0,
+    '火种是从上风一侧飘过来的（风往东吹，玩家西边就还有一排）',
+    `风向 ${emberHeld.dir} · 西侧火种 ${emberHeld.west}`,
+  );
+  expect(emberHeld.peak >= 1, '逆着风跑会被火种糊上', `峰值 ${emberHeld.peak} 层 ${JSON.stringify(emberHeld.dbg)}`);
+  // 顺带把"没有点亮的灯台"也钉住：这一版的「余烬风」多了第二条解（灯台的光会扑火），
+  // 万一这一局的灯台是亮的，上面那条"糊上"就可能在量别的东西
+  expect(emberHeld.dbg.litPyres === 0, '这一局里没有点亮的灯台（所以上面量到的层数都是火种糊上来的）', JSON.stringify(emberHeld.dbg));
+  expect(emberHeld.oil < emberHeld.oil0, '沾上之后灯油一直在掉（它咬的是油，不是血）', `${emberHeld.oil0.toFixed(3)} → ${emberHeld.oil.toFixed(3)}`);
+  // 冲刺 = 扑火。⚠ 看的是**冲刺那一帧**的层数，而不是"过一会儿再看一眼"：
+  // 风还在吹、身上还飘着火种，冲刺清完的下一层随时会再糊上来（隔 0.4 秒就能来一层），
+  // 固定等 200 毫秒再读，读到的是"新糊上的那一层"——量的是刷新的速度，不是冲刺的效果。
+  // 所以按一个采样器把那一整段记下来，取最小值。
+  const dashSampler = page.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const from = g.player.dashCount;
+    let min = g.emberStacks;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 700) {
+      await new Promise((r) => setTimeout(r, 30));
+      min = Math.min(min, g.emberStacks);
+    }
+    return { dashes: g.player.dashCount - from, min, peak: Math.max(min, g.emberStacks) };
+  });
+  await sleep(90); // 让采样器先跑起来，再按键
+  // 按住一小会儿再松：主循环是**每帧轮询**按键状态的，按下和松开落在同一帧之间就什么都读不到
+  await page.keyboard.down('Space'); // 冲刺 = 扑火
+  await sleep(160);
+  await page.keyboard.up('Space');
+  const emberDash = await dashSampler;
+  expect(emberDash.dashes > 0, '空格真的冲出去了（走的是真实键盘那条路）', JSON.stringify(emberDash));
+  expect(emberDash.min === 0, '冲刺那一帧把身上的火全抖掉（哪怕风还在往身上糊新的）', JSON.stringify(emberDash));
+  if (emberHeld.shot) {
+    await writeFile(join(SHOTS, '03i-emberwind-stacked.png'), Buffer.from(String(emberHeld.shot).split(',')[1], 'base64'));
+    ok('身上带着火的那一帧存了下来', '03i-emberwind-stacked.png');
+  } else {
+    fail('身上带着火的那一帧存了下来', '采样器没抓到');
+  }
+
+  // ── 3a-3. 「余烬风」的第二条解：跑向一盏亮着的灯 ──
+  // 冲刺是"立刻那一个"，灯台是"跑过去站一会儿那一个"（见 data/emberwind.ts 的 pyreDecay）。
+  // 这里在真实页面里验的是**接线**：亮着的灯台旁边，火种扑上来不再叠层、身上的层数自己往下掉。
+  const emberPyre = await page.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    const py = g.level.pyres[0];
+    g.enemies.clear();
+    g.projectiles.clear();
+    // 点一座灯台出来放在玩家旁边（真实流程是站过去等它点亮，这里只问"亮着的灯台能不能扑火"）
+    py.x = p.x + 90;
+    py.y = p.y;
+    py.lit = true;
+    py.flame = 1;
+    py.progress = 1;
+    g.handleHazard('emberwind');
+    g.emberwindDirX = 1;
+    g.emberwindDirY = 0;
+    // ⚠ 层数挂在 **game** 上，不是 player 上（`p.emberStacks = 3` 只会写到一个没人看的属性上，
+    //  然后量到的就是"灯台一点用都没有"——这一版在这里绕过一次弯）
+    g.emberStacks = 3;
+    const t0 = performance.now();
+    while (g.emberStacks > 0 && performance.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 50));
+    return { stacks: g.emberStacks, near: g.emberPyreNear, secs: +((performance.now() - t0) / 1000).toFixed(1) };
+  });
+  expect(emberPyre.near === true, '玩家站在灯台的光里（这一条量的是"光把火按灭"）', JSON.stringify(emberPyre));
+  expect(emberPyre.stacks === 0, '灯台边上三层会自己掉干净（每秒一层）', JSON.stringify(emberPyre));
+  expect(emberPyre.secs <= 4.5, '而且是在三四秒里掉的，不是等到天荒地老', JSON.stringify(emberPyre));
+
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    delete window.__EMBER__;
+    g.emberwindTimer = 0;
+    g.embers.length = 0;
+    g.emberStacks = 0;
+    g.player.hp = g.player.stats.maxHp;
+    g.player.x = 0;
+    g.player.y = 0;
   });
   await sleep(200);
 
@@ -2313,6 +2515,56 @@ async function main() {
   expect(cdRing.cooling && Number(cdRing.ring) > 0, '冷却时按钮上要画冷却圈', JSON.stringify(cdRing));
   expect(Number(cdRing.later) < Number(cdRing.ring), '冷却圈会随时间退回去（不是画着不动）', JSON.stringify(cdRing));
   expect(cdRing.done === '' && cdRing.doneCooling === false, '转完了圈要消失（没圈 = 能按）', JSON.stringify(cdRing));
+
+  // 按下缓冲（v65）在按钮上要看得见：冷却**快转完**的那一瞬间按下去，游戏会替你记下来、转完立刻放。
+  // 这里真的把时间等到剩 0.15 秒再按（缓冲窗口只有 0.2 秒，早按等于没按——那正是这条规则的边界），
+  // 然后看三件事：记下来了（is-buffered 亮起）、转完真的放出去了、放完那一下样子就收了。
+  const bufferedTap = await mobile.evaluate(async () => {
+    const btn = document.querySelector('[data-action="dash"]');
+    const p = window.__WICKLIGHT__.game.player;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = new Touch({ identifier: 27, target: btn, clientX: 0, clientY: 0 });
+    const send = (type) =>
+      btn.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [t],
+          targetTouches: type === 'touchend' ? [] : [t],
+          changedTouches: [t],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    const tap = async (hold) => {
+      send('touchstart');
+      await wait(hold);
+      send('touchend');
+      await wait(80);
+    };
+    p.dashCd = 0;
+    p.dashTimer = 0;
+    const n0 = p.dashCount;
+    await tap(120); // 先真的放一次，进入冷却
+    const first = p.dashCount;
+    for (let i = 0; i < 300 && p.dashCd > 0.15; i += 1) await wait(16);
+    const left = p.dashCd;
+    // 冷却只剩 0.15 秒时按下那一下。⚠ 这两个读数必须在**还按着**的时候取：
+    // 冷却一转眼就转完了（0.15 秒），松手再等 80 毫秒，那一发已经被放出去了、
+    // 缓冲也早就被消费掉了——量到的就是"从没记过"（第一版就是这么红的两条）。
+    send('touchstart');
+    await wait(50);
+    const armed = p.dashBuffer > 0;
+    const cls = btn.classList.contains('is-buffered');
+    const stillCooling = p.dashCd > 0;
+    send('touchend');
+    await wait(420);
+    return { n0, first, left, armed, cls, stillCooling, n1: p.dashCount, after: btn.classList.contains('is-buffered') };
+  });
+  expect(bufferedTap.first === bufferedTap.n0 + 1, '先按一下要真的放出去（后面才好比）', JSON.stringify(bufferedTap));
+  expect(bufferedTap.left < 0.2 && bufferedTap.left > 0, '要卡在缓冲窗口里按（剩不到 0.2 秒）', JSON.stringify(bufferedTap));
+  expect(bufferedTap.armed === true, '冷却快转完时按下的那一下会被记下来', JSON.stringify(bufferedTap));
+  expect(bufferedTap.cls === true && bufferedTap.stillCooling === true, '记下了要说一声：is-buffered 亮起，但圈还在转', JSON.stringify(bufferedTap));
+  expect(bufferedTap.n1 === bufferedTap.n0 + 2, '冷却一转完就替玩家把那一发放出去（不用再按一次）', JSON.stringify(bufferedTap));
+  expect(bufferedTap.after === false, '放完就不该再挂着"记下了"的样子', JSON.stringify(bufferedTap));
 
   // 暂停时手还搭在摇杆上是常事：那一刻必须松手，恢复后角色不能自己往前跑
   const holdPause = await mobile.evaluate(async () => {

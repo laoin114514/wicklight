@@ -13,6 +13,7 @@ import { LANTERNS } from '../data/lanterns';
 import { RELICS } from '../data/relics';
 import { STAGES } from '../data/stages';
 import { GRAZE } from '../data/graze';
+import { HUNT } from '../data/hunt';
 import { MINE } from '../data/mines';
 import { POUR } from '../data/pour';
 import { VORTEX } from '../data/vortex';
@@ -67,6 +68,7 @@ export const HAZARD_LABEL: Record<string, string> = {
   echoes: '回声涌来',
   bramble: '荆棘回廊',
   coldfront: '寒潮',
+  emberwind: '余烬风',
 };
 
 /**
@@ -78,11 +80,12 @@ export const HAZARD_TIP: Record<string, string> = {
   meteor: '落点先亮一圈预警，站进去就挨砸——边走边打，别在原地待着。',
   collapse: '地面会被砸开，短时间内别贴着墙和石堆走。',
   wispstorm: '相位风暴会撕碎灯光，视野忽明忽暗；先把灯油补满再进敌群。',
-  eruption: '熔岩喷发留下的火海会封路，把它当成会移动的墙。',
   oilvoid: '灯油被直接抽走——那几秒灯火又暗又弱，先退开再说。',
   echoes: '会从远处刷出「回响」：它们追的是你一秒前的位置，走折线，别直线跑。',
   bramble: '一圈荆棘把你围住，只留一道缺口——别硬撞，先环视一圈找那条缝。',
   coldfront: '踩进霜冻里会又慢又费油、灯火也暗一截，不咬人但很拖；提前绕开那几片蓝霜。',
+  eruption: '熔岩喷发留下的火海会封路，把它当成会移动的墙——火里的怪会一直烧，别跟进去。',
+  emberwind: '火种顺着一个方向飘，比你走得慢一点：顺着风跑它追不上你，迎着风走就是往火星上撞。沾上身会一直烧你的油——冲刺一下当场抖掉，或者站到亮着的灯台边，让长明把扑上来的火按灭（每秒一层）。',
 };
 
 /** 险境的一句话是什么样：图鉴里先讲"它长什么样"，再讲"怎么应付"。 */
@@ -96,6 +99,7 @@ export const HAZARD_DESC: Record<string, string> = {
   echoes: '黑暗里涌出追着你旧脚印的回响。',
   bramble: '一圈荆棘合拢，只留一道缺口。',
   coldfront: '一片霜冻铺开，踩上去又慢又费油。',
+  emberwind: '一阵风推着烧着的灰烬横穿整片战场。',
 };
 
 /** 险境在卡片上的图标与配色。 */
@@ -109,6 +113,7 @@ const HAZARD_ICON: Record<string, string> = {
   echoes: '🔊',
   bramble: '🌿',
   coldfront: '❄️',
+  emberwind: '🔥',
 };
 
 const HAZARD_COLOR: Record<string, string> = {
@@ -121,6 +126,7 @@ const HAZARD_COLOR: Record<string, string> = {
   echoes: '#9fd8ff',
   bramble: '#9fd45a',
   coldfront: '#bfe6ff',
+  emberwind: '#ffb15e',
 };
 
 const pct = (mult: number): string => `+${Math.round((mult - 1) * 100)}%`;
@@ -380,6 +386,25 @@ export function codexCatalog(): CodexEntry[] {
       ['进化', `满级 + 油雨 → 「${tideDef.name}」：一瓢变三瓢（扇形泼开），还是那一瓢的价钱`],
     ],
     extra: `往自己倒出来的火上再浇一瓢、那一刻火里已经有 ${POUR.douse} 只敌人在烧，就解「火上浇油」。它把灯火这件原来只能攒的东西变成了要"什么时候花"的东西：油满的时候连倒三瓢，油见底之前它一声不响——它的节奏不是冷却，是你补油有多快。和「枯灯 / 低语」那类"灯火越低伤害越高"的路子正好相反，凑在一起会互相拆台。`,
+  });
+  // 「循灯」（v66）：这是敌人身上的一条规则，而不是玩家的能力——所以它更像"精英词缀"那一章，
+  // 但它又确实只在收尾那几秒里发生、玩家一定会看见（那几只突然快起来还冒火星）。
+  // 放一页进来的理由和图鉴里别的东西一样：**看得见**的事该有地方读到它为什么这么干。
+  out.push({
+    kind: 'mechanic',
+    id: 'hunt',
+    name: '循灯',
+    blurb: '一波快打完、场上只剩最后几只的时候，还没走到你跟前的那几只不再吊着——它们循着灯找上来了。',
+    color: '#ffb15e',
+    icon: '🏮',
+    rows: [
+      ['什么时候开始', `一波已经刷完、场上只剩最后 ${HUNT.aliveAt} 只（这一波通常有 11~20 只）`],
+      ['它们会做什么', '不再保持距离、不再去扑你的灯台：一律直奔你（还在半路的那几只冒火星）'],
+      ['跑得有多快', `离得越远脚力越足，最多 ${HUNT.mult} 倍——但**绝对速度不超过 ${HUNT.ceiling}px/s**，比走路的你（220）慢，所以"不想打"永远走得掉`],
+      ['你看得见的那几只', `${HUNT.near}px 以内一点没变（灯火最亮时也才照到 320px）——这条只收拾"还在暗处没走到"的`],
+      ['首领', '不算数。首领有自己那一场，那么大一块突然加速也很假'],
+    ],
+    extra: '它出现的原因很实际：怪一律刷在 620~940px 外，而走得最慢的那几种（石守 34、喷糜者 40、游尸 52 px/s）光走过来就要十几二十秒。以前这段时间是"这一波打完了，但还没结束"——你站在场上等一个还在半路的东西。这一条只压缩"还在路上"的那一段，正在跟你打的那几只一点没变。',
   });
   for (const s of STAGES) {
     out.push({

@@ -23,7 +23,7 @@ export const STAGES: StageDef[] = [
     waves: 9,
     boss: 'emberwake',
     elites: ['wickmother', 'darkless', 'siphon'],
-    hazards: ['eruption', 'meteor', 'oilvoid'],
+    hazards: ['eruption', 'meteor', 'oilvoid', 'emberwind'],
   },
   {
     id: 'nightcity',

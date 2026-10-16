@@ -1,5 +1,6 @@
 import { Pool } from '../../core/Pool';
 import { ENEMY_MAP } from '../../data/enemies';
+import { HUNT } from '../../data/hunt';
 import type { EnemyDef } from '../../types';
 import { drawEnemy } from './EnemyArt';
 
@@ -44,6 +45,13 @@ export interface Enemy {
   buff: number;
   /** 掠影记账：这只怪下一次能记「掠影」还要等多久（同一只怪不许每帧都算一次） */
   grazeCd: number;
+  /**
+   * 「循灯」：收尾阶段（一波刷完、场上只剩最后几只）还没到场的那几只直奔玩家。
+   * 见 `data/hunt.ts`——`hunt` 是"这一帧吃不吃这条规则"，`huntSpeed` 是按距离算出来的脚力倍率
+   * （1 = 到场了，不再加速）。
+   */
+  hunt: boolean;
+  huntSpeed: number;
   /**
    * 掠影记账：这只怪**已经贴着玩家多久了**（连续待在掠影带里的秒数）。
    * 「掠影」是擦身而过，不是搂着不放——同一只怪贴久了贡献会一路衰减到 0
@@ -115,6 +123,11 @@ export interface EnemyContext {
   quench: (x: number, y: number, dt: number) => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
   regen: number;
+  /**
+   * 「循灯」窗口开没开（收尾阶段只剩最后几只）：开了的话，还没到场的怪一律直奔玩家。
+   * 由 Director 判定（"这一波是不是已经结束了"是它的事），这里只管执行。
+   */
+  hunt?: boolean;
   spikes: (x: number, y: number, r: number) => void;
   shake: (amount: number) => void;
 }
@@ -165,6 +178,8 @@ export class EnemySystem {
     dr: 0,
     affix: null,
     buff: 1,
+    hunt: false,
+    huntSpeed: 1,
     grazeCd: 0,
     grazeHold: 0,
   }), 256);
@@ -210,6 +225,8 @@ export class EnemySystem {
     e.dr = 0;
     e.affix = null;
     e.buff = 1;
+    e.hunt = false;
+    e.huntSpeed = 1;
     e.grazeCd = 0;
     e.grazeHold = 0;
     return e;
@@ -343,8 +360,11 @@ export class EnemySystem {
     // 地上有灯的话，"追谁"这件事整个换一个人：移动与射程都以那盏灯为准。
     // 两个例外：吹灯客有自己的目标（灯台 / 弃灯），回响追的是你过去的脚印。
     const behavior = e.def.behavior;
+    // 「循灯」（data/hunt.ts）：收尾阶段还没到场的这几只不理那些枝杈了——地上的灯不看了、
+    // 灯台不吹了，直奔玩家。正在打的那一波里 ctx.hunt 是 false，性格一点没动。
+    const hunt = !!ctx.hunt;
     const lure =
-      behavior === 'quench' || behavior === 'echo' ? null : (ctx.lureTarget?.(e.x, e.y) ?? null);
+      hunt || behavior === 'quench' || behavior === 'echo' ? null : (ctx.lureTarget?.(e.x, e.y) ?? null);
     const tx = lure ? lure.x : ctx.px;
     const ty = lure ? lure.y : ctx.py;
     const dx = tx - e.x;
@@ -359,6 +379,19 @@ export class EnemySystem {
     const playerDist = lure ? Math.hypot(pdx, pdy) || 1 : d;
     const lit = this.isLit(e, ctx);
     let speedMul = slow * e.buff;
+    // 循灯：离得越远脚力越足，但**绝对速度不超过 HUNT.ceiling**——"永远追不上走路的你"
+    // 是这一条的恒等式（不然就成了"跑不掉"，而不是"不用回头去捡"）。
+    e.hunt = hunt;
+    e.huntSpeed = 1;
+    if (hunt) {
+      const want = Math.min(e.speed * (1 + (playerDist - HUNT.near) / HUNT.span), HUNT.ceiling);
+      e.huntSpeed = Math.max(1, Math.min(HUNT.mult, want / e.speed));
+      speedMul *= e.huntSpeed;
+      // 只有真的在"赶路"的那几只冒火星：玩家得看得出它为什么突然快起来了
+      if (e.huntSpeed > 1.001 && Math.random() < dt * 6) {
+        ctx.burst(e.x, e.y, 1, '#ffb15e', { speed: 40, size: 2.2, life: 0.4 });
+      }
+    }
     if (e.def.lightShy && lit) speedMul *= 0.55;
     if (e.def.requiresLight && !lit && ctx.visionUpgrade <= 0) speedMul *= 1.6;
 
@@ -384,7 +417,8 @@ export class EnemySystem {
         break;
       }
       case 'ranged': {
-        const keep = 220;
+        // 循灯的时候不再保持距离：这一波已经结束了，还吊在中距离就只是让人多走一趟
+        const keep = hunt ? 0 : 220;
         const dir = d > keep + 40 ? 1 : d < keep - 40 ? -1 : 0;
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
@@ -468,8 +502,8 @@ export class EnemySystem {
         break;
       }
       case 'siphon': {
-        // 吊在中距离持续抽灯油：站着不动只会越来越黑
-        const keep = 300;
+        // 吊在中距离持续抽灯油：站着不动只会越来越黑（循灯时同样不再吊着）
+        const keep = hunt ? 0 : 300;
         const dir = d > keep + 30 ? 1 : d < keep - 30 ? -1 : 0;
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
@@ -498,7 +532,8 @@ export class EnemySystem {
       }
       case 'quench': {
         // 它不管你，只管你点亮的灯台：扑上去把灯焰一点点吹灭
-        const pyre = ctx.pyreTarget(e.x, e.y);
+        // （循灯时没有灯台了：这一波只剩它一个，它就是那个"该收掉的东西"）
+        const pyre = hunt ? null : ctx.pyreTarget(e.x, e.y);
         if (pyre) {
           const tx = pyre.x - e.x;
           const ty = pyre.y - e.y;

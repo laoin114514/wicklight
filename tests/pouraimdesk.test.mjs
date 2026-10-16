@@ -231,6 +231,25 @@ test('倾灯（桌面）：指针压在人物身上不算在瞄（不画落点�
   assert.equal(game.player.pourAim, null, '松手就没有标记了');
 });
 
+test('倾灯（桌面）：先按住再挪也认（按下那一刻就记住指针停在哪儿）', async (t) => {
+  const { game, input, env } = await open(t, 'press-first');
+  // 鼠标还没动过（`pointer.active` 还是 false）就直接按住右键：真浏览器里"点住不放"本来就带着坐标，
+  // 这里也得认——不然第一次按下再挪的那一帧会是"没在瞄"，这一瓢会先按自动瞄准飞出去。
+  const W = game.renderer.width;
+  const H = game.renderer.height;
+  // 怪站在**左边**：这样"往右飞"只可能来自指针（自动瞄准会让它往左）
+  statue(game, 620, 700);
+  game.player.oil = game.player.oilMax;
+  game.player.addWeapon('pour');
+  game.player.recomputeStats();
+  const cursor = mouse(env);
+  cursor.down(W / 2 + 200, H / 2);
+  assert.ok(input.aimVector(W, H), '按下就把指针位置记下来了（不必先挪一下鼠标）');
+  frames(env, 1);
+  const [shot] = shots(game);
+  assert.ok(shot && shot.vx > 1, `这一瓢往指针那边倒（实际 vx=${shot ? shot.vx.toFixed(1) : '没有瓢'}）`);
+});
+
 test('倾灯（桌面）：手里没有这件武器时，右键在屏幕上什么都不做', async (t) => {
   const { game, env } = await open(t, 'others');
   statue(game, 780, 700);

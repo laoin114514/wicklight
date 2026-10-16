@@ -45,11 +45,11 @@ test('荆棘回廊与寒潮：围住你、拖住你，而且讲得清', async (t
   const cityRows = (game.codex.entry('stage:nightcity').rows ?? []).map(([, v]) => v).join(' ');
   assert.ok(cityRows.includes('寒潮'), '关卡的险境应写出「寒潮」');
 
-  // ── 险境单独成一章：九种险境各自有条目，写清"长什么样"与"怎么应付" ──
+  // ── 险境单独成一章：十种险境各自有条目，写清"长什么样"与"怎么应付" ──
   const hazardEntries = game.codex.entries.filter((e) => e.kind === 'hazard');
-  assert.equal(hazardEntries.length, 9, `险境应有 9 条（实际 ${hazardEntries.length}）`);
-  assert.equal(game.codex.sectionTotal('hazard'), 9, '险境分类的条目数应与之一致');
-  for (const id of ['fog', 'meteor', 'collapse', 'wispstorm', 'eruption', 'oilvoid', 'echoes', 'bramble', 'coldfront']) {
+  assert.equal(hazardEntries.length, 10, `险境应有 10 条（实际 ${hazardEntries.length}）`);
+  assert.equal(game.codex.sectionTotal('hazard'), 10, '险境分类的条目数应与之一致');
+  for (const id of ['fog', 'meteor', 'collapse', 'wispstorm', 'eruption', 'oilvoid', 'echoes', 'bramble', 'coldfront', 'emberwind']) {
     const entry = game.codex.entry(`hazard:${id}`);
     assert.ok(entry, `缺少险境条目：${id}`);
     assert.ok(!entry.name.includes(id), `险境条目应写中文名而不是原始 id（${entry.name}）`);

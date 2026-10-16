@@ -1,19 +1,26 @@
 import type { Random } from '../core/Random';
 import { NORMAL_ENEMIES, ENEMY_MAP } from '../data/enemies';
 import { STAGES } from '../data/stages';
+import { HUNT } from '../data/hunt';
 import type { Difficulty, StageDef } from '../types';
 import { DIFFICULTIES } from './DifficultySystem';
 
 export interface DirectorContext {
   spawnEnemy: (defId: string, x: number, y: number, hpMult: number, dmgMult: number) => string | void;
   aliveCount: () => number;
-  spawnPoint: () => { x: number; y: number };
+  /**
+   * 刷怪点。传 `speed` 就按「赴灯」算到场时间（见 `data/arrival.ts`）——
+   * 普通怪都传，精英 / 首领不传（它们的登场是给玩家看的，不许刷在视野边上）。
+   */
+  spawnPoint: (speed?: number) => { x: number; y: number };
   announce: (text: string, big?: boolean) => void;
   hazard: (kind: string) => void;
   onBossSpawn: (defId: string) => void;
   onStageComplete: () => void;
   isBossAlive: () => boolean;
   playerPos: () => { x: number; y: number };
+  /** 收尾窗口刚打开的那一下（"余党循灯而来"）：只讲一次，别每帧重复 */
+  onHunt?: () => void;
 }
 
 export type DirectorPhase = 'intro' | 'spawning' | 'clearing' | 'boss' | 'complete';
@@ -34,6 +41,13 @@ export class Director {
   bossPair = false;
   /** 当前这一波同时上场的首领数量：1 / 2 / 3。 */
   bossCount = 0;
+  /**
+   * 「循灯」窗口：一波已经刷完、场上只剩最后几只（见 data/hunt.ts）。
+   * 开着的时候，还没到场的那几只直奔玩家——不然玩家要为了结束这一波，回头把余党一个个捡回来。
+   */
+  hunting = false;
+  /** 这一波里"循灯"报过没有（一个窗口只提示一次） */
+  private huntAnnounced = false;
   /** 本关夜咒带来的敌人强化。 */
   curse: { countMult: number; hpMult: number; dmgMult: number; extraWaves: number } = {
     countMult: 1,
@@ -68,6 +82,8 @@ export class Director {
     this.aliveCap = 0;
     this.bossPair = false;
     this.bossCount = 0;
+    this.hunting = false;
+    this.huntAnnounced = false;
   }
 
   /** 设置本关夜咒的敌人强化（在 setStage 之后调用）。 */
@@ -116,6 +132,8 @@ export class Director {
     this.aliveCap = Math.min(90, 14 + w * 3);
     this.spawned = 0;
     this.spawnTimer = 0.4;
+    this.hunting = false;
+    this.huntAnnounced = false;
 
     const bossIndex = Math.floor(this.wave / 5 - 1) % ENDLESS_BOSSES.length;
     const bossId = this.endless ? ENDLESS_BOSSES[bossIndex] : this.stage.boss;
@@ -177,7 +195,8 @@ export class Director {
             for (let i = 0; i < batch && this.spawned < this.waveBudget; i += 1) {
               const pool = NORMAL_ENEMIES.filter((id) => (ENEMY_MAP[id].minWave ?? 1) <= this.wave + this.stageIndex);
               const id = pool.length ? this.rng.pick(pool) : 'shade';
-              const pos = ctx.spawnPoint();
+              // 把脚力交给刷怪点：走得慢的从近处出发，让这一波"一起到场"（见 data/arrival.ts）
+              const pos = ctx.spawnPoint(ENEMY_MAP[id].speed);
               ctx.spawnEnemy(id, pos.x, pos.y, this.hpMult, this.dmgMult);
               this.spawned += 1;
             }
@@ -218,6 +237,18 @@ export class Director {
       default:
         break;
     }
+
+    // 「循灯」：一波刷完、场上只剩最后几只的时候开这个窗口（见 data/hunt.ts）。
+    // 判定放在 Director 是因为"这一波结束了没有"本来就是它的事；
+    // 执行在 EnemySystem（它只知道"我要不要直奔玩家"）。
+    const alive = ctx.aliveCount();
+    const hunting = this.phase === 'clearing' && alive > 0 && alive <= HUNT.aliveAt;
+    if (hunting && !this.huntAnnounced) {
+      this.huntAnnounced = true;
+      ctx.onHunt?.();
+    }
+    if (!hunting) this.huntAnnounced = false;
+    this.hunting = hunting;
 
     // Hazards
     this.hazardTimer -= dt;

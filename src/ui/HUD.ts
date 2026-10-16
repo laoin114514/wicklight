@@ -72,6 +72,9 @@ export class HUD implements HUDHost {
   private lampBtn: HTMLElement | null = null;
   private lastCd = new WeakMap<HTMLElement, string>();
   private dashFiring = false;
+  /** 「你按的那一下记下了」：冷却还没转完、但这一下已经进了按下缓冲（v65），按钮上要说出来 */
+  private dashBuffered = false;
+  private novaBuffered = false;
   private lampEmpty = false;
   private novaCharged = false;
 
@@ -850,9 +853,22 @@ export class HUD implements HUDHost {
         this.dashFiring = firing;
         this.dashBtn.classList.toggle('is-firing', firing);
       }
+      // 冷却圈还在转、这一下已经被记下了：给一个"记下了"的样子。
+      // 缓冲（v65）本来是看不见的——玩家按下去只看到"没反应"，而这正是它要修的那个缺陷，
+      // 只是它一直只活在代码里。冷却没转完的时候**不是**能按，所以仍然暗着，只让边光跳成琥珀色。
+      const buffered = p.dashBuffer > 0 && p.dashCd > 0;
+      if (buffered !== this.dashBuffered) {
+        this.dashBuffered = buffered;
+        this.dashBtn.classList.toggle('is-buffered', buffered);
+      }
     }
     if (this.novaBtn) {
       this.cdRing(this.novaBtn, p.novaCdFrac);
+      const bufferedN = p.novaBuffer > 0 && p.novaCd > 0;
+      if (bufferedN !== this.novaBuffered) {
+        this.novaBuffered = bufferedN;
+        this.novaBtn.classList.toggle('is-buffered', bufferedN);
+      }
       // 灯火过线时这一枚会亮起来：按下去不是普通燃爆，是「爆灯」（烧两倍的油换一发更大的）。
       // 和 `is-empty`（按了也没用）正好是一对——一个是"按不动"，一个是"按下去会不一样"。
       const charged = p.overburnReady;

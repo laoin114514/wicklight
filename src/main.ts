@@ -21,6 +21,9 @@ import { MINE as mines } from './data/mines';
 import { VORTEX as vortex } from './data/vortex';
 import { POUR as pour } from './data/pour';
 import { NOVA as nova } from './data/nova';
+import { EMBERWIND as emberwind } from './data/emberwind';
+import { HUNT } from './data/hunt';
+import { ARRIVAL } from './data/arrival';
 import { STAGES as stages } from './data/stages';
 import * as daily from './systems/DailySystem';
 
@@ -59,7 +62,7 @@ function boot(): void {
     // graze / mines / vortex / pour / nova 也放进来：掠影、伏灯、旋灯、倾灯、爆灯那几串调参值
     // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
     // 全是"文档里写过、测试要对着断言"的数，散在代码里迟早会漂
-    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova },
+    data: { weapons, relics, passives, curses, bounties, tribes, meta, graze, mines, vortex, pour, nova, emberwind, hunt: HUNT, arrival: ARRIVAL },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
     catalog: { enemies, affixes, stages, normalEnemies },

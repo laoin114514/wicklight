@@ -500,3 +500,37 @@ test('伏灯：升级会真的改数（等级越高，炸得越狠、撒得越�
   run(game, 2, 0, 0);
   assert.ok(game.mines.length > before, '满级伏灯照样能撒出雷来');
 });
+
+/**
+ * 这一条是台架跑出来的真崩溃（`tools/bench-waves.mjs` 一局里撞到 `Cannot read properties of
+ * undefined (reading 'radius')`）：`resolveMines` 从那头往回遍历，同时会在循环里 splice 掉
+ * **烧尽**的与**引信烧完**的雷。它先把"被踩响的那一颗"记成一个**下标**，等循环走完才去
+ * `this.mines[stepped]` 取——可这中间只要有一颗更靠前的雷烧尽被 splice 掉，数组整体前移一格，
+ * 那个下标就指到了别人身上（数组短了就指到 `undefined`，于是当场崩）。
+ *
+ * 这一段重现的正是那个次序：**被踩响的那颗排在后面（先访问、先记下下标），
+ * 同一帧里烧尽的那颗排在前面（后访问、把数组缩短）**。
+ */
+test('伏灯：同一帧里"有雷烧尽"和"有雷被踩响"撞在一起，炸的必须是被踩的那一颗', async (t) => {
+  const game = await open(t, 'race');
+  // 两个摆件都离玩家很远（玩家在 700,700），免得接触伤害带来打击停顿把这一帧吞掉
+  game.player.x = 700;
+  game.player.y = 700;
+  // ① 靠前的那一颗：这一帧就烧尽（不是被踩响，也不炸）
+  game.placeMine(0, 0, 20, 46, 30, 0);
+  const doomed = game.mines[0];
+  doomed.life = 1e-6;
+  // ② 靠后的那一颗：上弦完毕，脚下站着一只怪 → 这一帧会被踩响
+  game.placeMine(0, 0, 20, 46, 30, 0);
+  const stepped = game.mines[1];
+  stepped.arm = 0;
+  const victim = statue(game, 0, 0);
+  const hpBefore = victim.hp;
+
+  assert.doesNotThrow(() => run(game, 1), '同一帧撞上这两种情况时不该抛异常');
+
+  assert.equal(game.mines.includes(doomed), false, '烧尽的那一颗该离场（而且不炸）');
+  assert.equal(game.mines.includes(stepped), false, '被踩响的那一颗该炸掉');
+  assert.equal(game.mines.length, 0, '两颗都了结了');
+  assert.ok(victim.hp < hpBefore, '炸的必须是**被踩响**的那一颗——脚下的怪要真的掉血');
+});

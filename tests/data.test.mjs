@@ -22,7 +22,7 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -122,6 +122,56 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(nova.overburnArea > 0 && nova.overburnArea < 1, '半径也要长，但不该长到"整屏清场"');
   assert.ok(nova.overburnBurn >= 1, '爆灯的火要留下灼烧，不然它就只是一发更大的爆炸');
   assert.ok(nova.refundSpan > 0 && nova.afterglowSpan > 0 && nova.ashSpan > 0, '这条线那三个窗口都要有时长');
+
+  // ── 余烬风的调参表：这一张管着"风是墙还是背景板"，全看下面这几条关系 ──
+  const ember = data.emberwind;
+  assert.ok(ember, '构建产物应导出余烬风调参表');
+  for (const [k, v] of Object.entries(ember)) {
+    assert.equal(typeof v, 'number', `emberwind.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `emberwind.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(ember.speedEnd < 1, '火种永远追不上走路的玩家——"顺着风跑"必须是确定安全的答案（这条是它教的第一句话）');
+  assert.ok(ember.speedEnd > ember.speedStart, '风要越吹越急：尾巴比开头快，玩家才有"一直被催着走"的感觉');
+  assert.ok(ember.stackMax >= 2 && ember.stackMax <= 4, '层数上限太高就成了一次性罚站，太低就只看得到一层');
+  assert.ok(ember.oilPerStack > 0 && ember.stackMax * ember.oilPerStack < 0.06, '顶满时每秒的烧油量不该超过基础衰减（1.8%）的三倍上下：能吃掉一箱油，但不该一击致命');
+  assert.ok(ember.upwind > ember.rowSpread * 0.6, '火种要从画面上那一头来：生成点不该落在脸上');
+  assert.ok(ember.rowEvery < ember.moteLife, '隔得比寿命还久，场上就永远只有一排（铺不出"一阵风"）');
+  assert.ok(ember.rowCount >= 2 && ember.rowSpread / ember.rowCount < ember.radius * 8, '一排里两颗火种之间不能留下一条能大摇大摆穿过去的缝');
+
+  // ── 「循灯」的调参表：改错了不会报错，只会让"收尾"变成"整局都在追你"。
+  // 这里守的是它的三条边界（见 data/hunt.ts）：只在收尾、只碰你看不见的、永远追不上走路的你。
+  const huntTune = data.hunt;
+  assert.ok(huntTune, '构建产物应导出循灯调参表');
+  for (const [k, v] of Object.entries(huntTune)) {
+    assert.equal(typeof v, 'number', `hunt.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `hunt.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(huntTune.mult > 1, '它是"加速"那条规则：倍数不大于 1 就等于没写');
+  assert.ok(huntTune.aliveAt >= 1 && huntTune.aliveAt <= 5, '窗口只该在"一波的最后一小撮"时开，不能一整波都在追');
+  assert.ok(huntTune.near >= 250, 'near 以内一点不改：太小就成了"连你看得见的也要加速"（隐身加速）');
+  assert.ok(huntTune.span >= 200, '加速要有个坡度：太陡就是"一步到位"，看不见"越远越急"这件事');
+  assert.ok(huntTune.ceiling < 220, '绝对速度上限必须低于玩家基础步速(220)：这一条是"不用回头捡"，不是"跑不掉"');
+  assert.ok(huntTune.ceiling > huntTune.near * 0.4, '但也不能低到"循灯"根本没在走：它得看得出来在赶路');
+
+  // ── 「赴灯」的调参表：和循灯同一类（改了不报错，只会让"怪从哪儿来"变味）。
+  // 两条底线写在这里：**近的那头不许进视野，远的那头不许比原来更远**。
+  const arrival = data.arrival;
+  assert.ok(arrival, '构建产物应导出赴灯调参表');
+  for (const [k, v] of Object.entries(arrival)) {
+    assert.equal(typeof v, 'number', `arrival.${k} 应当是数字`);
+    assert.ok(Number.isFinite(v) && v > 0, `arrival.${k} 应当是正数（实际 ${v}）`);
+  }
+  assert.ok(arrival.min > 320,
+    `min 必须大于灯火常规最亮时能照到的地方（320px）——不然怪会当着玩家的面凭空出现（实际 ${arrival.min}）`);
+  assert.ok(arrival.max <= 940,
+    `max 不许超过原来那个生成环的外沿（940px）：这条规则只许把慢怪往里拉，不许把谁推得更远（实际 ${arrival.max}）`);
+  assert.ok(arrival.max > arrival.min * 1.5, '两头之间要留得下一段距离，不然"按脚力分配"就压成了一条窄缝');
+  assert.ok(arrival.jitter > 0 && arrival.jitter < 0.25, '抖动只该是"别落成一圈"的程度，不该把到场时间打乱');
+  // "看得见就不许刷"是恒等式：真正生效的近边界是 max(min, 灯火半径 + margin)，
+  // 所以 min 只是地板、margin 是灯外那一小圈留白——两个都不许被人顺手抹掉。
+  assert.ok(arrival.margin > 0 && arrival.margin < 120,
+    `margin 是"灯外再留一小圈"，不是"再推远一大截"（实际 ${arrival.margin}）`);
+  assert.ok(arrival.min + arrival.margin < arrival.max, '近端（地板 + 留白）要留得下远边界，不然带子会翻过来');
 
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;

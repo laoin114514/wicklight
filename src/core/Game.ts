@@ -43,7 +43,9 @@ import { GRAZE } from '../data/graze';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { POUR } from '../data/pour';
+import { EMBERWIND } from '../data/emberwind';
 import { ENEMY_MAP } from '../data/enemies';
+import { ARRIVAL } from '../data/arrival';
 import { LANTERN_MAP, LANTERNS } from '../data/lanterns';
 import { RELICS, RELIC_MAP, TRIBES } from '../data/relics';
 import { AFFIXES, AFFIX_MAP } from '../data/affixes';
@@ -131,6 +133,25 @@ interface Hazard {
   x: number;
   y: number;
   r: number;
+}
+
+/**
+ * 一颗被风推着走的火种（见 `data/emberwind.ts`）。
+ *
+ * 它不复用弹幕：弹幕的语义是"碰到就扣血、扣完就没了"，而火种的语义是
+ * "碰到会**粘住**，然后一直烧你的油"——那不是同一件事，塞进弹幕里只会让两边的规则都变糊。
+ */
+interface Ember {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** 左右飘的相位（每颗不一样，免得一整排看起来像一条直线） */
+  phase: number;
+  /** 垂直风向的摆动幅度 */
+  wob: number;
+  /** 还剩多久熄灭（秒）：飘出场地或烧尽就熄，不留在地上 */
+  life: number;
 }
 
 interface BeamFx {
@@ -345,6 +366,33 @@ export class Game {
   private sheetReturn: 'playing' | 'paused' = 'playing';
   oilPickups = 0;
   hazards: Hazard[] = [];
+  /** 「余烬风」飘在场上的火种（见 `data/emberwind.ts`） */
+  embers: Ember[] = [];
+  /** 身上粘着的「燎」层数：每层每秒烧一截灯油，冲刺一下清零 */
+  emberStacks = 0;
+  /** 这一阵余烬风还要吹多久 */
+  private emberwindTimer = 0;
+  /** 已经吹了多久（用来让风越吹越急） */
+  private emberwindElapsed = 0;
+  /** 下一排火种的倒计时 */
+  private emberwindSpawnT = 0;
+  /** 两次沾身之间的最短间隔 */
+  private emberwindStackCd = 0;
+  /** 这一帧玩家是不是站在某座亮着的灯台的光里（火种扑到身上会灭，身上的层数往回掉） */
+  private emberPyreNear = false;
+  /**
+   * 灯台扑火的记账：**在灯光里**待满 1/pyreDecay 秒就抖掉一层。
+   *
+   * ⚠ 这个计时器只往里走、而且离开光圈**不清零**（只当没在走）。清掉的话，
+   * 站在判定圈边界上来回蹭（进-出各两像素，几帧的事）就等于每次进圈白送一层——
+   * 那种"贴边抖"的玩法不该存在；现在它最多也就是"在光里待了多久就是多久"。
+   */
+  private emberPyreT = 1;
+  /** 风往哪边吹（只取四个正交方向，见 handleHazard） */
+  private emberwindDirX = 1;
+  private emberwindDirY = 0;
+  /** 上一次看到的冲刺计数：用来认出"这一帧刚起步的那次冲刺" */
+  private emberwindDashSeen = 0;
   grounds: Ground[] = [];
   /** 光矛这类瞬时直线特效 */
   beams: BeamFx[] = [];
@@ -519,6 +567,7 @@ export class Game {
     this.particles.clear();
     this.pickups.clear();
     this.hazards.length = 0;
+    this.clearEmberwind();
     this.grounds.length = 0;
     this.light.begin();
     this.audio.setMood('calm');
@@ -548,6 +597,8 @@ export class Game {
     this.player.reset(stats, { weapon: lantern.weapon, passive: lantern.passive });
     this.player.novaStyle = lantern.id;
     this.applyMetaToPlayer();
+    // 难度那一档的灯油进项（见 Player.difficultyOilMult）：乘在掉落 / 擦身 / 灯台余温上
+    this.player.difficultyOilMult = DIFFICULTIES[difficulty].oilMult;
 
     // 上一局挂着的卡片（和它身后排队的那些话）不进这一局。
     // ⚠ 必须在 loadStage 之前清：那一关的"关卡 · xxx"提示卡就是 loadStage 里弹的，
@@ -596,6 +647,7 @@ export class Game {
     this.pickups.clear();
     this.floaters.clear();
     this.hazards.length = 0;
+    this.clearEmberwind();
     this.grounds.length = 0;
     this.beams.length = 0;
     this.time = 0;
@@ -728,6 +780,7 @@ export class Game {
     this.hazards.length = 0;
     this.grounds.length = 0;
     this.beams.length = 0;
+    this.clearEmberwind();
     this.frostTime = 0;
     this.pyresLit = 0;
     this.pyreTotal = this.level.pyres.length;
@@ -1066,6 +1119,9 @@ export class Game {
 
     // 旋灯要在怪把速度积分成位移之前更新：吸力是加在怪自己的速度上的（见 Enemy.behave 里那一步）
     this.updateVortexes(dt);
+    // 余烬风排在玩家**之后**：火种粘不粘得上、冲刺有没有把身上那几层抖掉，都得看这一帧
+    // 玩家最后站在哪儿、这一帧有没有起一次新的冲刺（排在玩家前面，扑火会慢一整帧）
+    this.updateEmberwind(dt);
     this.enemies.update(dt, this.enemyCtx());
     const livingBosses = this.enemies.bosses;
     this.bossList = livingBosses.map((e) => ({ name: ENEMY_MAP[e.defId].name, frac: clamp(e.hp / e.maxHp, 0, 1) }));
@@ -1149,7 +1205,7 @@ export class Game {
     p.pyreMods.damageMult *= 1 + 0.05 * p.flags.pyreBonus;
     p.pyreMods.lightMult *= 1 + 0.06 * p.flags.pyreBonus;
     p.recomputeStats();
-    p.oil = Math.min(p.oilMax, p.oil + p.oilMax * 0.14);
+    p.oil = Math.min(p.oilMax, p.oil + p.oilMax * 0.14 * p.difficultyOilMult);
     this.gold += Math.round(10 * p.flags.goldMult * this.curseGoldMult);
     this.floaters.label(py.x, py.y - 36, '长明', '#ffd9a0', 15);
     this.particles.burst(py.x, py.y - 20, 26, '#ffb15e', { speed: 190, size: 3, life: 0.9 });
@@ -1570,6 +1626,9 @@ export class Game {
       pull: (e) => this.applyVortexPull(e),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
+      // 「循灯」窗口由 Director 判定（见 data/hunt.ts）：一整波打完了、只剩最后几只的时候，
+      // 还没到场的那几只直奔玩家，玩家不用回头把它们一个个捡回来
+      hunt: this.director.hunting,
       spikes: (x, y, r) => {
         this.hazards.push({ kind: 'thorn', timer: 1.15, x, y, r });
       },
@@ -1584,7 +1643,7 @@ export class Game {
         this.spawnWithScaling(defId, x, y, hpMult, dmgMult);
       },
       aliveCount: () => this.enemies.count,
-      spawnPoint: () => this.randomSpawnPoint(),
+      spawnPoint: (speed?: number) => this.randomSpawnPoint(speed),
       announce: (text: string, big?: boolean) => this.hud?.announce(text, big),
       hazard: (kind: string) => this.handleHazard(kind),
       onBossSpawn: (defId: string) => {
@@ -1599,6 +1658,14 @@ export class Game {
       onStageComplete: () => this.onStageComplete(),
       isBossAlive: () => this.enemies.bosses.length > 0,
       playerPos: () => ({ x: this.player.x, y: this.player.y }),
+      // 收尾窗口刚打开：给一句话，玩家才知道那几只为什么突然快起来了。
+      // 只讲一次（Director 管着），不然这一波剩下的几秒里会一直刷。
+      onHunt: () => {
+        this.floaters.label(this.player.x, this.player.y - 46, '余党循灯而来', '#ffb15e', 14);
+        this.audio.play('ui');
+        // 第一次看见就记进图鉴「机制」那一章：那几只为什么突然快起来，该有个地方读到
+        this.codex.discover('mechanic', 'hunt');
+      },
     };
   }
 
@@ -1633,15 +1700,28 @@ export class Game {
     if (def) this.particles.burst(e.x, e.y, 8, def.color, { speed: 120, size: 3, life: 0.5 });
   }
 
-  private randomSpawnPoint(): { x: number; y: number } {
+  /**
+   * 刷怪点。`speed` 是这只怪的脚力——传了就按「赴灯」（`data/arrival.ts`）算：
+   * **距离 = 到场时间 × 脚力**，走得慢的从近处出发，让它们一起到场。
+   * 不传（精英 / 首领）就还是老规矩：620~940px 的那个环，让它们自己走进来——
+   * 那两种的登场是**给玩家看的**（有预告、有大字），刷近了反而像凭空冒出来。
+   */
+  private randomSpawnPoint(speed?: number): { x: number; y: number } {
+    // 近边界是"灯火的当前半径 + margin"而不是一个死数（见 data/arrival.ts）：
+    // 灯火越亮、环越往外让，"看得见就不许刷"才是恒等式。
+    const near = Math.max(ARRIVAL.min, this.player.lightRadius + ARRIVAL.margin);
+    const base = speed ? clamp(ARRIVAL.target * speed, near, ARRIVAL.max) : 620 + this.rng.next() * 320;
+    // 抖动与 620~940 那条老环一样的比例（±8%）：全都落在同一个半径上会显得像一圈"弹出来的"
+    const jitter = speed ? base * ARRIVAL.jitter : 0;
     for (let i = 0; i < 30; i += 1) {
       const a = this.rng.angle();
-      const dist = 620 + this.rng.next() * 320;
+      // 抖动收在 [near, max] 里：抖动往外没问题，往里抖到近边界以内就等于把"看得见就不许刷"破了
+      const dist = speed ? clamp(base + (this.rng.next() * 2 - 1) * jitter, near, ARRIVAL.max) : base;
       const x = clamp(this.player.x + Math.cos(a) * dist, -this.level.halfW + 40, this.level.halfW - 40);
       const y = clamp(this.player.y + Math.sin(a) * dist, -this.level.halfH + 40, this.level.halfH - 40);
       if (!pointInWalls(x, y, this.level.walls, 26)) return { x, y };
     }
-    return { x: this.player.x + 560, y: this.player.y };
+    return { x: this.player.x + base, y: this.player.y };
   }
 
   /** 连锁闪电：从起点逐个跳向最近的敌人，并记录一道电弧特效。 */
@@ -1920,7 +2000,7 @@ export class Game {
     else if (e.elite) gold = 9;
     else if (this.rng.next() < 0.4) gold = 1 + Math.floor(this.wave / 4);
     gold = Math.round(gold * this.player.flags.goldMult * this.curseGoldMult);
-    this.loot.dropFromEnemy(e, this.player.stats.oilGainMult * DIFFICULTIES[this.difficulty].oilMult, this.rng, gold);
+    this.loot.dropFromEnemy(e, this.player.stats.oilGainMult * this.player.difficultyOilMult, this.rng, gold);
     if (def.splits) {
       // 碎魂：死亡时炸成几只影蛭，逼你处理"余党"
       for (let i = 0; i < def.splits.count; i += 1) {
@@ -2288,7 +2368,12 @@ export class Game {
     // 一只怪常常同时站在两三颗雷的触发圈里——按数组顺序随便挑一颗的话，
     // 爆炸中心会飘到怪脚边之外，而且被点着的邻居会从两个方向同时烧（一格串被拆成两半）。
     // 挑最近的那颗，爆炸就正好在它脚下，一串灯也只从脚下往外烧。
-    let stepped = -1;
+    //
+    // ⚠ 记的是**那颗雷本身**，不是它的下标：这个循环往回遍历、而且一路上会 splice
+    //   （烧尽的、引信烧完的）。等循环走完再 `this.mines[下标]`，中间只要有一颗更靠前的雷
+    //   离场，数组整体前移一格，取到的就是别人（数组短了就是 undefined —— 台架上撞到的
+    //   那次崩溃：`Cannot read properties of undefined (reading 'radius')`）。
+    let stepped: Mine | null = null;
     let steppedDist = Infinity;
     for (let i = this.mines.length - 1; i >= 0; i -= 1) {
       const m = this.mines[i];
@@ -2318,18 +2403,21 @@ export class Game {
         if (d <= rr * rr && d < near) near = d;
       });
       if (near < steppedDist) {
-        stepped = i;
+        stepped = m;
         steppedDist = near;
       }
     }
-    if (stepped < 0) return;
+    if (!stepped) return;
     // 走进你的触发圈的**如果是吹灯客**，那颗雷不炸——被它吹灭了。
     // 它本来就是"专扑灯"的那种怪，而伏灯是一盏灯：这一条不靠着再给一个范围常数，
     // 而是把"你的触发圈"直接反过来用（它扑得进来，就吹得灭）。
     // 于是它成了伏灯唯一的天敌：埋在地上的一整条路，它一边走一边给你掐灭——
     // 想用雷，就先把吹灯客点掉。
-    if (this.snufferInRange(this.mines[stepped])) this.snuffMine(stepped);
-    else this.detonateMine(this.mines[stepped], stepped);
+    // 取回它此刻真正的下标（这一帧里可能有别的雷先离场）
+    const idx = this.mines.indexOf(stepped);
+    if (idx < 0) return;
+    if (this.snufferInRange(stepped)) this.snuffMine(idx);
+    else this.detonateMine(stepped, idx);
   }
 
   /** 这颗雷的触发圈里有没有吹灯客（有的话它不是"被踩响"，而是"被吹灭"）。 */
@@ -2785,7 +2873,7 @@ export class Game {
     this.grazeCount += 1;
     // 油就是光：擦着黑暗走能一直亮着，这一小口就是"火苗被撩旺了"
     //「撩芯」把这一口翻倍——贴着脸打的那套牌，续航是靠"擦"接起来的，不是靠掉落
-    p.oil = Math.min(p.oilMax, p.oil + GRAZE.oil * (1 + p.flags.grazeOil) * (dashing ? GRAZE.dashMult : 1) * p.stats.oilGainMult);
+    p.oil = Math.min(p.oilMax, p.oil + GRAZE.oil * (1 + p.flags.grazeOil) * (dashing ? GRAZE.dashMult : 1) * p.stats.oilGainMult * p.difficultyOilMult);
     this.bounties.onGraze();
     this.codex.discover('mechanic', 'graze');
     const mx = (x + p.x) / 2;
@@ -2926,6 +3014,21 @@ export class Game {
         this.hud?.toast('💧 灯油被抽取');
         break;
       }
+      case 'emberwind': {
+        // 风向只取四个正交方向：风是要一眼看懂的，斜着一个角度只会让人分不清该往哪跑。
+        // 每阵重新掷一次，所以"这阵风往哪吹"是每局都要现读的东西。
+        const dir = this.rng.int(0, 3);
+        this.emberwindDirX = dir === 0 ? 1 : dir === 1 ? -1 : 0;
+        this.emberwindDirY = dir === 2 ? 1 : dir === 3 ? -1 : 0;
+        this.emberwindTimer = EMBERWIND.time;
+        this.emberwindElapsed = 0;
+        this.emberwindSpawnT = 0;
+        this.embers.length = 0;
+        this.emberStacks = 0;
+        this.emberwindStackCd = 0;
+        this.hud?.toast('🔥 余烬风');
+        break;
+      }
       default:
         break;
     }
@@ -2948,6 +3051,153 @@ export class Game {
         }
       }
     }
+  }
+
+  /**
+   * 「余烬风」：火种顺着风飘过来，沾在身上的那几层一直在烧油。规则与调参见 `data/emberwind.ts`。
+   *
+   * 三条动线都在这一个函数里，因为它们共用一份状态（风的方向 / 还要吹多久 / 身上几层）：
+   *   1. 起风时一排排地推火种过来（一排比随机撒更好读：一眼就能看出风朝哪边吹）；
+   *   2. 火种自己飘、摆动、烧尽；
+   *   3. 碰到玩家就粘住一层，**冲刺**一下全抖掉。
+   */
+  private updateEmberwind(dt: number): void {
+    const p = this.player;
+    // 一次新的冲刺 = 一次扑火。看计数而不是看 dashTimer：后者分不清"刚起步"和"同一段冲刺的后半截"
+    if (p.dashCount !== this.emberwindDashSeen) {
+      this.emberwindDashSeen = p.dashCount;
+      if (this.emberStacks > 0) {
+        this.emberStacks = 0;
+        this.floaters.label(p.x, p.y - 32, '火星抖落', '#ffd9a0', 14);
+        this.particles.burst(p.x, p.y, 12, '#ffc46b', { speed: 150, size: 3, life: 0.4 });
+      }
+    }
+    if (this.emberwindStackCd > 0) this.emberwindStackCd -= dt;
+    // 「灯台」那条解（见 data/emberwind.ts 的 pyreDecay）：站在亮着的灯台旁边，
+    // 身上的层数一分一分往回掉，而且这一会儿不再往上叠（火种扑进那圈光里就灭了，见 stepEmbers）。
+    this.emberPyreNear = this.litPyreWithin(p.x, p.y, EMBERWIND.pyreRadius);
+    if (this.emberPyreNear && this.emberStacks > 0) {
+      this.emberPyreT -= dt;
+      if (this.emberPyreT <= 0) {
+        this.emberPyreT = 1 / EMBERWIND.pyreDecay;
+        this.emberStacks -= 1;
+        this.floaters.label(p.x, p.y - 30, this.emberStacks > 0 ? `灯下不燎 ×${this.emberStacks}` : '灯下不燎', '#dfe9ff', 14);
+        // 白烟：一撮火被光按灭该有的样子（橘色是"烧起来了"，这里正好相反）
+        this.particles.burst(p.x, p.y - 6, 6, '#dfe9ff', { speed: 70, size: 2.6, life: 0.5 });
+      }
+    }
+    if (this.emberStacks > 0) {
+      // 这一口不是"挨一下"，是"背着一笔账"：层数在的时候每秒都在扣油。
+      // 直接写油而不是走 damagePlayer：它咬的是灯油这条账，不是生命；
+      // 油见底之后按这一局一直以来的规矩（油空 = 掉血）自然会接上。
+      p.oil = Math.max(0, p.oil - this.emberStacks * EMBERWIND.oilPerStack * dt);
+      if (this.rng.next() < dt * 12) this.particles.ember(p.x + this.rng.range(-8, 8), p.y - 6, '#ffb15e');
+    }
+    // ⚠ 风停了（timer 归零）**不等于**可以提前 return：场上的火种还要顺风飘完、自己烧尽。
+    //   早先写成"风一停就 return"，那些火种会**冻在画面上**不动也不灭——最难查的那种错。
+    if (this.emberwindTimer > 0) {
+      this.emberwindTimer -= dt;
+      this.emberwindElapsed += dt;
+      const ramp = Math.min(1, this.emberwindElapsed / EMBERWIND.time);
+      const speed = p.stats.moveSpeed * (EMBERWIND.speedStart + (EMBERWIND.speedEnd - EMBERWIND.speedStart) * ramp);
+      this.emberwindSpawnT -= dt;
+      this.pushEmberRows(p, speed);
+    }
+    this.stepEmbers(dt);
+  }
+
+  /** 起风期间每隔 `rowEvery` 秒推一排火种过来（一整排比随机撒更好读：一眼看得出风朝哪边吹）。 */
+  private pushEmberRows(p: Player, speed: number): void {
+    if (this.emberwindSpawnT <= 0) {
+      this.emberwindSpawnT = EMBERWIND.rowEvery;
+      // 垂直于风向的那条线：把一排火种铺开（风向的法线）
+      const nx = -this.emberwindDirY;
+      const ny = this.emberwindDirX;
+      const jitter = this.rng.range(-1, 1) * EMBERWIND.rowSpread * 0.16;
+      for (let i = 0; i < EMBERWIND.rowCount; i += 1) {
+        const t = EMBERWIND.rowCount > 1 ? i / (EMBERWIND.rowCount - 1) : 0.5;
+        const off = (t - 0.5) * 2 * EMBERWIND.rowSpread + jitter;
+        const x = p.x - this.emberwindDirX * EMBERWIND.upwind + nx * off;
+        const y = p.y - this.emberwindDirY * EMBERWIND.upwind + ny * off;
+        // 生成在场地外的不生成（墙外"飘进来"看着就是穿墙）。
+        // 顺带立了一条规矩：贴着上风口的墙站，能少挨一半——那是玩家自己发现的便宜
+        if (Math.abs(x) > this.level.halfW || Math.abs(y) > this.level.halfH) continue;
+        this.embers.push({
+          x,
+          y,
+          vx: this.emberwindDirX * speed,
+          vy: this.emberwindDirY * speed,
+          phase: this.rng.next() * 6.2832,
+          wob: 22 + this.rng.next() * 18,
+          life: EMBERWIND.moteLife,
+        });
+      }
+    }
+  }
+
+  /** 火种自己飘、摆动、烧尽；碰到玩家就粘住一层。 */
+  private stepEmbers(dt: number): void {
+    const p = this.player;
+    const rr = p.radius + EMBERWIND.radius;
+    for (let i = this.embers.length - 1; i >= 0; i -= 1) {
+      const m = this.embers[i];
+      m.life -= dt;
+      m.phase += dt * 2.6;
+      const wob = Math.sin(m.phase) * m.wob;
+      m.x += (m.vx - this.emberwindDirY * wob) * dt;
+      m.y += (m.vy + this.emberwindDirX * wob) * dt;
+      // 飘出场地（或者烧尽）就熄
+      if (m.life <= 0 || Math.abs(m.x) > this.level.halfW + 200 || Math.abs(m.y) > this.level.halfH + 200) {
+        this.embers.splice(i, 1);
+        continue;
+      }
+      const dx = m.x - p.x;
+      const dy = m.y - p.y;
+      if (dx * dx + dy * dy > rr * rr) continue;
+      // 站在灯台的光里：火种扑到身上就灭，哪一颗都一样、也不管冷却
+      //（这一条是"跑向灯"那条路在算术上成立的前提——少了它，站在灯台边清一层来一层）
+      if (this.emberPyreNear) {
+        this.embers.splice(i, 1);
+        this.particles.burst(m.x, m.y, 3, '#dfe9ff', { speed: 60, size: 2, life: 0.35 });
+        continue;
+      }
+      // ⚠ 冷却里的那一颗**不消费**：它还留在你身上飘，冷却一过就再烫你一下（每 0.4 秒一层）。
+      // 这是"迎着风站进一排里会被糊满三层"的全部来源——台架量出来的那张方向矩阵（0/0/3/3）
+      // 就是它量出来的，所以这一行不能顺手改掉。
+      // （改这一版时真踩过：把"碰到就消费"挪到冷却判断前面，余烬风静悄悄地轻了一半，
+      //  浏览器实测"逆风跑 2.6 秒"从稳拿一层变成一层都拿不到。）
+      if (this.emberwindStackCd > 0) continue;
+      this.embers.splice(i, 1);
+      this.emberwindStackCd = EMBERWIND.stackCd;
+      if (this.emberStacks < EMBERWIND.stackMax) {
+        this.emberStacks += 1;
+        this.floaters.label(p.x, p.y - 30, `燎 ×${this.emberStacks}`, '#ff9d2e', 14);
+      }
+      this.particles.burst(m.x, m.y, 5, '#ffb15e', { speed: 110, size: 2.6, life: 0.35 });
+    }
+  }
+
+  /** 这一点附近有没有**亮着的**灯台（灯焰被吹灭的灯台不算：它自己都保不住）。 */
+  private litPyreWithin(x: number, y: number, r: number): boolean {
+    const rr = r * r;
+    for (const py of this.level.pyres) {
+      if (!py.lit) continue;
+      if ((py.x - x) ** 2 + (py.y - y) ** 2 <= rr) return true;
+    }
+    return false;
+  }
+
+  /** 换关 / 重开 / 回主菜单：把余烬风整段收掉，别让上一阵的火种飘进下一局。 */
+  private clearEmberwind(): void {
+    this.embers.length = 0;
+    this.emberStacks = 0;
+    this.emberwindTimer = 0;
+    this.emberwindElapsed = 0;
+    this.emberwindSpawnT = 0;
+    this.emberwindStackCd = 0;
+    this.emberPyreNear = false;
+    this.emberPyreT = 1 / EMBERWIND.pyreDecay;
+    this.emberwindDashSeen = this.player.dashCount;
   }
 
   private onStageComplete(): void {
@@ -3442,6 +3692,7 @@ export class Game {
     this.light.setScale(r.dpr, this.profile.lightScale);
     this.light.render(ctx, this.camera, w, h, this.time);
     this.drawPyreGlow(ctx, w, h);
+    this.drawEmberGlow(ctx, w, h);
     this.drawFrostHaze(ctx, w, h);
 
     // Screen-space overlays
@@ -3522,6 +3773,64 @@ export class Game {
       ctx.beginPath();
       ctx.arc(s.x, s.y - 26 * cam.zoom, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 火种画在**灯光之后**（和灯台的余晖同一趟，加法叠加）。
+   *
+   * 它们是"黑地里还在烧的东西"，跟着世界层一起被暗幕压暗就等于没画；
+   * 而这一阵险境要教的第一件事就是"风往哪边吹"——看不见火种，这一句就无从谈起。
+   * 沾在玩家身上的那几层也画在这里：玩家得能一眼看见自己身上烧着几层，
+   * 不然只会觉得油莫名其妙在掉。
+   */
+  private drawEmberGlow(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!this.embers.length && this.emberStacks <= 0) return;
+    const cam = this.camera;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const m of this.embers) {
+      const s = cam.worldToScreen(m.x, m.y);
+      if (s.x < -40 || s.y < -40 || s.x > w + 40 || s.y > h + 40) continue;
+      const a = clamp(m.life / EMBERWIND.fade, 0, 1);
+      // 顺着风拖一条尾迹：火种本身只是个亮点，"风往哪边吹"这件事全靠这条尾巴讲。
+      // 尾巴短（11px 上下）——再长就成了一串流星，看不出是一颗一颗的火种。
+      ctx.strokeStyle = `rgba(255,150,60,${0.3 * a})`;
+      ctx.lineWidth = 1.6 * cam.zoom;
+      ctx.beginPath();
+      ctx.moveTo(s.x - this.emberwindDirX * 11 * cam.zoom, s.y - this.emberwindDirY * 11 * cam.zoom);
+      ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+      const r = 9 * cam.zoom;
+      // 外圈那点虚光 + 中间一颗实的芯：两点就够了（这一段每帧要画几十颗，
+      // 每颗都去 createRadialGradient 太贵；灯台那种一屏两三座才用得起渐变）
+      ctx.fillStyle = `rgba(255,120,40,${0.18 * a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,214,150,${0.9 * a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 2.1 * cam.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (this.emberStacks > 0) {
+      const p = this.player;
+      const s = cam.worldToScreen(p.x, p.y);
+      const rr = (p.radius + 12) * cam.zoom;
+      // 身上那圈光要**很小很淡**：这是加法叠加，给多一点就把玩家整个人糊成一团白，
+      // 反而看不见自己在哪。层数靠那几颗绕圈的火星数，不靠这圈光的大小。
+      ctx.fillStyle = `rgba(255,170,80,${0.05 * this.emberStacks})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, rr * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < this.emberStacks; i += 1) {
+        const a = this.time * 3.2 + (i / this.emberStacks) * Math.PI * 2;
+        ctx.fillStyle = 'rgba(255,190,110,0.85)';
+        ctx.beginPath();
+        ctx.arc(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr * 0.78, 2.6 * cam.zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
