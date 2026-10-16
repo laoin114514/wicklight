@@ -146,7 +146,8 @@ test('倾灯这套：正好四件、一族一件、四个数各归一件，而�
   // 一族一件：四族等量，第二档共鸣（5 件）的门槛才一直是那个数
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 14, lamp: 14, oil: 14, shade: 14 }, '四族应各 14 件');
+  // ×v77：「伏灯」那四件（灯阵 / 接火 / 香饵 / 绊线）各补一件，于是现在是各 15 件
+  assert.deepEqual(counts, { flame: 15, lamp: 15, oil: 15, shade: 15 }, '四族应各 15 件');
   // 装上也真的不炸：四件同时在身上，五个数都得到身上
   const p = build(game, Object.keys(LINE));
   assert.ok(p.flags.pourStacks > 0 && p.flags.pourSpread > 0 && p.flags.pourLife > 0, '前三个数该上身');

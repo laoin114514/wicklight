@@ -123,7 +123,7 @@ export interface EnemyContext {
    * 「它们扑的是光，不是你」——你埋的那颗雷本来就是一盏灯，蛾拐过去扑它，然后自己踩响。
    * 别的行为不接这条线：不然地上摆一片雷就成了"把全场引开"的万能开关。
    */
-  mineLure?: (x: number, y: number, maxDist: number) => { x: number; y: number } | null;
+  mineLure?: (x: number, y: number) => { x: number; y: number } | null;
   /**
    * 「旋灯」的吸力：在怪把速度积分成位移**之前**调一下，让它自己往里挪。
    * 钩子挂在这一步而不是"每帧直接掰位置"，是为了让吸力真的和怪自己的速度打架——
@@ -146,8 +146,10 @@ export interface EnemyContext {
   shake: (amount: number) => void;
 }
 
-/** 蛾能从多远发现地上那盏灯（和 data/mines.ts 的 `lure` 是同一个意思，这里只用来查表） */
-const MINE_LURE = 380;
+// ⚠ 这里原来抄了一份 `MINE_LURE = 380`（"蛾能从多远闻到地上那盏灯"）。v77 把它删掉了：
+//   那一份是**第二处**真话，而「香饵」（遗物）要改的正是这个数——两处只要有一处没跟上，
+//   就会出现"店里写着引得更远、实际上一只蛾都没多引来"这种谁也看不出来的错。
+//   现在这个数只有 data/mines.ts 里的 `lure` 一份，加成由 Game 在那一次调用里算好传进来。
 
 /**
  * 给一只怪挂上减速——**所有**减速都从这里过（v75）。
@@ -488,7 +490,7 @@ export class EnemySystem {
       case 'dive': {
         // 蛾扑的是光：地上那盏灯比"当前目标"更近，就先扑灯（多半就踩响在它身上）。
         // 这一条只在蛾身上接：别的怪不会因为地上摆了雷就集体改道。
-        const lamp = ctx.mineLure?.(e.x, e.y, MINE_LURE) ?? null;
+        const lamp = ctx.mineLure?.(e.x, e.y) ?? null;
         if (lamp) {
           const lx = lamp.x - e.x;
           const ly = lamp.y - e.y;

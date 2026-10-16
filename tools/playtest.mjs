@@ -19,6 +19,8 @@ const RELIC_NAME = { wickveil: '遮光', wickember: '暗火', wickstride: '夜�
 const AURA_RELIC_NAME = { auraflare: '旺火', auralantern: '漫光', aurasiphon: '吮灯', aurasmother: '烟熏' };
 /** 「倾灯」这条线四件遗物的名字（v76，见 3a9d / 手机那段）。 */
 const POUR_RELIC_NAME = { pourstoke: '浇油', pourladle: '大瓢', pourgather: '拾油', pourward: '烬护' };
+/** 「伏灯」这条线四件遗物的名字（v77，见 3a5b / 手机那段）。 */
+const MINE_RELIC_NAME = { minerack: '灯阵', minelink: '接火', minebait: '香饵', minetrip: '绊线' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -975,6 +977,53 @@ async function main() {
   });
   expect(mineCodex.mine.includes('伏灯') && mineCodex.chain.includes('连珠'), '图鉴收录了伏灯与它的进化', JSON.stringify(mineCodex));
   expect(mineCodex.mech, '布过第一颗雷之后，图鉴「机制」章多出一条伏灯', JSON.stringify(mineCodex));
+
+  // ── 3a5b. 「伏灯」这条线（四件遗物，v77）：把"把它放在那儿"这笔账也读出来 ──
+  // 离线单测（tests/minerelics.test.mjs）量的是四个数各自生效（地上 6 → 8 颗、等 10 → 13 秒；
+  // 排成一列时裸装串不起来、带接火能一路烧过去；蛾从 405px 外就闻得到并且炸死回油；
+  // 踩响的那一圈在 1.2 秒里只走一半的路）。
+  // 这里量的是**界面读不读得出来**：手里有伏灯的时候，构筑总览要多出「伏灯」那一栏
+  // （撒了几颗、最长一串几颗、几只蛾是被灯引来的），而且那四件遗物要连条件一起写出来。
+  const mineFamIds = ['minerack', 'minelink', 'minebait', 'minetrip'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, mineFamIds);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const mineFamText = await page.evaluate(() => document.querySelector('.lo-mine')?.textContent ?? '');
+  const mineFamLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(mineFamLayout.hOverflow === 0, '加了伏灯那四件，总览仍没被撑出横向滚动', `hOverflow=${mineFamLayout.hOverflow}`);
+  expect(mineFamLayout.issues.length === 0, '带满四件伏灯遗物的构筑总览布局正常', mineFamLayout.issues.join('; '));
+  await page.evaluate(() => document.querySelector('.lo-mine')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const mineFamBlock = await page.evaluate(() => window.__PROBE__.layout('.lo-mine'));
+  expect(mineFamBlock.count === 1, '手里有伏灯时，构筑总览多出「伏灯」那一栏', JSON.stringify(mineFamBlock));
+  expect(mineFamBlock.issues.length === 0, '「伏灯」栏滚得进视野、也不越界', mineFamBlock.issues.join('; '));
+  for (const bit of ['伏灯 · 地上', '本局撒了', '灯阵 地上 8 颗', '能等 13s', '接火 连爆 +45%', '香饵 引蛾 570px', '每只回 0.50%', '绊线 拖住 50%', '1.4s']) {
+    expect(mineFamText.includes(bit), `「伏灯」栏写出「${bit}」`, mineFamText.slice(-260));
+  }
+  expect(!/undefined|NaN/.test(mineFamText), '「伏灯」栏没有缺字段', mineFamText);
+  await shot('03l4-mine-family');
+  const codexMineFam = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:mine');
+    return { text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    Object.values(MINE_RELIC_NAME).every((n) => codexMineFam.text.includes(n)),
+    '图鉴的「伏灯」条目里点出了这四件遗物',
+    codexMineFam.text.slice(-200),
+  );
+  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.removeRelic(id);
+    g.player.recomputeStats();
+  }, mineFamIds);
+  await sleep(150);
 
   // 收尾：把这一段借走的东西还回去（武器、地上的雷、敌人），别让后面的段落量到别人的账
   await page.evaluate(() => {
@@ -3371,18 +3420,27 @@ async function main() {
 
   // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
   // （燎灯那四件），v76 是**第三**行（倾灯那四件）——三族买的是同一桶油，所以都住在这一栏里。
-  // 窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，所以这里也量一次
-  // （和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
-  // 为了把"最坏情况"量出来，**三族十二件全塞上**：窄屏上这一栏最长就是这样。
+  // v77 又加了一栏「伏灯」（那一族买的是"位置"，所以它有自己的一栏，不长在灯火里）。
+  // 窄屏横带上最容易出事的正是"多一行 / 多一栏把面板撑出横向溢出"，所以这里也量一次
+  // （和桌面那条同一个做法：那几栏在滚动容器里，先滚进视野再量）。
+  // 为了把"最坏情况"量出来，**四族十六件全塞上**：窄屏上那两栏最长就是这样。
   const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
   const mAuraFamily = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
   const mPourFamily = ['pourstoke', 'pourladle', 'pourgather', 'pourward'];
-  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily];
+  const mMineFamily = ['minerack', 'minelink', 'minebait', 'minetrip'];
+  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily, ...mMineFamily];
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.addRelic(id);
     g.player.recomputeStats();
   }, mTwelve);
+  // 手里也得有一把伏灯：那一栏只在"有伏灯（或者挂着这一族的遗物）"时才画
+  await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    window.__SAVED_MINE__ = g.player.weapons.has('mine');
+    if (!window.__SAVED_MINE__) g.player.weapons.set('mine', 1);
+    g.player.recomputeStats();
+  });
   await mobile.click('[data-act="sheet"]');
   await sleep(350);
   await mobile.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
@@ -3400,18 +3458,41 @@ async function main() {
   expect(mobileSheet.count === 1, '手机上构筑总览也有「灯火」那一栏', JSON.stringify(mobileSheet));
   expect(mobileSheet.issues.length === 0, '手机横带上「灯火」栏不越界', mobileSheet.issues.join('; '));
   expect(mobileSheet.hOverflow === 0, '手机横带上总览没被撑出横向滚动', `hOverflow=${mobileSheet.hOverflow}`);
+  // 「伏灯」那一栏在「灯火」下面，窄屏上得自己滚进来再量一次（和桌面那条同一个做法）
+  await mobile.evaluate(() => document.querySelector('.lo-mine')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const mobileMine = await mobile.evaluate(() => {
+    const mine = window.__PROBE__.layout('.lo-mine');
+    const panel = window.__PROBE__.layout('.panel--loadout');
+    return {
+      count: mine.count,
+      issues: mine.issues,
+      hOverflow: panel.hOverflow,
+      text: document.querySelector('.lo-mine')?.textContent ?? '',
+    };
+  });
+  expect(mobileMine.count === 1, '手机上也有「伏灯」那一栏', JSON.stringify(mobileMine));
+  expect(mobileMine.issues.length === 0, '手机横带上「伏灯」栏不越界', mobileMine.issues.join('; '));
+  expect(mobileMine.hOverflow === 0, '多出「伏灯」那一栏也没把手机上的总览撑出横向滚动', `hOverflow=${mobileMine.hOverflow}`);
+  const LIGHT_NAMES = { ...RELIC_NAME, ...AURA_RELIC_NAME, ...POUR_RELIC_NAME };
   expect(
-    mTwelve.every((id) => mobileSheet.text.includes({ ...RELIC_NAME, ...AURA_RELIC_NAME, ...POUR_RELIC_NAME }[id])),
-    '手机上也把三族十二件遗物连条件一起写出来了',
-    mobileSheet.text.slice(-200),
+    mTwelve.every((id) => id in MINE_RELIC_NAME || LIGHT_NAMES[id]),
+    '这一条的前提：十六件遗物的名字都登记在案（少一件这一条就量不全）',
+    mTwelve.join('/'),
+  );
+  expect(
+    mTwelve.every((id) => (id in MINE_RELIC_NAME ? mobileMine.text : mobileSheet.text).includes(MINE_RELIC_NAME[id] ?? LIGHT_NAMES[id])),
+    '手机上也把四族十六件遗物连条件一起写出来了',
+    `${mobileSheet.text.slice(-160)} | ${mobileMine.text.slice(-160)}`,
   );
   await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
   await mobile.click('[data-act="sheet-close"]');
   await sleep(300);
-  // 收尾：把塞进去的十二件拿掉（后面的检查照旧）
+  // 收尾：把塞进去的十六件拿掉、把借来的那把伏灯还回去（后面的检查照旧）
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.relics.delete(id);
+    if (!window.__SAVED_MINE__) g.player.weapons.delete('mine');
     g.player.recomputeStats();
   }, mTwelve);
 

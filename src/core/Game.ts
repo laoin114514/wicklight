@@ -1696,8 +1696,11 @@ export class Game {
       // 吹灯客的目标：最近的亮灯台，或者你刚放下的那盏弃灯（谁近扑谁）
       pyreTarget: (x, y) => this.nearestLitOrLamp(x, y, 1600),
       lureTarget: (x, y) => this.nearestLamp(x, y),
-      // 灯蛾扑的是**光**：地上的伏灯也算（只有上弦之后的那颗才算"亮着"）
-      mineLure: (x, y, maxDist) => this.nearestArmedMine(x, y, maxDist),
+      // 灯蛾扑的是**光**：地上的伏灯也算（只有上弦之后的那颗才算"亮着"）。
+      // ⚠ 「香饵」（遗物）改的就是这个距离，而**只有这里**能改：Enemy 那边原来抄了一份
+      //   同样的 380（`MINE_LURE`），v77 删掉了——两处真话只要有一处没跟上，就会出现
+      //   "店里写着引得更远、实际一只蛾都没多引来"这种谁都看不出来的错。
+      mineLure: (x, y) => this.nearestArmedMine(x, y, MINE.lure * (1 + this.player.flags.mineLure)),
       pull: (e) => this.applyVortexPull(e),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
       regen: this.curse?.mods.enemyRegen ?? 0,
@@ -2555,7 +2558,10 @@ export class Game {
     opts: {
       knockback?: number;
       burn?: number;
+      /** 减速持续几秒（0 = 不减速）。强度是下面那个 `slowPower` */
       slow?: number;
+      /** 减速的强度：0.5 = 移速砍一半（默认 0.5，和 `applySlow` 那条合并规矩同一个写法） */
+      slowPower?: number;
       ring?: string;
       spark?: string;
       sparkCount?: number;
@@ -2579,6 +2585,7 @@ export class Game {
       this.applyHit(e, damage * falloff, false, e.x - x, e.y - y, opts.knockback ?? 0, {
         burn: opts.burn,
         slow: opts.slow,
+        slowPower: opts.slowPower,
         source: opts.source,
       });
       hits += 1;
@@ -2594,12 +2601,14 @@ export class Game {
    * 上弦期间踩不响——那是玩家刚转身离开的那半秒。
    */
   placeMine(x: number, y: number, damage: number, radius: number, trigger: number, fire: number, source: string): void {
-    // 地上最多留六颗：不给上限的话，一路小跑就能铺出一条雷带（见 data/mines.ts）
-    if (this.mines.length >= MINE.max) this.mines.shift();
+    // 地上最多留六颗：不给上限的话，一路小跑就能铺出一条雷带（见 data/mines.ts）。
+    // 「灯阵」（遗物）把它抬到 8 颗——**抬的是上限，不是取消上限**：这条规矩要拦的是
+    // "一路小跑铺出一条雷带"，多两颗只是让"铺一条路"这件事做得成，不是让它变成唯一解。
+    if (this.mines.length >= MINE.max + this.player.flags.mineMax) this.mines.shift();
     this.mines.push({
       x,
       y,
-      life: MINE.life,
+      life: MINE.life + this.player.flags.mineLife,
       arm: MINE.arm,
       damage,
       radius,
@@ -2889,8 +2898,9 @@ export class Game {
   private detonateMine(m: Mine, index: number): void {
     this.mines.splice(index, 1);
     const radius = m.radius * (1 + (this.player.stats.areaMult - 1) * 0.5);
-    // 「以灯为饵」：先数一眼这一炸够得着几只蛾，再炸（炸完它们就没了，数不出来）
-    let moths = 0;
+    // 「以灯为饵」：先把够得着的那几只蛾**记下来**，再炸——炸完它们就没了（`active` 变 false），
+    // 而「香饵」（遗物）要数的正是"这几只里被你炸死了几只"。所以这里记的是名单，不是只数。
+    const baited: Enemy[] = [];
     const p = this.player;
     this.enemies.forEach((e) => {
       if (e.defId !== 'moth') return;
@@ -2901,28 +2911,53 @@ export class Game {
       const reach = radius + e.radius;
       const dm = (e.x - m.x) ** 2 + (e.y - m.y) ** 2;
       const dp = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
-      if (dm <= reach * reach && dm < dp) moths += 1;
+      if (dm <= reach * reach && dm < dp) baited.push(e);
     });
+    const moths = baited.length;
     if (moths > 0) {
       this.mineMothHits += moths;
       // 「以灯为饵」看的是**一次**炸到几只，而不是攒够多少只：
       // 攒数的话随便扔雷都会慢慢够，而"把一群蛾引到同一盏灯上"才是这件事的难点。
       if (moths >= MINE.mothBait) this.achievements.unlock('mine_moth');
     }
+    // 「绊线」（遗物）：踩响的这一圈**走不动**。走的是 `applyHit` 那条共用的减速账
+    // （合并规矩只有一份，见 Enemy.applySlow）——所以它和霜印 / 烟熏撞在一起时，
+    // 谁更狠听谁的，强度不会叠着算两次。
+    const snare = p.flags.mineSnare;
     const hits = this.blast(m.x, m.y, radius, m.damage, {
       knockback: MINE.knockback,
       burn: m.fire,
+      slow: snare > 0 ? MINE.snareSpan : 0,
+      slowPower: 1 - snare,
       ring: '#ffb14e',
       spark: '#ffd9a0',
       sparkCount: 22,
       source: m.source,
     });
+    // 「香饵」（遗物）：被你这一炸炸死的灯蛾，每只把那口油还给你的灯。
+    // 为什么数"炸死"而不是"炸到"：蛾扑的是光、自己撞上来，那口油本来就该是"它烧完了"的结果；
+    // 而且按只算，往蛾群里摆一盏灯才真的划算——这正是这一族想教的那件事。
+    // （判据是 `active`，它由 `EnemySystem.damage` 在血扣到 0 的那一下写成 false。）
+    const mothOil = p.flags.mineMothOil;
+    if (mothOil > 0) {
+      let killed = 0;
+      for (const e of baited) if (!e.active) killed += 1;
+      if (killed > 0) {
+        const gain = Math.min(p.oilMax - p.oil, p.oilMax * mothOil * killed);
+        if (gain > 0) {
+          p.oil += gain;
+          this.floaters.label(m.x, m.y - 16, `+${(gain * 100).toFixed(1)}% 油`, '#ffd24e', 12);
+        }
+      }
+    }
     if (m.fire > 0) this.addGround(m.x, m.y, radius * 0.75, MINE.fireLife, MINE.fireDps, 'fire', false, m.source);
     // 一次炸到一片：这是伏灯最想要的那一下（也是「伏击」成就的判据）
     if (hits >= MINE.multiHit) this.achievements.unlock('mine_multi');
     // 连爆：这一炸够得着的其他雷会被引信点着。排得密就一串响，排得开就一颗一颗响——
     // 不是同一帧一起炸（那样看见的只是一团白光），而是隔 0.09 秒顺着串烧过去。
-    const reach = radius * MINE.chainReach;
+    // 「接火」（遗物）：这一串能接上更远的那一颗。撒得开（跑着撒）本来就只有一颗一颗响的份，
+    // 加成之后"隔着一颗爆炸半径"的位置也能接上——"排成一列"这件事第一次有了回报。
+    const reach = radius * MINE.chainReach * (1 + p.flags.mineChain);
     let lit = 0;
     for (const other of this.mines) {
       if (other.fuse > 0 || other === m) continue;

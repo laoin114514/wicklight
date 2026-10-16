@@ -15,6 +15,7 @@ import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
+import { MINE } from '../data/mines';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -503,6 +504,7 @@ export class UIManager implements UIHost {
       : '<div class="lo-empty">本关暂无夜咒</div>';
 
     const graze = this.grazeBlock();
+    const mineBlock = this.mineBlock();
 
     const b = g.bounties.state;
     const bounty = b
@@ -550,6 +552,7 @@ export class UIManager implements UIHost {
             ${bounty}
             <h4>掠影</h4>
             ${graze}
+            ${mineBlock ? `<h4>伏灯</h4>${mineBlock}` : ''}
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
@@ -629,6 +632,43 @@ export class UIManager implements UIHost {
    * 现在攒到哪儿了、以及身上那些围绕它的东西到底改了什么数。
    * 所以这里把"基础值 → 你现在的值"并排写出来，跟升级卡上那张数值对照是同一个道理。
    */
+  /**
+   * 构筑总览里的「伏灯」栏（v77）：地上还剩几颗、这一局撒了多少颗、最长串了几颗、
+   * 一共有几只蛾是被灯引过去炸死的，以及身上那四件遗物到底改了哪个数。
+   *
+   * 为什么要单独一栏：伏灯的钱全花在**看不见的地方**——它炸得多不多取决于
+   * "刚刚你把雷撒在哪儿"，而这件事在结算之前没有任何地方能读到。这一栏把"这一局的路
+   * 铺得怎么样"摊开（撒了几颗、最长一串连了几颗、几只蛾是被饵引来的），
+   * 于是"下一局我该怎么撒"才有东西可看。
+   *
+   * 什么时候才画：手里有伏灯（或进化那一把）、或者身上挂着这一族的遗物。
+   * 「掠影」那一栏是无条件画的——那条机制人人都有；伏灯是一件**要拿到手里**的武器，
+   * 没有它的玩家在这里只会读到一行"地上 0 颗"，那是占地方。
+   */
+  private mineBlock(): string {
+    const g = this.game;
+    const p = g.player;
+    const f = p.flags;
+    const has = p.weapons.has('mine') || p.weapons.has('mine_chain');
+    const fam: string[] = [];
+    if (f.mineMax || f.mineLife) fam.push(`灯阵 地上 ${MINE.max + f.mineMax} 颗 · 能等 ${MINE.life + f.mineLife}s`);
+    if (f.mineChain) fam.push(`接火 连爆 +${Math.round(f.mineChain * 100)}%`);
+    if (f.mineLure) fam.push(`香饵 引蛾 ${Math.round(MINE.lure * (1 + f.mineLure))}px · 每只回 ${(f.mineMothOil * 100).toFixed(2)}%`);
+    if (f.mineSnare) fam.push(`绊线 拖住 ${Math.round(f.mineSnare * 100)}% · ${MINE.snareSpan}s`);
+    if (!has && !fam.length) return '';
+    const chain = g.mineChainBest > 1 ? ` · 最长一串 ${g.mineChainBest} 颗` : '';
+    const moth = g.mineMothHits > 0 ? ` · 灯上的蛾 ${g.mineMothHits} 只` : '';
+    return `<div class="lo-bounty lo-mine" style="--c:#ffca7a">
+        <b>🕯️ 伏灯 · 地上 ${g.mines.length}/${MINE.max + f.mineMax} 颗</b>
+        <span>本局撒了 ${g.mineCount} 颗${chain}${moth}</span>
+        <span>${
+          fam.length
+            ? `伏灯这套：${fam.join(' · ')}`
+            : `撒在身后、上弦 ${MINE.arm}s，之后谁踩上来就炸一圈；「灯蛾」在 ${MINE.lure}px 内会拐过来扑它——拿它当饵`
+        }</span>
+      </div>`;
+  }
+
   private grazeBlock(): string {
     const g = this.game;
     const p = g.player;

@@ -148,8 +148,9 @@ test('燎灯这套：正好四件、一族一件、四个数各归一件，而�
   // 一族一件：四族等量，第二档共鸣（5 件）的门槛才一直是那个数
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  // ×v76：「倾灯」那四件（浇油 / 大瓢 / 拾油 / 烬护）照同样的规矩一族一件，于是现在是各 14 件
-  assert.deepEqual(counts, { flame: 14, lamp: 14, oil: 14, shade: 14 }, '四族应各 14 件');
+  // ×v76：「倾灯」那四件（浇油 / 大瓢 / 拾油 / 烬护）照同样的规矩一族一件，于是变成各 14 件；
+  // ×v77：「伏灯」那四件（灯阵 / 接火 / 香饵 / 绊线）再各补一件，于是现在是各 15 件。
+  assert.deepEqual(counts, { flame: 15, lamp: 15, oil: 15, shade: 15 }, '四族应各 15 件');
   // 装上也真的不炸：四件同时在身上，四个数都得到身上
   const p = build(game, [], Object.keys(LINE));
   assert.ok(p.flags.auraCrowd > 0 && p.flags.lightSpread > 0, '旺火与漫光的数该上身');
