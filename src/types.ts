@@ -335,6 +335,7 @@ export interface InputState {
   aimY: number;
   dash: boolean;
   nova: boolean;
+  /** 桌面上的手动瞄准（鼠标右键按住）：真时由指针位置给出方向与力度，见 Input.aimVector。 */
   focus: boolean;
   pause: boolean;
   sheet: boolean;

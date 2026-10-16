@@ -108,6 +108,7 @@ export function installDomStubs(opts = {}) {
       this.clientWidth = 1280;
       this.clientHeight = 720;
       this._ctx = null;
+      this._listeners = null;
     }
     get className() { return [...this.classList.set].join(' '); }
     set className(value) {
@@ -122,9 +123,22 @@ export function installDomStubs(opts = {}) {
     remove() {}
     setAttribute() {}
     getAttribute() { return null; }
-    addEventListener() {}
-    removeEventListener() {}
-    dispatchEvent() { return true; }
+    // 元素级监听真的记下来、也真的派发：画布上的 mousedown（右键 = 手动瞄准）就挂在这里，
+    // 只记不派的话，"鼠标这条路"在无头环境里永远走不通，只能靠测试自己去戳私有字段。
+    addEventListener(type, fn) {
+      if (!this._listeners) this._listeners = new Map();
+      const list = this._listeners.get(type) ?? [];
+      list.push(fn);
+      this._listeners.set(type, list);
+    }
+    removeEventListener(type, fn) {
+      const list = this._listeners?.get(type);
+      if (list) this._listeners.set(type, list.filter((f) => f !== fn));
+    }
+    dispatchEvent(event) {
+      for (const fn of this._listeners?.get(event?.type) ?? []) fn(event);
+      return true;
+    }
     getBoundingClientRect() { return { left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720, x: 0, y: 0 }; }
     querySelector() { return new FakeElement('div'); }
     querySelectorAll() { return []; }

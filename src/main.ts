@@ -103,14 +103,15 @@ function boot(): void {
       touch.setActive(game.state === 'playing');
       if (game.state === 'playing') touch.apply(snap);
       backGuard.sync(game.state === 'playing');
-      game.setInput(
-        snap.moveX,
-        snap.moveY,
-        snap.dash,
-        snap.nova,
-        snap.lamp,
-        snap.aim ? { x: snap.aimX, y: snap.aimY } : null,
-      );
+      // 手动瞄准有两条路，编码是同一种（方向 + 0~1 的力度），所以游戏那边只认一个向量：
+      // · 触屏：手指按住屏幕右侧拖（见 TouchControls），`snap` 里已经写好了；
+      // · 桌面：**按住鼠标右键**，指针指哪儿这一瓢就倒哪儿（见 Input.aimVector）。
+      // 两条路各自量自己的行程（手指按下的那一点 / 指针到屏幕中心），主循环只负责二选一：
+      // 手指按着的时候以触屏为准——同一个玩家身上两种设备都在时，刚按下去的那根手指说了算。
+      const aim = snap.aim
+        ? { x: snap.aimX, y: snap.aimY }
+        : input.aimVector(game.renderer.width, game.renderer.height);
+      game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova, snap.lamp, aim);
       if (st.pause) {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
       }

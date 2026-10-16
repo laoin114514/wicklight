@@ -1,6 +1,7 @@
 import type { Game } from '../core/Game';
 import { isTouchDevice } from '../core/Perf';
 import { haptic } from '../core/Haptics';
+import { AIM_MIN_PULL } from '../core/Input';
 
 /**
  * 摇杆死区：手指按在摇杆中心附近时总会有几像素的抖动，直接当输入会让角色慢慢漂。
@@ -13,6 +14,8 @@ const DEAD_ZONE = 0.12;
  * 12px 以内当作没在瞄（点一下、手抖都算），56px 推到满——和左手摇杆的行程同一个量级
  * （摇杆直径 132，横屏收到 112，最大行程 0.42 × 直径 ≈ 47~55px）。
  * 两个数之间线性映射成"推了多远"（0~1），游戏那边拿它决定这一瓢落在射程的几成处。
+ * 力度下限与桌面那条路共用（`AIM_MIN_PULL`，见 core/Input）：两条路的行程尺子不一样，
+ * 但"过了死区的最小力度是多少"是同一件事，各写一个字面量迟早会漂成两个。
  */
 const AIM_DEAD = 12;
 const AIM_FULL = 56;
@@ -175,7 +178,7 @@ export class TouchControls {
     }
     // 力度就是推程（0~1）：过了死区之后**任何**非零长度都算"在瞄"，
     // 剩下的（落在射程的几成处）由游戏那边按 `POUR.aimNear` 插值——一个真值，不在这儿再映射一次。
-    const pull = Math.max(0.04, Math.min(1, (len - AIM_DEAD) / (AIM_FULL - AIM_DEAD)));
+    const pull = Math.max(AIM_MIN_PULL, Math.min(1, (len - AIM_DEAD) / (AIM_FULL - AIM_DEAD)));
     this.aimOn = true;
     this.aimX = (dx / len) * pull;
     this.aimY = (dy / len) * pull;
