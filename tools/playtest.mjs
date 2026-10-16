@@ -94,6 +94,24 @@ async function main() {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 
+  /**
+   * 按**游戏内时间**等，不按墙上时间：容器里帧被拖慢时主循环会夹住 dt，墙上 2.4 秒可能只走了
+   * 不到 1 秒游戏时间——而这几条量的都是"蛾闻着灯走过来""吹灯客走到雷上"这种**世界真的转过几秒**
+   * 才发生的事（本文件在别处已经踩过这个坑：16 秒墙钟只走了 4 秒游戏时间）。
+   * `ready` 是"已经成了"的判据（传进来的是在页面里跑的函数）；没传就纯等满这么久。
+   * 还是会带一个墙上时间的保险：真卡住了（标签页被挂起之类）不该把整轮体检吊死在这儿。
+   */
+  const waitGame = async (secs, ready) => {
+    const t0 = await page.evaluate(() => window.__WICKLIGHT__.game.runTime);
+    const wall0 = Date.now();
+    for (;;) {
+      if (ready && (await page.evaluate(ready))) return true;
+      if ((await page.evaluate(() => window.__WICKLIGHT__.game.runTime)) - t0 >= secs) return false;
+      if (Date.now() - wall0 > secs * 4000) return false;
+      await sleep(80);
+    }
+  };
+
   const consoleErrors = [];
   const pageErrors = [];
   const failedRequests = [];
@@ -908,6 +926,9 @@ async function main() {
   // 离人远是为了量得干净——人这半秒里什么都不做，它吃到的每一滴血都只可能来自伏灯。
   const staged = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
+    // 场上原来那些怪要清掉：它们会把这只石守从雷心上挤开（怪与怪之间会让位），
+    // 那这一炸吃到的就成了边缘的衰减伤害（实测撞到过一次 41，判据是"正中该吃满 60"）。
+    g.enemies.clear();
     g.mines.length = 0;
     g.placeMine(240, 0, 60, 80, 40, 0, 'mine');
     window.__MINE__ = g.mines[0];
@@ -1096,7 +1117,7 @@ async function main() {
     for (let i = 0; i < 3; i += 1) g.enemies.spawn('moth', -40 + i * 40, -420, 1, 0);
     return { mines: g.mines.length, hits: g.mineMothHits };
   });
-  await sleep(2400);
+  await waitGame(3, () => window.__WICKLIGHT__.game.mines.length === 0);
   const baited = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     return { mines: g.mines.length, hits: g.mineMothHits, alive: g.enemies.count };
@@ -1116,7 +1137,7 @@ async function main() {
     e.maxHp = 1e6;
     return { snuffed: g.mineSnuffed, chains: g.mineChainBest, hp: Math.round(g.player.hp) };
   });
-  await sleep(1500);
+  await waitGame(2, () => window.__WICKLIGHT__.game.mines.length === 0);
   const snuffed = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     return { mines: g.mines.length, snuffed: g.mineSnuffed, chains: g.mineChainBest, hp: Math.round(g.player.hp) };
@@ -1769,6 +1790,11 @@ async function main() {
     g.director.phase = 'intro';
     g.director.introTimer = 1e9;
     g.director.hazardTimer = 1e9;
+    // 先把"灯亮到多大"落定再摆靶：`lightRadius` 是每帧从油量重算的，直接读拿到的是**上一屏**
+    // 那个人剩下的半径（实测 282 vs 落定后的 320），而"圈外"要按真的那一圈摆才对。
+    p.oil = p.oilMax;
+    g.setInput(0, 0, false, false);
+    g.update(1 / 60);
     const R = p.lightRadius;
     // 一圈 10 只：全都在光圈里（0.8R），但只留 6 只活着——脉冲那一下要**一次**全打中
     const foes = [];
@@ -1796,12 +1822,20 @@ async function main() {
     // 顺手量"那一拍长什么样"：这一件不发射任何东西，所以"它开火了"只有画面上的那一圈，
     // 而那一圈**停在哪儿**就是它打得到哪儿——数记在放圈的那一刻（灯火是每帧从油量重算的）。
     const rings = [];
+    // 每一拍顺手把"圈外那只"当时离人多远记下来：这一条要是红了，得能一眼看出
+    // 是"光真的伸过去了"还是"它自己走进了光里"——只报一个 R 的话，这两种分不出来。
+    const outsideGap = [];
     const shock = g.particles.shockwave.bind(g.particles);
     g.particles.shockwave = (x, y, color, size, life) => {
       rings.push({ size: +size.toFixed(2), at: +p.lightRadius.toFixed(2), life });
+      outsideGap.push(+(Math.hypot(out.x - p.x, out.y - p.y) - size).toFixed(1));
       return shock(x, y, color, size, life);
     };
     for (let f = 0; f < 90; f += 1) {
+      // 圈外那一只**钉住**：它旁边那些被烫飞的圈内怪会把它撞进光里（实测有一次被挪到 y=-91 才挨的），
+      // 那是推挤的账，不是燎灯够得着。钉住它，这一条问的才是"光伸不伸得过去"。
+      out.x = R * 1.4;
+      out.y = 0;
       g.setInput(0, 0, false, false);
       g.update(1 / 60);
       const hit = foes.filter((e, i) => e.hp < hp0[i]).length;
@@ -1812,6 +1846,11 @@ async function main() {
       best,
       rings,
       outsideHp: out.hp === out0,
+      // 红了才有用：它最后站在哪儿、还活不活跃（真挨了打 / 被谁挪了 / 被回收了，三种情况一眼分开）
+      out: { x: Math.round(out.x), y: Math.round(out.y), gap: Math.round(Math.hypot(out.x - p.x, out.y - p.y) - p.lightRadius), hp: Math.round(out.hp), active: out.active },
+      outsideGap,
+      px: Math.round(p.x),
+      py: Math.round(p.y),
       oil: +p.oilFrac.toFixed(2),
       dps: Math.round(g.damageBySource.get('aura') ?? 0),
     };
@@ -2162,6 +2201,16 @@ async function main() {
   // ⚠ 按**游戏内时间**收工，不按墙上时间：容器里帧被拖慢时，主循环夹住了 dt，
   // 16 秒墙上时间可能只走了 4 秒游戏时间——敌人还没走到灯火里，测试就会莫名其妙地红
   // （这块以前就有：10 轮 = 16 秒墙钟，偶发 kills=0）。
+  // 这一段量的是"按键真的打得出去"，不是"这个脚本活不活得下来"：血一空，`Escape` 就不再暂停
+  // （`state !== 'playing'`），后面几十条会跟着一起塌（v85 复查时撞到过一次，红在"点不到继续按钮"）。
+  // 所以先把血上限**临时**抬起来撑住这一段，跑完立刻还回去（后面结算那一屏用的是真身板）。
+  const maxHpBefore = await page.evaluate(() => {
+    const p = window.__WICKLIGHT__.game.player;
+    const before = p.stats.maxHp;
+    p.stats.maxHp = 1e6;
+    p.hp = 1e6;
+    return before;
+  });
   let kills = 0;
   for (let i = 0; i < 40 && kills === 0; i += 1) {
     const ranFor = await page.evaluate(() => window.__WICKLIGHT__.game.runTime);
@@ -2175,6 +2224,11 @@ async function main() {
     kills = (await page.evaluate(() => window.__WICKLIGHT__.game.kills));
   }
   await drainLevelUps();
+  await page.evaluate((before) => {
+    const p = window.__WICKLIGHT__.game.player;
+    p.stats.maxHp = before;
+    p.hp = p.stats.maxHp;
+  }, maxHpBefore);
 
   const play = await page.evaluate(() => window.__PROBE__.state());
   expect(play && play.state === 'playing', '战斗进行中', JSON.stringify(play));
@@ -2336,6 +2390,10 @@ async function main() {
   const snuffer = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     const pyre = g.level.pyres[0];
+    // 场上别的灯台先熄掉：吹灯客挑的是**最近的那盏亮灯**（`quenchPyre` 里就是挑最近），
+    // 两盏都亮着时"到 pyres[0] 的距离"完全可能越走越大——那是它在扑另一盏，不是扑错了人
+    // （v85 复查时撞到过两次：586→590、581→624）。
+    for (const py of g.level.pyres) if (py !== pyre && py.lit) g.extinguishPyre(py);
     g.enemies.clear();
     g.player.x = pyre.x;
     g.player.y = pyre.y;
@@ -2344,13 +2402,19 @@ async function main() {
     g.enemies.forEach((e) => list.push(e));
     const one = list.find((e) => e.defId === 'snuffer');
     const before = one ? Math.hypot(one.x - pyre.x, one.y - pyre.y) : 0;
-    // 把人挪远：它该扑的是灯，不是玩家
+    // 这一条要证明的是"它扑的是灯，不是你"，所以**把人挪到它鼻子底下**（60px），而灯在 586px 外——
+    // 躲得远远的那种摆法证明不了什么（它本来就只能在灯和你之间挑一个近的）。
     if (one) {
-      g.player.x = pyre.x + 900;
-      g.player.y = pyre.y;
-      for (let i = 0; i < 30; i += 1) g.enemies.update(1 / 60, g.enemyCtx());
+      // 站到它**背后**（灯那一侧的反方向）60px：这样"朝灯走"和"离你更远"永远是同一件事，
+      // 不然灯正好在你那个方向时，两条断言会互相打架
+      const away = Math.hypot(pyre.x - one.x, pyre.y - one.y) || 1;
+      g.player.x = one.x - ((pyre.x - one.x) / away) * 60;
+      g.player.y = one.y - ((pyre.y - one.y) / away) * 60;
     }
+    const toManBefore = one ? Math.hypot(one.x - g.player.x, one.y - g.player.y) : 0;
+    if (one) for (let i = 0; i < 30; i += 1) g.enemies.update(1 / 60, g.enemyCtx());
     const after = one ? Math.hypot(one.x - pyre.x, one.y - pyre.y) : 0;
+    const toManAfter = one ? Math.hypot(one.x - g.player.x, one.y - g.player.y) : 0;
     const out = {
       lit: pyre.lit,
       flame: pyre.flame,
@@ -2358,6 +2422,8 @@ async function main() {
       others: list.filter((e) => e.defId !== 'snuffer').length,
       before: Math.round(before),
       after: Math.round(after),
+      toManBefore: Math.round(toManBefore),
+      toManAfter: Math.round(toManAfter),
     };
     // 收干净：熄灭这座灯台、清场、把人放回中心，后面的流程照旧
     g.extinguishPyre(pyre);
@@ -2370,7 +2436,9 @@ async function main() {
   expect(snuffer.lit && snuffer.flame === 1, '灯台点亮后灯焰是满的', JSON.stringify(snuffer));
   expect(snuffer.snuffers >= 1, '点灯会招来吹灯客', JSON.stringify(snuffer));
   expect(snuffer.others > 0, '点灯的动静照旧会叫来普通敌人', JSON.stringify(snuffer));
-  expect(snuffer.after < snuffer.before, '吹灯客直奔灯台，而不是扑向玩家', JSON.stringify(snuffer));
+  // 两条一起看才算数：离灯更近**而且**离人更远（人就站在它旁边 60px，灯在五百多像素外）
+  expect(snuffer.after < snuffer.before, '吹灯客直奔灯台', JSON.stringify(snuffer));
+  expect(snuffer.toManAfter > snuffer.toManBefore, '人就在它鼻子底下，它也不扑你', JSON.stringify(snuffer));
   expect(snuffer.afterCleanup.lit === false && snuffer.afterCleanup.pyresLit === 0, '熄灭后灯台与计数都归位', JSON.stringify(snuffer.afterCleanup));
   await shot('04f-snuffer');
 
@@ -2383,6 +2451,10 @@ async function main() {
   //   所以按完看一眼状态，没进暂停就先排空再按一次。
   let paused = null;
   for (let i = 0; i < 3; i += 1) {
+    await page.evaluate(() => {
+      const p = window.__WICKLIGHT__.game.player;
+      p.hp = p.stats.maxHp;
+    });
     await drainLevelUps();
     await page.keyboard.press('Escape');
     await sleep(300);
@@ -2393,7 +2465,14 @@ async function main() {
   const pauseLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
   expect(pauseLayout.issues.length === 0, '暂停面板布局正常', pauseLayout.issues.join('; '));
   await shot('05-pause');
-  await page.click('[data-act="resume"]');
+  // 没进暂停就别去点那颗按钮：面板不在的时候 `click` 会干等满 30 秒再抛异常，
+  // 而抛异常会把整轮体检**打断**（后面几十条一条都跑不到，也看不出红的是哪一条）。
+  // 这里退化成一条断言失败：这条红了，后面照旧跑完。
+  if (paused && paused.state === 'paused') {
+    await page.click('[data-act="resume"]');
+  } else {
+    expect(false, '暂停面板上那颗「继续」点得到', '面板就没出来，这一条没法点');
+  }
   await sleep(250);
 
   // ── 4b. 构筑总览（Tab）──

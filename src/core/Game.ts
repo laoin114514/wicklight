@@ -22,7 +22,7 @@ import { generateLevel, refinishLevel, type Level } from '../systems/LevelGen';
 import { drawDecor } from './Decor';
 import type { Pyre, Shrine } from '../systems/LevelGen';
 import { CURSES, type CurseDef } from '../data/curses';
-import { collideWalls, clampToArena, pointInWalls } from '../systems/CollisionSystem';
+import { collideWalls, clampToArena, pointInWalls, rayWalls } from '../systems/CollisionSystem';
 import { UpgradeSystem } from '../systems/UpgradeSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { MetaSystem } from '../systems/MetaSystem';
@@ -1971,6 +1971,14 @@ export class Game {
   /**
    * 光矛：一条瞬时贯穿的直线。命中判定用"敌心到线段的距离"，
    * 所以一条光矛能把排成一列的敌人全部串起来——这正是它存在的意义。
+   *
+   * ⚠ 它会**被墙截断**（v85）：到 v84 为止这条线是战场上唯一一件穿墙的东西——
+   * 子弹一路在墙里判死（`resolveProjectiles`），怪的位移也早就不穿墙了，只有它"谁在线上串谁"。
+   * 现在起点到墙面这一段才是这一发真正打得到的距离（`rayWalls`），**伤害与画线用同一个数**：
+   * 画到墙上、伤害也只到墙上——两头不一致的话，"墙后面那只为什么没挨打"在画面上看不出来。
+   *
+   * 刻意没动的两处：自动瞄准照旧瞄最近的那一只（哪怕隔着墙，和子弹一样，那一下是白打的——
+   * 要不要打、往哪儿站是玩家的事）；雷弧（`chainZap`）照旧不看墙，它跳的是"怪与怪之间的空气"。
    */
   private fireBeam(
     x: number,
@@ -1984,16 +1992,20 @@ export class Game {
   ): void {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    const ex = x + dx * length;
-    const ey = y + dy * length;
+    // 光会被墙挡住（v85）：伤害与画线必须用**同一个数**（为什么见函数头那一段）。
+    const reach = rayWalls(x, y, dx, dy, length, this.level.walls);
+    const blocked = reach < length;
+    const ex = x + dx * reach;
+    const ey = y + dy * reach;
     this.beams.push({ x, y, ex, ey, width, life: 0.18, maxLife: 0.18, color, seed: this.rng.next() * 1000 });
+    if (blocked) this.particles.burst(ex, ey, 4, '#cbd4e8', { speed: 90, size: 2.2, life: 0.28 });
 
     const hits: Enemy[] = [];
     this.enemies.forEach((e) => {
       if (!e.active || !this.enemies.isVulnerable(e, this.lightCtx())) return;
       const px = e.x - x;
       const py = e.y - y;
-      const t = clamp(px * dx + py * dy, 0, length);
+      const t = clamp(px * dx + py * dy, 0, reach);
       const cx = x + dx * t;
       const cy = y + dy * t;
       if (Math.hypot(e.x - cx, e.y - cy) <= width + e.radius) hits.push(e);

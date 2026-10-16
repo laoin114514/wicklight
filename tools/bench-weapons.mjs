@@ -143,6 +143,16 @@ async function measure({ weapon, layout, dist, seed }) {
   // 靶房：不刷怪、不弹面板、只留这一件武器
   game.director.introTimer = 1e9;
   game.xpToNext = 1e9;
+  // 墙要清掉（v85 起）：这间靶房是**开在真地图上的**（`newRun` 现生成一关），
+  // 于是"距离"那一列里混着"这一局的地图长什么样"。弹体一路上在墙里判死（`resolveProjectiles`），
+  // 撞上一堵就没了——同一颗种子清墙前后差得最远的是这几格（seed 11，`--secs=30` 实测）：
+  //   光刃碎片 ring 400   0.0 → 55.1（那一发在去路上死在墙里）
+  //   回旋灯刃 pack 110   647.3 → 1389.8
+  //   双月轮   pack 110  2648.7 → 6373.7
+  //   倾灯     pack 400   932.8 → 1715.4
+  // 不吃墙的那几件逐位没变（光矛 ring/pack 400 是 90.0 / 510.3，燎灯 482.7，追踪火苗 ring 110 575.3）。
+  // 要量"墙挡不挡得住"，用的是带场景的 `tools/bench-wall.mjs`，不是这一间靶房。
+  game.level.walls.length = 0;
   p.weapons.clear();
   p.weapons.set(weapon, LEVEL);
   p.recomputeStats();

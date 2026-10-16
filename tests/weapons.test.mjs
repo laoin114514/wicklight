@@ -56,6 +56,10 @@ test('新武器（光矛 / 回旋灯刃）与进化链', async (t) => {
   assert.ok(game.codex.total() >= 113, `图鉴条目应随内容增长（${game.codex.total()}）`);
 
   // ── 光矛：一条直线把排队的敌人全部串起来，站歪的不受影响 ──
+  // 墙要清掉（v85 起光会被墙截断）：这一条量的是"这条线串不串得起来"，不是这一局的地图。
+  // 不清的话，关卡随机生成的墙偶尔正好横在 +x 那条线上，光停在墙面上——**约 15% 的概率红**
+  //（20 轮连跑实测 3 轮红，全是这一条）。
+  game.level.walls.length = 0;
   game.enemies.clear();
   const px = game.player.x;
   const py = game.player.y;

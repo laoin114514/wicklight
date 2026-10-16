@@ -105,6 +105,56 @@ export function slideStep(
   return { x: res.x, y: res.y, hit: true, nx: px / push, ny: py / push, wall: res.wall };
 }
 
+/**
+ * 一条射线从 (x,y) 沿**单位**方向 (dx,dy) 打出去，撞上第一堵墙时走了多远（px）。
+ * 一路没墙就返回 `maxT`；起点本来就在墙里就是 0。
+ *
+ * 为什么和 `slideStep` 摆在一起、却不是同一个东西：位移那一段问的是"这个身位能不能推出去"
+ * （有体积、会被推开），而"一道光能打多远"没有体积、也不会被推开，它只在墙面上断掉。
+ * 两件事共用同一批矩形，但用的是两种几何——所以是两个函数，不是两种"墙"。
+ *
+ * 这里走的是标准的 slab 判法（把射线分别夹进 x / y 两个区间再取交集），
+ * 逐面墙算第一个交点、取最近的那个：墙是**轴对齐矩形**，这条判法没有特例，也不需要宽高比。
+ *
+ * `t1` 从 `Infinity` 起头、只在最后和 `best` 比一次（`t0 < best`），**不**在循环里把它收窄到 `best`。
+ * 那一种写法（`let t1 = best`）读起来像是省了一半比较，其实和 `t0 < best` 完全是一回事、
+ * 两条守卫各挡一半——删掉任何一条读数都不变（变异台架实测：两条都杀不掉）。
+ * 留一条就够了：进不来墙的射线被 `t0 > t1` 挡掉，"不是最近的那堵"被 `t0 < best` 挡掉，
+ * 而 `best` 一开始就是 `maxT`，顺带把"墙在射程之外"和"一路没墙"并进同一条路上。
+ */
+export function rayWalls(
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  maxT: number,
+  walls: readonly Rect[],
+): number {
+  let best = maxT;
+  for (const w of walls) {
+    let t0 = 0;
+    let t1 = Infinity;
+    if (Math.abs(dx) < 1e-9) {
+      if (x < w.x || x > w.x + w.w) continue;
+    } else {
+      const a = (w.x - x) / dx;
+      const b = (w.x + w.w - x) / dx;
+      t0 = Math.max(t0, Math.min(a, b));
+      t1 = Math.min(t1, Math.max(a, b));
+    }
+    if (Math.abs(dy) < 1e-9) {
+      if (y < w.y || y > w.y + w.h) continue;
+    } else {
+      const a = (w.y - y) / dy;
+      const b = (w.y + w.h - y) / dy;
+      t0 = Math.max(t0, Math.min(a, b));
+      t1 = Math.min(t1, Math.max(a, b));
+    }
+    if (t0 <= t1 && t0 < best) best = t0;
+  }
+  return best;
+}
+
 export function clampToArena(x: number, y: number, r: number, halfW: number, halfH: number): { x: number; y: number } {
   return {
     x: Math.max(-halfW + r, Math.min(halfW - r, x)),
