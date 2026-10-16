@@ -166,13 +166,23 @@ interface BeamFx {
   seed: number;
 }
 
-/** 环境伤害的玩家向说法（敌人用 ENEMY_MAP 查）。 */
+/**
+ * 「这一下是谁干的」的玩家向说法——**两个方向共用一张表**：
+ * 挨打的时候用来写"灯火熄灭于 ×××"（和 ENEMY_MAP 一起查），
+ * 打出去的时候用来写「本局伤害构成」里那几行不是武器的行。
+ * 共用是因为它回答的本来就是同一个问题（"这个东西叫什么"），
+ * 分成两张表迟早会有一边忘了加。
+ */
 const SOURCE_LABEL: Record<string, { name: string; color: string }> = {
   meteor: { name: '陨石雨', color: '#ff8a4e' },
   collapse: { name: '塌方', color: '#b48a5a' },
   thorn: { name: '荆棘地刺', color: '#9fd45a' },
   fire: { name: '火海', color: '#ff7a2f' },
   poison: { name: '毒地', color: '#7ddc6a' },
+  // 玩家这一侧的三个非武器来源（见 creditDamage）
+  nova: { name: '燃爆', color: '#ffb14e' },
+  lantern: { name: '灯火', color: '#ffd98a' },
+  other: { name: '其他', color: '#8fa7ff' },
 };
 
 interface Ground {
@@ -195,6 +205,8 @@ interface Ground {
   igniteIn?: number;
   /** 画这片火用的一点随机相位：每片火的火舌抖法错开，同一片火前后连贯 */
   phase?: number;
+  /** 这片火是谁放的（武器 id）：它续上的每一层灼烧都记在那个来源头上（见 `creditDamage`） */
+  source?: string;
 }
 
 /**
@@ -226,6 +238,8 @@ interface Mine {
   fuseY: number;
   /** 这是这一串里的第几节（0 = 被踩响的那一颗；音高与成就都看这个数） */
   link: number;
+  /** 谁埋的（武器 id）：炸出来的伤害记在它头上 */
+  source: string;
 }
 
 /**
@@ -246,6 +260,8 @@ interface Vortex {
   drag: number;
   /** 画面上旋臂的相位：每盏转的圈不必同步 */
   phase: number;
+  /** 谁放的（武器 id）：收缩那一下的伤害记在它头上 */
+  source: string;
 }
 
 /** 地上的一盏弃灯（「分灯」放下的）。 */
@@ -437,6 +453,20 @@ export class Game {
   runPyres = 0;
   /** 单次最高伤害（结算用）。 */
   maxHit = 0;
+  /**
+   * 「本局伤害构成」：每个来源（武器 id / `nova` / `lantern` / `other`）在本局一共打出去多少。
+   *
+   * 为什么要有它：这一局的枪法是自动的，玩家唯一一直在做的决定是**把升级给谁**——
+   * 可到了结算页，他能看到的只有一个总伤害。哪件在扛、哪件在刮，只能靠感觉猜；
+   * 而"猜"在一个以构筑为核心的游戏里是说不通的：肉鸽的乐趣就长在"下一步该堆什么"上。
+   *
+   * 报的是**名义值**、不按剩余血量截断（和"最强一击"同一个口径），并且
+   * **连灼烧那条路也算在内**（`Enemy` 每帧扣的那一点，见 `Enemy.burnSource`）——
+   * 于是"所有桶加起来恒等于 `damageDealt`"，这条恒等式有测试钉着。
+   * 顺带把 `damageDealt` 本身补准了：从前它漏掉灼烧，倾灯那种"伤害全在灼烧里"的武器
+   * 在结算页上会显示成几乎没打伤害。
+   */
+  damageBySource = new Map<string, number>();
   /** 本局燃爆次数（结算用） */
   novaCount = 0;
   /** 本局掠影多少次（结算 / 成就用） */
@@ -680,6 +710,7 @@ export class Game {
     this.pendingLevels = 0;
     this.rerollsLeft = 0;
     this.damageDealt = 0;
+    this.damageBySource.clear();
     this.damageTaken = 0;
     this.combo = 0;
     this.bestCombo = 0;
@@ -1572,8 +1603,10 @@ export class Game {
         this.novaCount += 1;
         this.bounties.onNova();
       },
-      mine: (x, y, damage, radius, trigger, fire) => this.placeMine(x, y, damage, radius, trigger, fire),
-      vortex: (x, y, damage, radius, burn, drag) => this.placeVortex(x, y, damage, radius, burn, drag),
+      mine: (x, y, damage, radius, trigger, fire, source) =>
+        this.placeMine(x, y, damage, radius, trigger, fire, source),
+      vortex: (x, y, damage, radius, burn, drag, source) =>
+        this.placeVortex(x, y, damage, radius, burn, drag, source),
       pour: (cost) => {
         this.pourCount += 1;
         this.pourSpent += cost;
@@ -1611,6 +1644,9 @@ export class Game {
       addLight: (x, y, r, i) => this.light.addLight(x, y, r, i),
       burst: (x, y, c, col, opts) => this.particles.burst(x, y, c, col, opts),
       onDeath: (e) => this.onEnemyDeath(e),
+      // 灼烧每帧扣的那一点也要进账（见 Enemy.burnSource）：不然"倾灯"这种
+      // 全靠地上那片火续灼烧的武器，在「本局伤害构成」里会显示成几乎没打伤害。
+      onBurn: (amount, source) => this.creditDamage(source, amount),
       snuffLight: (amount) => {
         this.player.oil = Math.max(0, this.player.oil - amount);
         this.darknessBoost = Math.min(0.5, this.darknessBoost + amount * 1.5);
@@ -1725,7 +1761,7 @@ export class Game {
   }
 
   /** 连锁闪电：从起点逐个跳向最近的敌人，并记录一道电弧特效。 */
-  private chainZap(x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number }): void {
+  private chainZap(x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number; source?: string }): void {
     const pts: number[] = [x, y];
     const hitIds = new Set<number>();
     let cx = x;
@@ -1760,7 +1796,7 @@ export class Game {
     width: number,
     damage: number,
     color: string,
-    opts: { burn?: number; slow?: number; knockback?: number } = {},
+    opts: { burn?: number; slow?: number; knockback?: number; source?: string } = {},
   ): void {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
@@ -1784,6 +1820,7 @@ export class Game {
       this.applyHit(e, damage * (crit ? this.player.stats.critMult : 1), crit, dx, dy, opts.knockback ?? 60, {
         burn: opts.burn,
         slow: opts.slow,
+        source: opts.source,
       });
       this.particles.burst(e.x, e.y, 3, color, { speed: 120, size: 2, life: 0.25 });
     }
@@ -1897,17 +1934,28 @@ export class Game {
     return best;
   }
 
-  applyHit(e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts: { burn?: number; slow?: number } = {}): boolean {
+  applyHit(
+    e: Enemy,
+    damage: number,
+    crit: boolean,
+    kx: number,
+    ky: number,
+    knockback: number,
+    opts: { burn?: number; slow?: number; source?: string } = {},
+  ): boolean {
     if (!this.enemies.isVulnerable(e, this.lightCtx())) return false;
+    // ⚠ 来源要在咒盾清空 opts **之前**抄下来：`opts = {}` 那一句是为了"元素免疫连灼烧一起免掉"，
+    //   可它是整份 opts 换掉——先读出来，账才不会因为对手有个词缀就整笔记到 `other` 去。
+    const source = opts.source;
     // 咒盾：元素免疫 + 额外减伤，逼玩家在「堆元素」和「堆物理」之间做选择
     const warded = e.affix === 'warded';
     if (warded) opts = {};
     const reduced = damage * (1 - e.dr) * (warded ? 0.75 : 1);
     const killed = this.enemies.damage(e, reduced, this.lightCtx(), kx, ky, knockback);
-    this.damageDealt += reduced;
+    this.creditDamage(source, reduced);
     if (reduced > this.maxHit) this.maxHit = reduced;
     this.floaters.damage(e.x, e.y - e.radius - 6, reduced, crit);
-    if (opts.burn) this.enemies.applyBurn(e, opts.burn);
+    if (opts.burn) this.enemies.applyBurn(e, opts.burn, source ?? null);
     if (opts.slow && opts.slow > 0 && e.active) e.slowTimer = Math.max(e.slowTimer, opts.slow);
     if (this.player.flags.lifesteal > 0) {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + reduced * this.player.flags.lifesteal);
@@ -1916,6 +1964,47 @@ export class Game {
     if (killed) this.hitStop = Math.max(this.hitStop, 0.035);
     else this.audio.play('hit');
     return killed;
+  }
+
+  /**
+   * 记一笔伤害：**总额与"谁打的"同时往上走**。
+   *
+   * 两者写在同一个函数里是有意的：分头去加迟早会有一条路只加了其中一边，
+   * 而那种错在界面上完全看不出来（少记的那笔谁也发现不了）。
+   * 现在只要所有伤害都从这里过，"各桶加起来 = 造成伤害"就是恒等式。
+   *
+   * `source` 缺省时归到 `other`——宁可有一个"其他"，也不要把说不清的那部分漏掉。
+   */
+  private creditDamage(source: string | null | undefined, amount: number): void {
+    if (!(amount > 0)) return;
+    this.damageDealt += amount;
+    const key = source || 'other';
+    this.damageBySource.set(key, (this.damageBySource.get(key) ?? 0) + amount);
+  }
+
+  /**
+   * 把账本整理成能给界面用的行：按伤害从多到少排，带上名字与占比。
+   *
+   * 名字从两处现取：武器走 `WEAPON_MAP`（改武器名，这里不会漂），
+   * 其余几个固定 id 走 `SOURCE_LABEL`（和"被谁扑灭"共用一张表）。认不出来的 id 就直接把 id 当名字——
+   * "显示一个说不清名字的东西"也比"少一行、总数对不上"强。
+   */
+  damageBreakdown(): { id: string; name: string; color: string; amount: number; frac: number }[] {
+    const total = this.damageDealt || 1;
+    return [...this.damageBySource.entries()]
+      .filter(([, v]) => v > 0)
+      .map(([id, amount]) => {
+        const w = WEAPON_MAP[id];
+        const label = SOURCE_LABEL[id];
+        return {
+          id,
+          name: w?.name ?? label?.name ?? id,
+          color: w?.color ?? label?.color ?? '#8fa7ff',
+          amount,
+          frac: amount / total,
+        };
+      })
+      .sort((a, b) => b.amount - a.amount);
   }
 
   private addDecal(x: number, y: number, r: number, color: string, life: number): void {
@@ -2209,7 +2298,7 @@ export class Game {
           if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 <= rr * rr) {
             const crit = Math.random() < this.player.stats.critChance;
             const dmg = p.damage * (crit ? this.player.stats.critMult : 1);
-            this.applyHit(e, dmg, crit, p.vx, p.vy, p.knockback, { burn: p.burn, slow: p.slow });
+            this.applyHit(e, dmg, crit, p.vx, p.vy, p.knockback, { burn: p.burn, slow: p.slow, source: p.weaponId });
             p.hitIds.push(e.id);
             if (p.returning) {
               this.bladeReturnHits += 1;
@@ -2251,11 +2340,12 @@ export class Game {
       knockback: p.knockback,
       burn: p.burn,
       slow: p.slow,
+      source: p.weaponId,
       spark: '#ff9d2e',
       sparkCount: 18,
     });
     // 「倾灯」落地：炸完之后在地上留一片**自己烧的火**（别的武器没有这一项，`poolRadius` 是 0）
-    if (p.poolRadius > 0) this.pourPool(p.x, p.y, p.poolRadius * spread, p.poolLife);
+    if (p.poolRadius > 0) this.pourPool(p.x, p.y, p.poolRadius * spread, p.poolLife, p.weaponId);
   }
 
   /**
@@ -2266,7 +2356,7 @@ export class Game {
    * 而且要求那只怪脚下那片火是**自己的**（`ignites`）：连珠伏灯留下的那层火不算，
    * 那层火本来就在烧玩家，不是倒出来的油。
    */
-  private pourPool(x: number, y: number, r: number, life: number): void {
+  private pourPool(x: number, y: number, r: number, life: number, source: string): void {
     let doused = 0;
     this.enemies.forEach((e) => {
       if ((e.x - x) ** 2 + (e.y - y) ** 2 > r * r) return;
@@ -2278,7 +2368,7 @@ export class Game {
         }
       }
     });
-    this.addGround(x, y, r, life, 0, 'fire', true);
+    this.addGround(x, y, r, life, 0, 'fire', true, source);
     // 第一瓢落地就把图鉴「机制」那一章的条目记上（和伏灯 / 旋灯一样：条目里的数是现取的）
     this.codex.discover('mechanic', 'pour');
     if (doused >= POUR.douse) this.achievements.unlock('pour_douse');
@@ -2306,6 +2396,8 @@ export class Game {
       sparkCount?: number;
       /** 地上那道焦痕的颜色。默认是暖色的"烧焦"（火球、伏灯那种），冷色的武器可以自己换。 */
       decal?: string;
+      /** 这一炸是谁放的（武器 id）：一圈炸到的每一只都记在那个来源头上 */
+      source?: string;
     } = {},
   ): number {
     const ring = opts.ring ?? '#ff7a2f';
@@ -2319,7 +2411,11 @@ export class Game {
       if (d > radius + e.radius) return;
       // 边缘只吃四成：站在爆炸圈最外沿不该和正中一样疼
       const falloff = 1 - clamp((d / radius) * 0.5, 0, 0.6);
-      this.applyHit(e, damage * falloff, false, e.x - x, e.y - y, opts.knockback ?? 0, { burn: opts.burn, slow: opts.slow });
+      this.applyHit(e, damage * falloff, false, e.x - x, e.y - y, opts.knockback ?? 0, {
+        burn: opts.burn,
+        slow: opts.slow,
+        source: opts.source,
+      });
       hits += 1;
     });
     return hits;
@@ -2332,7 +2428,7 @@ export class Game {
    * 上弦半秒、亮一盏小灯（黑暗里得看得见它，而且它本来就是一盏灯）、
    * 上弦期间踩不响——那是玩家刚转身离开的那半秒。
    */
-  placeMine(x: number, y: number, damage: number, radius: number, trigger: number, fire: number): void {
+  placeMine(x: number, y: number, damage: number, radius: number, trigger: number, fire: number, source: string): void {
     // 地上最多留六颗：不给上限的话，一路小跑就能铺出一条雷带（见 data/mines.ts）
     if (this.mines.length >= MINE.max) this.mines.shift();
     this.mines.push({
@@ -2349,6 +2445,7 @@ export class Game {
       fuseX: x,
       fuseY: y,
       link: 0,
+      source,
     });
     this.mineCount += 1;
     // 第一次布下伏灯就把「机制」那一章的条目记上（图鉴里的数是现取的，改调参会自己跟上）
@@ -2446,7 +2543,7 @@ export class Game {
    * 落点由玩家给（Player 只知道"我朝哪儿"，锁的是最近那只怪），
    * 剩下的都在这里：吸力、卷弹幕、收缩那一下。
    */
-  placeVortex(x: number, y: number, damage: number, radius: number, burn: number, drag: number): void {
+  placeVortex(x: number, y: number, damage: number, radius: number, burn: number, drag: number, source: string): void {
     this.vortexes.push({
       x,
       y,
@@ -2457,6 +2554,7 @@ export class Game {
       burn,
       drag,
       phase: this.rng.next() * 6.283,
+      source,
     });
     this.vortexCount += 1;
     this.codex.discover('mechanic', 'vortex');
@@ -2503,6 +2601,7 @@ export class Game {
       this.blast(v.x, v.y, v.radius * VORTEX.burst, dmg, {
         knockback: 0,
         burn: v.burn,
+        source: v.source,
         ring: '#8fb8ff',
         spark: '#dcefff',
         sparkCount: 20 + caught * 3,
@@ -2651,8 +2750,9 @@ export class Game {
       ring: '#ffb14e',
       spark: '#ffd9a0',
       sparkCount: 22,
+      source: m.source,
     });
-    if (m.fire > 0) this.addGround(m.x, m.y, radius * 0.75, MINE.fireLife, MINE.fireDps);
+    if (m.fire > 0) this.addGround(m.x, m.y, radius * 0.75, MINE.fireLife, MINE.fireDps, 'fire', false, m.source);
     // 一次炸到一片：这是伏灯最想要的那一下（也是「伏击」成就的判据）
     if (hits >= MINE.multiHit) this.achievements.unlock('mine_multi');
     // 连爆：这一炸够得着的其他雷会被引信点着。排得密就一串响，排得开就一颗一颗响——
@@ -2684,8 +2784,9 @@ export class Game {
     dps: number,
     kind: 'fire' | 'poison' | 'mud' | 'frost' = 'fire',
     ignites = false,
+    source?: string,
   ): void {
-    this.grounds.push({ x, y, r, life, dps, kind, ignites, igniteIn: 0, phase: ignites ? this.rng.next() * 6.283 : 0 });
+    this.grounds.push({ x, y, r, life, dps, kind, ignites, igniteIn: 0, phase: ignites ? this.rng.next() * 6.283 : 0, source });
     const tint = kind === 'mud' ? '#9fb7c9' : kind === 'frost' ? '#bfe6ff' : '#ff7a2f';
     this.particles.shockwave(x, y, tint, r, life);
   }
@@ -2748,7 +2849,7 @@ export class Game {
           g.igniteIn = POUR.igniteEvery;
           this.enemies.forEach((e) => {
             if ((e.x - g.x) ** 2 + (e.y - g.y) ** 2 > (g.r + e.radius) ** 2) return;
-            this.enemies.applyBurn(e, POUR.igniteStacks);
+            this.enemies.applyBurn(e, POUR.igniteStacks, g.source ?? null);
           });
         }
         // 它也是一片光：油烧起来比别的火亮，暗幕里那圈火自己就是路标

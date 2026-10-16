@@ -98,7 +98,7 @@ test('伏灯：武器在池里、图鉴收录、进化链闭合', async (t) => {
   // 第一颗雷落地就该点亮图鉴「机制」那一章：这一条讲的是"地上那颗雷的规则"，
   // 和别的武器不一样的地方全在那儿，所以它值得单独成一条（数值是从 data/mines.ts 现取的）
   assert.equal(game.codex.has('mechanic', 'mine'), false, '还没布过雷时这条是问号');
-  game.placeMine(0, 0, 20, 40, 30, 0);
+  game.placeMine(0, 0, 20, 40, 30, 0, 'mine');
   assert.ok(game.codex.has('mechanic', 'mine'), '布下第一颗伏灯就该记进图鉴「机制」章');
   const mech = game.codex.entry('mechanic:mine');
   assert.ok(
@@ -168,7 +168,7 @@ test('伏灯：撒在身后，而且地上最多留六颗', async (t) => {
 
   // 上限：连放十颗，地上只该剩六颗，而且最老的那颗被顶掉
   const firstX = game.mines[0].x;
-  for (let i = 0; i < 10; i += 1) game.placeMine(i * 40, 400, 20, 50, 30, 0);
+  for (let i = 0; i < 10; i += 1) game.placeMine(i * 40, 400, 20, 50, 30, 0, 'mine');
   assert.equal(game.mines.length, 6, `地上最多留六颗（实际 ${game.mines.length}）`);
   assert.ok(!game.mines.some((m) => m.x === firstX && m.y === 0), '超出上限时最老的那颗应当先消失');
   assert.equal(game.mineCount, 11, '布下的总数要照实记（结算里写的是它）');
@@ -177,7 +177,7 @@ test('伏灯：撒在身后，而且地上最多留六颗', async (t) => {
 test('伏灯：上弦那半秒踩不响，上弦之后才认踩', async (t) => {
   const game = await open(t, 'arm');
   const MINE = MINE_OF();
-  game.placeMine(0, 0, 40, 50, 32, 0);
+  game.placeMine(0, 0, 40, 50, 32, 0, 'mine');
   const e = statue(game, 0, 0);
   run(game, 1, 0, 0);
   assert.equal(game.mines.length, 1, '刚放下就炸的话，它是手雷不是陷阱——上弦期间踩不响');
@@ -191,14 +191,14 @@ test('伏灯：踩不响的距离不该响；大块头因为体积大，会更�
   const MINE = MINE_OF();
   // 影蛭（半径 13）站在触发圈外沿之外：32 + 13 = 45 已经够不着，站到 51 更够不着
   const game = await open(t, 'range');
-  game.placeMine(0, 0, 40, 50, 32, 0);
+  game.placeMine(0, 0, 40, 50, 32, 0, 'mine');
   statue(game, 32 + 13 + 6, 0);
   run(game, Math.ceil(MINE.arm * 60) + 4, 0, 0);
   assert.equal(game.mines.length, 1, '站在触发圈外面不该被踩响');
 
   // 同样距离换成石守（半径 22）：32 + 22 = 54 > 51，它的边缘已经进圈了
   const big = await open(t, 'range2');
-  big.placeMine(0, 0, 40, 50, 32, 0);
+  big.placeMine(0, 0, 40, 50, 32, 0, 'mine');
   const bul = statue(big, 32 + 13 + 6, 0, 'bulwark');
   run(big, Math.ceil(MINE.arm * 60) + 4, 0, 0);
   assert.equal(big.mines.length, 0, '触发量的是"怪的边缘"，大块头该更早踩响');
@@ -208,7 +208,7 @@ test('伏灯：踩不响的距离不该响；大块头因为体积大，会更�
 test('伏灯：自己烧尽不炸，爆炸也不伤自己', async (t) => {
   const game = await open(t, 'fizzle');
   const p = game.player;
-  game.placeMine(0, 0, 40, 60, 32, 0);
+  game.placeMine(0, 0, 40, 60, 32, 0, 'mine');
   // 触发圈外的怪：这样"没炸"只可能是寿终，而不是被踩响
   const far = statue(game, 400, 0);
   const hpBefore = p.hp;
@@ -221,7 +221,7 @@ test('伏灯：自己烧尽不炸，爆炸也不伤自己', async (t) => {
   // 踩响：玩家自己站在爆炸圈里（但没贴到那只怪身上）也不该挨伤害
   p.x = 30;
   p.y = 30;
-  game.placeMine(0, 0, 40, 100, 32, 0);
+  game.placeMine(0, 0, 40, 100, 32, 0, 'mine');
   const p2 = statue(game, 0, 0);
   game.mines[0].arm = 0;
   run(game, 2, 0, 0);
@@ -233,7 +233,7 @@ test('伏灯：自己烧尽不炸，爆炸也不伤自己', async (t) => {
 test('伏灯：一圈按距离衰减，进化的那颗还留一片火', async (t) => {
   const game = await open(t, 'fire');
   // 边缘那只站在 40 处：34 + 13 = 47，踩得响；爆炸半径 60 也罩得住它
-  game.placeMine(0, 0, 100, 60, 34, 0);
+  game.placeMine(0, 0, 100, 60, 34, 0, 'mine');
   const near = statue(game, 0, 0);
   const edge = statue(game, 40, 0);
   run(game, 1, 0, 0);
@@ -245,7 +245,7 @@ test('伏灯：一圈按距离衰减，进化的那颗还留一片火', async (t
 
   // 进化的连珠伏灯：炸完脚下留一片火（不然"连珠"只是个更大的圈）
   const evo = await open(t, 'evolve');
-  evo.placeMine(0, 0, 50, 60, 34, 2);
+  evo.placeMine(0, 0, 50, 60, 34, 2, 'mine');
   const e = statue(evo, 0, 0, 'bulwark');
   evo.mines[0].arm = 0;
   run(evo, 2, 0, 0);
@@ -253,7 +253,7 @@ test('伏灯：一圈按距离衰减，进化的那颗还留一片火', async (t
   assert.ok(e.burn > 0, '被炸到的敌人还该带灼烧');
   // 不进化（burn = 0）的那颗不该留火：不然"留火"就不是进化的好处了
   const plain = await open(t, 'plain');
-  plain.placeMine(0, 0, 50, 60, 34, 0);
+  plain.placeMine(0, 0, 50, 60, 34, 0, 'mine');
   statue(plain, 0, 0, 'bulwark');
   plain.mines[0].arm = 0;
   run(plain, 2, 0, 0);
@@ -264,9 +264,9 @@ test('伏灯：排得密会连爆成一串，而且是一节一节烧过去的',
   const game = await open(t, 'chain');
   const MINE = MINE_OF();
   // 三颗排成一条线，间距（50）小于一颗的爆炸半径（60）——连爆够得着
-  game.placeMine(0, 0, 40, 60, 30, 0);
-  game.placeMine(50, 0, 40, 60, 30, 0);
-  game.placeMine(100, 0, 40, 60, 30, 0);
+  game.placeMine(0, 0, 40, 60, 30, 0, 'mine');
+  game.placeMine(50, 0, 40, 60, 30, 0, 'mine');
+  game.placeMine(100, 0, 40, 60, 30, 0, 'mine');
   const e = statue(game, 0, 0);
   game.mines.forEach((m) => {
     m.arm = 0;
@@ -294,7 +294,7 @@ test('伏灯：排得密会连爆成一串，而且是一节一节烧过去的',
 
   // 引信点着了就不再看有没有人来踩：上弦还没走完、场上一个敌人都没有，时间到照样响
   const solo = await open(t, 'fuse');
-  solo.placeMine(0, 0, 40, 60, 30, 0);
+  solo.placeMine(0, 0, 40, 60, 30, 0, 'mine');
   solo.mines[0].arm = MINE.arm;
   solo.mines[0].fuse = MINE.chainFuse;
   run(solo, 1, 0, 0);
@@ -304,8 +304,8 @@ test('伏灯：排得密会连爆成一串，而且是一节一节烧过去的',
 
   // 排得开就一颗一颗响：两百像素外那颗既够不着、也不该被点着
   const apart = await open(t, 'apart');
-  apart.placeMine(0, 0, 40, 60, 30, 0);
-  apart.placeMine(200, 0, 40, 60, 30, 0);
+  apart.placeMine(0, 0, 40, 60, 30, 0, 'mine');
+  apart.placeMine(200, 0, 40, 60, 30, 0, 'mine');
   statue(apart, 0, 0);
   apart.mines.forEach((m) => {
     m.arm = 0;
@@ -320,7 +320,7 @@ test('伏灯：一串连到 4 颗解「一串灯」，结算里写出最长的�
   const game = await open(t, 'chain4');
   const MINE = MINE_OF();
   assert.equal(game.save.achievements.includes('minechain'), false, '开局不该有这个成就');
-  for (let i = 0; i < 4; i += 1) game.placeMine(i * 40, 0, 40, 60, 30, 0);
+  for (let i = 0; i < 4; i += 1) game.placeMine(i * 40, 0, 40, 60, 30, 0, 'mine');
   statue(game, 0, 0);
   game.mines.forEach((m) => {
     m.arm = 0;
@@ -332,7 +332,7 @@ test('伏灯：一串连到 4 颗解「一串灯」，结算里写出最长的�
   assert.ok(game.ui.statsBlock().includes('最长一串'), '结算面板里应写出最长的一串');
   // 单响不该在结算里凑出"最长一串"那一行
   const solo = await open(t, 'chain4solo');
-  solo.placeMine(0, 0, 40, 60, 30, 0);
+  solo.placeMine(0, 0, 40, 60, 30, 0, 'mine');
   statue(solo, 0, 0);
   solo.mines[0].arm = 0;
   run(solo, 3, 0, 0);
@@ -343,7 +343,7 @@ test('伏灯：一串连到 4 颗解「一串灯」，结算里写出最长的�
 test('伏灯：一次炸到五只解「伏击」', async (t) => {
   const game = await open(t, 'ach');
   assert.equal(game.save.achievements.includes('mine_multi'), false, '开局不该有这个成就');
-  game.placeMine(0, 0, 20, 70, 34, 0);
+  game.placeMine(0, 0, 20, 70, 34, 0, 'mine');
   // 触发圈外面站四只（不该被算进这一炸），圈里站五只
   for (let i = 0; i < 4; i += 1) statue(game, 300 + i * 30, 0);
   const pack = [statue(game, 0, 40), statue(game, 0, -40), statue(game, 40, 0), statue(game, -40, 0), statue(game, 0, 0)];
@@ -367,7 +367,7 @@ test('伏灯：它是一盏灯——灯蛾会拐过来扑它，然后自己踩�
   assert.ok(moth.x > 130, `没有灯的时候蛾朝人飞（x=${Math.round(moth.x)}）`);
 
   // 摆一盏**上弦好的**灯在它正上方（比人近得多）
-  game.placeMine(100, 400, 40, 60, 34, 0);
+  game.placeMine(100, 400, 40, 60, 34, 0, 'mine');
   const mine = game.mines[0];
   mine.arm = 0;
   const before = Math.hypot(moth.x - mine.x, moth.y - mine.y);
@@ -383,7 +383,7 @@ test('伏灯：它是一盏灯——灯蛾会拐过来扑它，然后自己踩�
   // 没上弦的那颗不算"亮着的灯"（芯还是冷青色的），蛾不该理它
   const cold = await open(t, 'moth-cold');
   const moth2 = cold.enemies.spawn('moth', 100, 700, 1, 0);
-  cold.placeMine(100, 400, 40, 60, 34, 0);
+  cold.placeMine(100, 400, 40, 60, 34, 0, 'mine');
   cold.mines[0].arm = MINE.arm;
   run(cold, 30, 0, 0);
   assert.ok(moth2.x > 130, `还没上弦的雷不算灯，蛾不拐弯（x=${Math.round(moth2.x)}）`);
@@ -392,7 +392,7 @@ test('伏灯：它是一盏灯——灯蛾会拐过来扑它，然后自己踩�
   // 只有蛾认这条线：别的怪不会因为地上摆了雷就集体改道
   const shade = await open(t, 'moth-shade');
   const walker = shade.enemies.spawn('shade', 100, 700, 1, 0);
-  shade.placeMine(100, 400, 40, 60, 34, 0);
+  shade.placeMine(100, 400, 40, 60, 34, 0, 'mine');
   shade.mines[0].arm = 0;
   run(shade, 30, 0, 0);
   assert.ok(walker.x > 130, `影蛭照旧追人，不会被灯牵走（x=${Math.round(walker.x)}）`);
@@ -402,7 +402,7 @@ test('伏灯：吹灯客踩进触发圈是把雷吹灭，不是把它踩响', as
   // 伏灯是一盏灯，而吹灯客是"专扑灯"的那种怪——它是伏灯唯一的天敌：
   // 埋在地上的一整条路，它能一边走一边掐灭。想用雷，就先把吹灯客点掉。
   const game = await open(t, 'snuff');
-  game.placeMine(0, 0, 40, 60, 34, 0);
+  game.placeMine(0, 0, 40, 60, 34, 0, 'mine');
   game.mines[0].arm = 0;
   const snuffer = game.enemies.spawn('snuffer', 0, 30, 1, 0);
   snuffer.hp = 1e6;
@@ -416,7 +416,7 @@ test('伏灯：吹灯客踩进触发圈是把雷吹灭，不是把它踩响', as
   assert.ok(game.ui.statsBlock().includes('被吹灭'), '结算面板里应写出被吹灭了几颗');
   // 同一颗雷换成普通怪踩：照炸不误（吹灭这条只对吹灯客成立）
   const other = await open(t, 'snuff-shade');
-  other.placeMine(0, 0, 40, 60, 34, 0);
+  other.placeMine(0, 0, 40, 60, 34, 0, 'mine');
   other.mines[0].arm = 0;
   const shade = statue(other, 0, 30);
   run(other, 4, 0, 0);
@@ -435,7 +435,7 @@ test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t
   assert.ok(MINE.mothBait >= 3, '一次炸到一只蛾就该算的话，"把它们引到同一盏灯上"这件事就不成立了');
   // 用真的蛾（18 血，一炸就死），不改成打不死的——不然同一只蛾会被下一炸再数一遍
   const flock = [0, 12, 24].map((x) => game.enemies.spawn('moth', x, 0, 1, 0));
-  game.placeMine(0, 0, 40, 70, 34, 0);
+  game.placeMine(0, 0, 40, 70, 34, 0, 'mine');
   game.mines[0].arm = 0;
   run(game, 2, 0, 0);
   assert.equal(game.mineMothHits, 3, `这一炸数出 3 只（实际 ${game.mineMothHits}）`);
@@ -444,7 +444,7 @@ test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t
   assert.ok(game.ui.statsBlock().includes('灯上的蛾'), '结算面板里会写出这一局灯上落过几只蛾');
   assert.ok(!game.ui.statsBlock().includes('以灯为饵'), '结算面板不该把没解开的成就写上去');
   // 再来一颗，一次炸到四只：这才是"你把这群蛾引到了同一盏灯上"
-  game.placeMine(0, 0, 40, 70, 34, 0);
+  game.placeMine(0, 0, 40, 70, 34, 0, 'mine');
   game.mines[0].arm = 0;
   for (const x of [0, 10, 20, 30]) game.enemies.spawn('moth', x, 0, 1, 0);
   // 多跑几帧：上一次那一炸打死三只，会带来一下"打击停顿"（kill 的手感），
@@ -454,7 +454,7 @@ test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t
   assert.ok(game.save.achievements.includes('mine_moth'), '一次炸到 4 只该解锁「以灯为饵」');
   // 圈外站着的蛾不算：挨着爆炸半径外一点点
   const edge = await open(t, 'bait-edge');
-  edge.placeMine(0, 0, 40, 60, 34, 0);
+  edge.placeMine(0, 0, 40, 60, 34, 0, 'mine');
   edge.mines[0].arm = 0;
   // 站在触发圈外（34 + 14），等雷被"踩响"不可能——所以这里直接引爆它
   statue(edge, 200, 0);
@@ -465,7 +465,7 @@ test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t
   assert.equal(edge.mineMothHits, 0, `爆炸够不着的那只蛾不该被数进去（实际 ${edge.mineMothHits}）`);
   // 挨着爆炸圈边上的那只（radius + 它自己的半径以内）要数进去
   const near = await open(t, 'bait-near');
-  near.placeMine(0, 0, 40, 60, 34, 0);
+  near.placeMine(0, 0, 40, 60, 34, 0, 'mine');
   near.mines[0].arm = 0;
   near.mines[0].fuse = 0.02;
   statue(near, 70, 0, 'moth');
@@ -475,7 +475,7 @@ test('伏灯：一颗雷一次炸到 4 只灯蛾解「以灯为饵」', async (t
   const pull = await open(t, 'bait-pull');
   pull.player.x = 0;
   pull.player.y = 0;
-  pull.placeMine(0, -120, 40, 60, 34, 0);
+  pull.placeMine(0, -120, 40, 60, 34, 0, 'mine');
   pull.mines[0].arm = 0;
   pull.mines[0].fuse = 0.02; // 直接点着引信，不靠踩
   statue(pull, 0, -40, 'moth'); // 离灯 80px、离人 40px
@@ -517,11 +517,11 @@ test('伏灯：同一帧里"有雷烧尽"和"有雷被踩响"撞在一起，炸�
   game.player.x = 700;
   game.player.y = 700;
   // ① 靠前的那一颗：这一帧就烧尽（不是被踩响，也不炸）
-  game.placeMine(0, 0, 20, 46, 30, 0);
+  game.placeMine(0, 0, 20, 46, 30, 0, 'mine');
   const doomed = game.mines[0];
   doomed.life = 1e-6;
   // ② 靠后的那一颗：上弦完毕，脚下站着一只怪 → 这一帧会被踩响
-  game.placeMine(0, 0, 20, 46, 30, 0);
+  game.placeMine(0, 0, 20, 46, 30, 0, 'mine');
   const stepped = game.mines[1];
   stepped.arm = 0;
   const victim = statue(game, 0, 0);

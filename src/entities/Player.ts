@@ -25,11 +25,11 @@ export interface PlayerContext {
   audio: (name: string) => void;
   shake: (amount: number) => void;
   hurt: (amount: number) => void;
-  hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number }) => boolean;
+  hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number; source?: string }) => boolean;
   findTarget: (x: number, y: number, maxDist: number, requireLight?: boolean) => Enemy | null;
   /** 「倾灯」倒了一瓢：把"这一瓢花了多少油"记回这一局的账上（结算面板要看） */
   pour: (cost: number) => void;
-  chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number }) => void;
+  chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number; source?: string }) => void;
   /** 光矛：一条贯穿光束，沿途全部命中 */
   beam: (
     x: number,
@@ -39,7 +39,7 @@ export interface PlayerContext {
     width: number,
     damage: number,
     color: string,
-    opts?: { burn?: number; slow?: number; knockback?: number },
+    opts?: { burn?: number; slow?: number; knockback?: number; source?: string },
   ) => void;
   /** 燃爆真正放出去的那一刻（用于悬赏计数等）。 */
   onNova: () => void;
@@ -47,12 +47,12 @@ export interface PlayerContext {
    * 伏灯：在地上布一颗雷。
    * 位置由玩家给（Player 只知道"我朝哪儿走"），落点判定与爆炸都在 Game 里。
    */
-  mine: (x: number, y: number, damage: number, radius: number, trigger: number, fire: number) => void;
+  mine: (x: number, y: number, damage: number, radius: number, trigger: number, fire: number, source: string) => void;
   /**
    * 旋灯：在某处转起一盏往里吸的灯，转完缩成一下炸。
    * `drag` > 0 的那把连弹幕一起卷（卷到中心就吞掉）。
    */
-  vortex: (x: number, y: number, damage: number, radius: number, burn: number, drag: number) => void;
+  vortex: (x: number, y: number, damage: number, radius: number, burn: number, drag: number, source: string) => void;
 }
 
 export interface PlayerFlags {
@@ -696,7 +696,8 @@ export class Player {
         if (cd <= 0) {
           this.orbit.hitCooldown.set(e.id, 0.25);
           const dmg = 9 * this.stats.damageMult * this.damageScale * this.flags.contactMult;
-          ctx.hit(e, dmg, false, e.x - this.x, e.y - this.y, 40, { burn: 1, slow: this.flags.chill });
+          // 这一口火不是哪件武器打的，是**灯火本身**贴着怪烧的：记成 `lantern`（结算里叫「灯火」）
+          ctx.hit(e, dmg, false, e.x - this.x, e.y - this.y, 40, { burn: 1, slow: this.flags.chill, source: 'lantern' });
         }
       }
     });
@@ -762,7 +763,7 @@ export class Player {
         const dmg = 34 * this.stats.damageMult * castScale * power;
         const crit = Math.random() < this.stats.critChance;
         const applied = crit ? dmg * this.stats.critMult : dmg;
-        const opts: { burn?: number; slow?: number } = {};
+        const opts: { burn?: number; slow?: number; source?: string } = { source: 'nova' };
         if (style === 'emberkin') opts.burn = 3;
         else if (style === 'lamplighter') opts.burn = 1;
         else if (style === 'shadewalker') opts.slow = 2.5;
@@ -883,7 +884,7 @@ export class Player {
               const cd = this.orbit.hitCooldown.get(e.id) ?? 0;
               if (cd <= 0) {
                 this.orbit.hitCooldown.set(e.id, 0.35);
-                this.hitEnemy(e, dmg, ctx, st, e.x - ox, e.y - oy);
+                this.hitEnemy(e, dmg, ctx, st, e.x - ox, e.y - oy, id);
               }
             }
           });
@@ -958,7 +959,7 @@ export class Player {
         break;
       }
       case 'arc': {
-        ctx.chainZap(this.x, this.y, dmg, Math.max(1, st.pierce + this.countOf(st) - 1), st.range * area, def.color, { burn: st.burn, slow: st.slow });
+        ctx.chainZap(this.x, this.y, dmg, Math.max(1, st.pierce + this.countOf(st) - 1), st.range * area, def.color, { burn: st.burn, slow: st.slow, source: id });
         ctx.audio('wisp');
         break;
       }
@@ -970,6 +971,7 @@ export class Player {
             burn: st.burn,
             slow: st.slow,
             knockback: st.knockback,
+            source: id,
           });
         }
         ctx.audio('shoot');
@@ -1031,7 +1033,7 @@ export class Player {
         const back = (moving ? Math.atan2(this.vy, this.vx) : this.angle) + Math.PI;
         for (let i = 0; i < count; i += 1) {
           const a = back + (i - (count - 1) / 2) * 0.75;
-          ctx.mine(this.x + Math.cos(a) * 22, this.y + Math.sin(a) * 22, dmg, st.radius * area, st.range, st.burn);
+          ctx.mine(this.x + Math.cos(a) * 22, this.y + Math.sin(a) * 22, dmg, st.radius * area, st.range, st.burn, id);
         }
         ctx.audio('lamp');
         break;
@@ -1088,7 +1090,7 @@ export class Player {
         for (let i = 0; i < count; i += 1) {
           // 两盏（进化）时左右各偏一点：两团旋涡挨着，中间那一块也被拢住了
           const a = base + (count > 1 ? (i - (count - 1) / 2) * 0.85 : 0);
-          ctx.vortex(this.x + Math.cos(a) * dist, this.y + Math.sin(a) * dist, dmg, st.radius * area, st.burn, st.drag ?? 0);
+          ctx.vortex(this.x + Math.cos(a) * dist, this.y + Math.sin(a) * dist, dmg, st.radius * area, st.burn, st.drag ?? 0, id);
         }
         ctx.audio('vortex');
         break;
@@ -1126,8 +1128,8 @@ export class Player {
           while (diff > Math.PI) diff -= TAU;
           while (diff < -Math.PI) diff += TAU;
           if (Math.abs(diff) <= half) {
-            this.hitEnemy(e, dmg, ctx, st, dx, dy);
-            ctx.enemies.applyBurn(e, 1);
+            this.hitEnemy(e, dmg, ctx, st, dx, dy, id);
+            ctx.enemies.applyBurn(e, 1, id);
           }
         });
         ctx.audio('hit');
@@ -1138,10 +1140,11 @@ export class Player {
     }
   }
 
-  private hitEnemy(e: Enemy, dmg: number, ctx: PlayerContext, st: { knockback: number; burn?: number; slow?: number }, kx: number, ky: number): void {
+  /** `source` 是这件武器自己的 id：记账用（见 Game.creditDamage）。 */
+  private hitEnemy(e: Enemy, dmg: number, ctx: PlayerContext, st: { knockback: number; burn?: number; slow?: number }, kx: number, ky: number, source: string): void {
     const crit = Math.random() < this.stats.critChance;
     const finalDmg = dmg * (crit ? this.stats.critMult : 1);
-    ctx.hit(e, finalDmg, crit, kx, ky, st.knockback, { burn: st.burn ?? 0, slow: Math.max(st.slow ?? 0, this.flags.chill) });
+    ctx.hit(e, finalDmg, crit, kx, ky, st.knockback, { burn: st.burn ?? 0, slow: Math.max(st.slow ?? 0, this.flags.chill), source });
   }
 
   draw(ctx: CanvasRenderingContext2D, time: number, opts?: { cone?: number; halo?: number }): void {

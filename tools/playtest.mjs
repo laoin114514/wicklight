@@ -529,7 +529,7 @@ async function main() {
   const staged = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     g.mines.length = 0;
-    g.placeMine(240, 0, 60, 80, 40, 0);
+    g.placeMine(240, 0, 60, 80, 40, 0, 'mine');
     window.__MINE__ = g.mines[0];
     const e = g.enemies.spawn('bulwark', 240, 0, 1, 0);
     e.hp = 1e6;
@@ -579,8 +579,8 @@ async function main() {
   const noMine = await mineShot();
   await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
-    g.placeMine(g.player.x + 70, g.player.y, 40, 60, 34, 2);
-    g.placeMine(g.player.x + 70, g.player.y + 58, 40, 60, 34, 0);
+    g.placeMine(g.player.x + 70, g.player.y, 40, 60, 34, 2, 'mine');
+    g.placeMine(g.player.x + 70, g.player.y + 58, 40, 60, 34, 0, 'mine');
     g.mines.forEach((m) => {
       m.arm = 0;
     });
@@ -612,7 +612,7 @@ async function main() {
     // （3a5 结尾本来就要把武器还回去，这里不必自己恢复。）
     p.weapons.clear();
     [150, 200, 250, 300].forEach((x, i) => {
-      g.placeMine(x, 0, 40, 60, 40, 0);
+      g.placeMine(x, 0, 40, 60, 40, 0, 'mine');
       g.mines[g.mines.length - 1].cid = i;
       g.mines[g.mines.length - 1].arm = 0;
     });
@@ -711,7 +711,7 @@ async function main() {
     g.player.x = 0;
     g.player.y = 0;
     // 灯摆在人斜上方 240px：蛾离灯 180px、离人 420px——扑最近的那盏光就该拐弯
-    g.placeMine(0, -240, 40, 70, 40, 0);
+    g.placeMine(0, -240, 40, 70, 40, 0, 'mine');
     g.mines[0].arm = 0;
     for (let i = 0; i < 3; i += 1) g.enemies.spawn('moth', -40 + i * 40, -420, 1, 0);
     return { mines: g.mines.length, hits: g.mineMothHits };
@@ -729,7 +729,7 @@ async function main() {
     const g = window.__WICKLIGHT__.game;
     g.enemies.clear();
     g.mines.length = 0;
-    g.placeMine(0, -120, 40, 70, 40, 0);
+    g.placeMine(0, -120, 40, 70, 40, 0, 'mine');
     g.mines[0].arm = 0;
     const e = g.enemies.spawn('snuffer', 0, -190, 1, 0);
     e.hp = 1e6;
@@ -1659,6 +1659,95 @@ async function main() {
   await sleep(250);
   const sheetClosed = await page.evaluate(() => window.__PROBE__.state());
   expect(sheetClosed && sheetClosed.state === 'playing', 'Tab 再按一次回到战斗', JSON.stringify(sheetClosed));
+
+  // ── 4c. 本局伤害构成（真浏览器里再量一次版式与口径）──
+  // 记账最怕的不是报错，而是**悄悄错**：少记一笔、记到别的桶里，光看总伤害都发现不了。
+  // 软件测试已经钉住恒等（各来源之和 === 造成伤害），这里在真浏览器里量**看得见的那半边**：
+  // 两把武器各打一会儿，表得出来、条按占比画、行按伤害从多到少排，而且塞得进面板。
+  const dmgSetup = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    // 量完要还回去：这一局真的长成什么样，后面几张截图还得照着它画
+    g.__dmgBak = new Map(p.weapons);
+    p.weapons.clear();
+    for (let i = 0; i < 3; i += 1) p.levelWeapon('fireball');
+    for (let i = 0; i < 3; i += 1) p.levelWeapon('whip');
+    p.recomputeStats();
+    p.stats.cooldownMult = 0.4; // 让两把都在这 1.7 秒里各打几轮，免得钝的那把 0 伤害、干脆不上表
+    p.x = 0;
+    p.y = 0;
+    // 站着挨打的靶子：血厚（不触发击杀顿帧）、脚力 0（不会贴上来蹭出「灯火」接触伤害污染口径）
+    for (let i = 0; i < 4; i += 1) {
+      const a = (i / 4) * Math.PI * 2;
+      const e = g.enemies.spawn('shade', Math.cos(a) * 130, Math.sin(a) * 130, 4, 1);
+      e.hp = e.maxHp = 1e6;
+      e.speed = 0;
+    }
+    return { weapons: p.weapons.size };
+  });
+  expect(dmgSetup.weapons === 2, '摆好两把武器来量伤害构成', JSON.stringify(dmgSetup));
+  await sleep(1700);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const dmgBlock = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const rows = g.damageBreakdown();
+    const els = [...document.querySelectorAll('.dmg-block .dmg-row')];
+    const bars = els.map((el) => parseFloat(el.querySelector('.dmg-row__bar > i').style.width));
+    // 条**真的**画了那么长吗：拿量出来的像素宽除以轨道宽，和声明宽比一比。
+    // （宽度是 CSS 变量算的，DOM 上写得对不等于桌上画得对。）
+    const pxErr = els.map((el, i) => {
+      const track = el.querySelector('.dmg-row__bar').getBoundingClientRect().width;
+      const fill = el.querySelector('.dmg-row__bar > i').getBoundingClientRect().width;
+      return track > 0 ? Math.abs((fill / track) * 100 - bars[i]) : 999;
+    });
+    const labelPct = els.map((el) => parseFloat(el.querySelector('.dmg-row__val > u').textContent));
+    const dataPct = rows.map((r) => Math.round(r.frac * 100));
+    const box = document.querySelector('.panel--loadout') || document.querySelector('.panel');
+    const r = box.getBoundingClientRect();
+    return {
+      total: g.damageDealt,
+      sumBreakdown: rows.reduce((s, x) => s + x.amount, 0),
+      sumFrac: rows.reduce((s, x) => s + x.frac, 0),
+      sorted: rows.every((x, i) => i === 0 || rows[i - 1].amount >= x.amount),
+      rows: els.length,
+      names: els.map((el) => el.querySelector('.dmg-row__name').textContent),
+      barSum: bars.reduce((s, x) => s + x, 0),
+      maxPxErr: Math.max(...pxErr),
+      pctOk: labelPct.every((v, i) => v === dataPct[i]),
+      title: document.querySelector('.dmg-block__title')?.textContent ?? '',
+      fits: r.right <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1,
+      bad: /undefined|NaN/.test(box.textContent),
+    };
+  });
+  expect(dmgBlock.rows >= 2, '本局伤害构成列出每一件出过力的武器', JSON.stringify(dmgBlock.names));
+  expect(Math.abs(dmgBlock.sumBreakdown - dmgBlock.total) < 0.5, '各来源之和正好等于造成伤害（不多记也不少记）', JSON.stringify({ sum: dmgBlock.sumBreakdown, total: dmgBlock.total }));
+  expect(Math.abs(dmgBlock.sumFrac - 1) < 1e-6, '各来源占比加起来正好是 1', `sumFrac=${dmgBlock.sumFrac}`);
+  // 每条按占比画；细得看不见的那几条会被垫到最小 2%（所以总量最多被抬到 100% + 2% × (条数-1)）。
+  // 这个上界就是"最小宽度"这条规则的边界——超过了说明有别的脏东西在撑宽。
+  expect(dmgBlock.barSum >= 99.9 && dmgBlock.barSum <= 100 + 2 * (dmgBlock.rows - 1) + 0.5, '条长之和就是总量（顶多被最小宽度垫高一点）', `barSum=${dmgBlock.barSum} rows=${dmgBlock.rows}`);
+  expect(dmgBlock.maxPxErr < 0.6, '条在桌上真的画了那么长（不是只有 DOM 上写着）', `maxPxErr=${dmgBlock.maxPxErr}`);
+  expect(dmgBlock.pctOk, '百分比写的是这一行自己的占比', JSON.stringify(dmgBlock.names));
+  expect(dmgBlock.sorted, '行按伤害从多到少排（扛的那件在最上面）', JSON.stringify(dmgBlock.names));
+  expect(/合计/.test(dmgBlock.title), '表头写出合计', dmgBlock.title);
+  expect(dmgBlock.fits && !dmgBlock.bad, '伤害构成塞得进面板、没有缺字段', JSON.stringify(dmgBlock));
+  await shot('05d-damage');
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate(() => {
+    // 收摊：靶子撤掉（别让 4 只厚血雕像跟着这一局走到结算），武器还回原样。
+    // 这一局的伤害账不清——它本来就该记着这一局真打过什么，正是这张表的意义。
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    p.weapons.clear();
+    for (const [id, lv] of g.__dmgBak ?? []) p.weapons.set(id, lv);
+    delete g.__dmgBak;
+    p.recomputeStats();
+  });
 
   // ── 5. 升级面板（游戏内真实触发）──
   await page.evaluate(() => {

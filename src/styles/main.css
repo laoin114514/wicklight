@@ -958,6 +958,27 @@ body.is-touch .hud__pause { display: grid; }
 .rb-reso { font-style: normal; font-size: 11px; letter-spacing: 1px; color: rgba(255, 210, 120, 0.7); }
 .rb-tribe { padding: 1px 8px; border-radius: 999px; font-size: 11.5px; color: var(--c, #ffd24e); border: 1px solid color-mix(in srgb, var(--c, #ffd24e) 40%, transparent); background: color-mix(in srgb, var(--c, #ffd24e) 12%, transparent); }
 
+/* 「本局伤害构成」：和「这一局长成了什么样」同一块材质（深色内嵌面 + 琥珀标签），
+   因为这两块回答的是同一个问题——"我这一局堆出来的东西，哪一件真的在干活"。
+   条长按**占全额的百分比**画，所以几条叠起来正好是一整条：它读的是"这一件占了我多少伤害"，
+   不是"它和第一名差多少"（后者会让第一名永远顶格，反而看不出整体被谁瓜分）。
+   颜色取自武器自己的配色（品牌色一路用到这儿），于是表和上面的武器行一眼能对上。 */
+.dmg-block {
+  margin: 10px 0 2px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(12, 14, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.dmg-block__title { font-size: 11.5px; font-weight: 700; letter-spacing: 3px; color: var(--amber); margin-bottom: 7px; }
+.dmg-block__title span { letter-spacing: 0; font-size: 11px; font-weight: 500; color: rgba(226, 220, 208, 0.45); }
+.dmg-row { display: grid; grid-template-columns: 86px 1fr auto; align-items: center; gap: 9px; padding: 2px 0; font-size: 12px; }
+.dmg-row__name { color: var(--c, #f0ece2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-row__bar { height: 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.dmg-row__bar i { display: block; height: 100%; border-radius: 999px; background: var(--c, #8fa7ff); box-shadow: 0 0 8px color-mix(in srgb, var(--c, #8fa7ff) 55%, transparent); }
+.dmg-row__val { color: rgba(240, 236, 226, 0.92); font-variant-numeric: tabular-nums; }
+.dmg-row__val u { text-decoration: none; margin-left: 7px; font-size: 11px; color: rgba(226, 220, 208, 0.5); }
+
 /* 比祭坛更冷、更沉，卡片先把"回报"亮出来，代价写在下面 */
 .curse-grid {
   display: grid;

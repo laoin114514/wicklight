@@ -481,7 +481,7 @@ export class UIManager implements UIHost {
           <div><span>等级</span><b>${s.level}</b></div>
           <div><span>存活</span><b>${Math.floor(s.time / 60)}:${String(Math.floor(s.time % 60)).padStart(2, '0')}</b></div>
           <div><span>金币</span><b>${g.gold}</b></div>
-          <div><span>造成伤害</span><b>${s.damageDealt}</b></div>
+          <div><span>造成伤害</span><b>${num(s.damageDealt)}</b></div>
           <div><span>最高连击</span><b>${s.bestCombo}</b></div>
         </div>
         <div class="lo-grid">
@@ -492,6 +492,7 @@ export class UIManager implements UIHost {
             ${passives || '<div class="lo-empty">还没有被动</div>'}
             <h4>进化路线</h4>
             ${evoRows}
+            ${this.damageBlock()}
           </section>
           <section class="lo-col">
             <h4>遗物 <b>${p.relics.size}</b></h4>
@@ -546,6 +547,36 @@ export class UIManager implements UIHost {
       </div>`;
   }
 
+  /**
+   * 「本局伤害构成」：每一件武器（以及燃爆 / 灯火 / 灼烧）在这一局里打了多少。
+   *
+   * 为什么要做：这一局的枪法是自动的，玩家唯一一直在做的决定是**把升级给谁**——
+   * 可结算页从前只给一个总伤害，哪件在扛、哪件在刮只能靠感觉猜。
+   * 肉鸽的乐趣就长在"下一步堆什么"上，那就得把"上一堆堆得怎么样"摊开给他看。
+   *
+   * 只在**两个来源以上**时才出现：手里只有一件武器的时候，这张表说到底就是
+   * "100% 是它"，占地方而已。条长按占全额的百分比画（所以几条加起来正好一整条），
+   * 数字写出来，百分比写在后面——"它到底占多少"和"它打了多少"是两件事，都该看得见。
+   */
+  private damageBlock(): string {
+    const rows = this.game.damageBreakdown();
+    if (rows.length < 2) return '';
+    const body = rows
+      .map((r) => {
+        const pct = Math.round(r.frac * 100);
+        return `<div class="dmg-row" style="--c:${r.color}">
+          <span class="dmg-row__name">${r.name}</span>
+          <span class="dmg-row__bar"><i style="width:${Math.max(2, r.frac * 100).toFixed(1)}%"></i></span>
+          <span class="dmg-row__val">${num(r.amount)}<u>${pct}%</u></span>
+        </div>`;
+      })
+      .join('');
+    return `<div class="dmg-block">
+      <div class="dmg-block__title">本局伤害构成 <span>（含灼烧；合计 ${num(this.game.damageDealt)}）</span></div>
+      ${body}
+    </div>`;
+  }
+
   private statsBlock(): string {
     const g = this.game;
     const s = g.runStats();
@@ -557,12 +588,12 @@ export class UIManager implements UIHost {
         <div><span>存活</span><b>${Math.floor(s.time / 60)}:${String(Math.floor(s.time % 60)).padStart(2, '0')}</b></div>
         <div><span>波次</span><b>${s.wave}</b></div>
         <div><span>最高连击</span><b>${s.bestCombo}</b></div>
-        <div><span>造成伤害</span><b>${s.damageDealt}</b></div>
-        <div><span>承受伤害</span><b>${s.damageTaken}</b></div>
+        <div><span>造成伤害</span><b>${num(s.damageDealt)}</b></div>
+        <div><span>承受伤害</span><b>${num(s.damageTaken)}</b></div>
         <div><span>击败首领</span><b>${s.bossKills}</b></div>
         ${pyre}
         <div><span>完成悬赏</span><b>${g.bounties.completedThisRun}</b></div>
-        <div><span>最强一击</span><b>${Math.round(g.maxHit)}</b></div>
+        <div><span>最强一击</span><b>${num(g.maxHit)}</b></div>
         <div><span>燃爆</span><b>${g.novaCount} 次</b></div>
         ${g.lampCount > 0 ? `<div><span>分灯</span><b>${g.lampCount} 盏</b></div>` : ''}
         ${g.mineCount > 0 ? `<div><span>伏灯</span><b>${g.mineCount} 颗</b></div>` : ''}
@@ -780,6 +811,7 @@ export class UIManager implements UIHost {
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
+        ${this.damageBlock()}
         ${this.runBuildBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="again">再点一盏</button>
@@ -802,6 +834,7 @@ export class UIManager implements UIHost {
         ${this.achievementEmbersLine()}
         ${this.recordBadges()}
         ${this.statsBlock()}
+        ${this.damageBlock()}
         ${this.runBuildBlock()}
         <div class="row-actions">
           <button class="btn btn--primary" data-act="endless">挑战无尽之夜</button>
@@ -1206,6 +1239,14 @@ export class UIManager implements UIHost {
     });
     this.on('[data-act="back"]', () => this.backToOrigin());
   }
+}
+
+/**
+ * 伤害这类数字动辄六七位（一局打出去十几万是常事），不分组根本数不清是几位。
+ * 结算与构筑总览共用这一个：不然"造成伤害 212345"和"合计 212,345"会同时出现在一屏上。
+ */
+function num(n: number): string {
+  return Math.round(n).toLocaleString('en-US');
 }
 
 /** 升级卡的能力对照表：只列"可能被被动改动"的那些，顺序即优先级。 */

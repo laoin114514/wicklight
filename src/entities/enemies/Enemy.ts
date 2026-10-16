@@ -26,6 +26,14 @@ export interface Enemy {
   phase: number;
   burn: number;
   burnTimer: number;
+  /**
+   * 身上这层火烧**是谁点的**（武器 id / 'nova' / 'lantern' …）。
+   * 只用来记「本局伤害构成」——灼烧的伤害不是 `applyHit` 那一瞬间打出去的，
+   * 而是接下来三秒里每帧从 `EnemySystem` 里扣的，那条路上没有"谁打的"这个信息，
+   * 所以点火的这一下得把它记在怪身上。多个来源轮流点火时记的是**最后一次**点的那个
+   * （常见构筑里只有一件武器带火，这条规则就够用；写死了反而更难解释）。
+   */
+  burnSource: string | null;
   slowTimer: number;
   hitFlash: number;
   attackCd: number;
@@ -88,6 +96,11 @@ export interface EnemyContext {
   addLight: (x: number, y: number, r: number, intensity: number) => void;
   burst: (x: number, y: number, count: number, color: string, opts?: { speed?: number; size?: number; life?: number }) => void;
   onDeath: (e: Enemy) => void;
+  /**
+   * 灼烧每帧扣掉的那一点伤害（见 `Enemy.burnSource`）。
+   * 报告的是**名义值**（和 `applyHit` 记账用的是同一个口径，不按剩余血量截断）。
+   */
+  onBurn?: (amount: number, source: string | null) => void;
   snuffLight: (amount: number) => void;
   spawnAdd: (defId: string, x: number, y: number) => void;
   ignitGround: (x: number, y: number) => void;
@@ -163,6 +176,7 @@ export class EnemySystem {
     phase: 1,
     burn: 0,
     burnTimer: 0,
+    burnSource: null,
     slowTimer: 0,
     hitFlash: 0,
     attackCd: 0,
@@ -210,6 +224,7 @@ export class EnemySystem {
     e.phase = 1;
     e.burn = 0;
     e.burnTimer = 0;
+    e.burnSource = null;
     e.slowTimer = 0;
     e.hitFlash = 0;
     e.attackCd = 1;
@@ -263,9 +278,23 @@ export class EnemySystem {
     return false;
   }
 
-  applyBurn(e: Enemy, stacks: number): void {
+  /**
+   * 点一把火（或者往已经烧着的那把上再添一层）。
+   *
+   * `source` 是**记名**用的：这一局结算时那张「本局伤害构成」要知道这口火是谁点的，
+   * 而灼烧是按 0.25 秒一跳、跳在**怪身上**（见 update 里 `ctx.onBurn`）——它跟"命中那一瞬间"
+   * 完全脱钩，所以点火的人得在点的时候抄在怪身上。
+   *
+   * 规则是**"谁最后点的，这一跳就算谁的"**：同一只怪身上的火常被好几件武器轮流续过
+   * （烈焰鞭点着、倾灯往上倒油、遗物再添一层），层数只有一个总数（`e.burn`），
+   * 要逐层记来源就得在每只怪身上挂一摞小账，而收益只是把"三层里的那一层"换个名字。
+   * 传 `null` 表示不记名（那一跳会落进结算表的兜底「其他」栏）。
+   */
+  applyBurn(e: Enemy, stacks: number, source: string | null = null): void {
     e.burn = Math.min(12, e.burn + stacks);
     e.burnTimer = 3;
+    // 只有报了名才覆盖：续火的是"不记名"的那种（比如环境本身），不该把点火的人顶掉
+    if (source) e.burnSource = source;
   }
 
   /** 取 delay 秒前的玩家位置（轨迹不足时返回 null）。 */
@@ -326,7 +355,11 @@ export class EnemySystem {
       if (e.slowTimer > 0) e.slowTimer -= dt;
       if (e.burnTimer > 0) {
         e.burnTimer -= dt;
-        e.hp -= ctx.burnDps * e.burn * dt;
+        const burnDmg = ctx.burnDps * e.burn * dt;
+        e.hp -= burnDmg;
+        // 灼烧也得算进「本局伤害构成」：不报的话，倾灯 / 带火的构筑会显示成"几乎没打伤害"
+        // （倒在地上的那片油火本身只有 `dps = 0`，它全部的伤害都是从这里一帧一帧扣出来的）。
+        ctx.onBurn?.(burnDmg, e.burnSource);
         if (Math.random() < dt * 6) ctx.burst(e.x, e.y, 1, '#ff7a2f', { speed: 40, size: 2, life: 0.3 });
         if (e.burnTimer <= 0) e.burn = 0;
         if (e.hp <= 0) {
