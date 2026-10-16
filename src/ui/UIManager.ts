@@ -413,10 +413,14 @@ export class UIManager implements UIHost {
         const max = def.levels.length;
         const full = lvl >= max;
         const stats = weaponAt(id, lvl);
+        // 「燎灯」那一行的读法和别的武器不一样：它那一下就烫**光里全体**，
+        // 只写"伤害 10"会被读成一件很弱的武器（那是**每只**挨的）。这一行是构筑总览，
+        // 玩家就是在这儿决定"要不要往这一件上再投一级"，所以这里必须说清楚。
+        const hitAll = def.kind === 'aura' ? ' · 光里全体' : '';
         return `<div class="lo-row" style="--c:${def.color}">
           <span class="lo-row__name">${def.name}${def.evolved ? '<i class="lo-tag lo-tag--evo">进化</i>' : ''}</span>
           <span class="lo-row__lv ${full ? 'is-full' : ''}">Lv ${lvl}/${max}</span>
-          <span class="lo-row__blurb">伤害 ${Math.round(stats.damage)} · 间隔 ${stats.cooldown > 0 ? `${stats.cooldown.toFixed(2)}s` : '常驻'}${stats.count > 1 ? ` · ${stats.count} 发` : ''}</span>
+          <span class="lo-row__blurb">伤害 ${Math.round(stats.damage)} · 间隔 ${stats.cooldown > 0 ? `${stats.cooldown.toFixed(2)}s` : '常驻'}${stats.count > 1 ? ` · ${stats.count} 发` : ''}${hitAll}</span>
         </div>`;
       })
       .join('');

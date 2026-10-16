@@ -17,7 +17,8 @@ export type WeaponKind =
   | 'boomerang'
   | 'mine'
   | 'vortex'
-  | 'pour';
+  | 'pour'
+  | 'aura';
 
 export interface WeaponStats {
   damage: number;

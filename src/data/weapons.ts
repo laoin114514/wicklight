@@ -174,6 +174,18 @@ export const WEAPONS: WeaponDef[] = [
     ),
     evolve: { passive: 'oilrain', into: 'pour_tide' },
   },
+  {
+    id: 'aura',
+    name: '燎灯',
+    kind: 'aura',
+    color: '#ffd08a',
+    blurb: '你的灯光本身在烧：罩在光里的敌人，每隔一下就被烤一遍。',
+    // `range` / `radius` / `count` / `speed` 都留 0：这一件不发射任何东西，它的**射程就是灯火半径**
+    // （见 data/aura.ts 里那一段）。真正跟着等级长的只有两样——每一下有多重、心跳有多快。
+    // `knockback: 0`：光不推人——而且真推的话，怪会被一下一下推出光圈，等于这件武器在拆自己的台。
+    levels: scale({ ...base, damage: 5, cooldown: 0.44, count: 0, speed: 0, range: 0, radius: 0, knockback: 0 }, { damage: 1.25, cooldown: 0.94 }),
+    evolve: { passive: 'scorch', into: 'aura_wild' },
+  },
 
   // ── Evolved forms (unlocked via UpgradeSystem) ──
   {
@@ -302,6 +314,17 @@ export const WEAPONS: WeaponDef[] = [
     evolved: true,
     levels: scale({ ...base, damage: 20, cooldown: 0.34, count: 5, range: 210, radius: 14, spread: 0.9, burn: 3 }, { damage: 8, count: 1, burn: 1 }),
   },
+  {
+    id: 'aura_wild',
+    name: '燎野',
+    kind: 'aura',
+    color: '#ffb14e',
+    blurb: '火从灯里漫出去：烫得更勤、更狠，而且每一跳都在敌人身上留一层火。',
+    // `range` 在这一件里是**灯火之外再烧出去多远**（60px）：灯照不到的地方，火还能烧到一点点。
+    // 于是"燎野"和"燎原"（被动，灼烧伤害 +40%）连着用才对——它现在一半的输出在灼烧那条账上。
+    levels: scale({ ...base, damage: 11, cooldown: 0.3, count: 0, speed: 0, range: 60, radius: 0, burn: 1, knockback: 0 }, { damage: 2, cooldown: 0.95 }),
+    evolved: true,
+  },
 ];
 
 export const WEAPON_MAP: Record<string, WeaponDef> = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
@@ -313,4 +336,19 @@ export function weaponAt(id: string, level: number): WeaponStats {
 }
 
 export const STARTER_WEAPONS = ['ring', 'wisp', 'fireball', 'whip', 'shard', 'spray'] as const;
-export const NEW_WEAPON_POOL = ['wisp', 'fireball', 'whip', 'shard', 'spray', 'ring', 'frost', 'arc', 'beam', 'boomerang', 'mine', 'pour'] as const;
+
+/**
+ * 升级面板里"新武器"这一档的候选：**所有非进化的武器，去掉开局就有的那六件**。
+ *
+ * ⚠ 这一份是**从数据表派生**出来的，不是手抄的 id 清单——手抄过一回，漏了两回：
+ * v62 加「旋灯」、v73 加「燎灯」，两次都没往那张手写的表里补一笔。于是这两件武器
+ * 数据齐全、图鉴有词条、成就挂着、体检脚本也在跑，**可玩家一局都抽不到它**。
+ * 一件进不了升级池的武器等于不存在，而这类漏法**不会报任何错**：它只是安静地少一个选项。
+ * 所以这里改成"谁在武器表里谁就是候选"，并且让 tests/aura.test.mjs 里那条用例真的去抽
+ * 三百次升级面板、把"抽不到"变成一条会红的断言——从两头把它堵死。
+ *
+ * 进化的形态不在这里：它们只能由"满级 + 对应被动满级"那条路解锁（见 UpgradeSystem）。
+ */
+export const NEW_WEAPON_POOL: readonly string[] = WEAPONS.filter(
+  (w) => !w.evolved && !(STARTER_WEAPONS as readonly string[]).includes(w.id),
+).map((w) => w.id);

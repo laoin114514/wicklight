@@ -44,6 +44,7 @@ import { WICK } from '../data/wick';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { POUR } from '../data/pour';
+import { AURA } from '../data/aura';
 import { EMBERWIND } from '../data/emberwind';
 import { ENEMY_MAP } from '../data/enemies';
 import { ARRIVAL } from '../data/arrival';
@@ -1613,6 +1614,13 @@ export class Game {
       onNova: () => {
         this.novaCount += 1;
         this.bounties.onNova();
+      },
+      // 「燎灯」的一次脉冲真的烫到了东西：第一次就把它记进图鉴「机制」那一章，
+      // 顺手判一下「照单全收」（一次同时烤到 8 只）。空转（什么都没烫到）不报——
+      // 图鉴与成就都该是"用出来了"，不是"带在身上"。
+      onAura: (hits) => {
+        this.codex.discover('mechanic', 'aura');
+        if (hits >= AURA.crowd) this.achievements.unlock('aura_crowd');
       },
       mine: (x, y, damage, radius, trigger, fire, source) =>
         this.placeMine(x, y, damage, radius, trigger, fire, source),
@@ -3605,6 +3613,8 @@ export class Game {
     const rule =
       def.kind === 'pour'
         ? ` 它只在灯火 ≥ ${Math.round(POUR.minOil * 100)}% 时才倒——不满就整发不出手，所以它响不响看的是你补油快不快（擦身、击杀掉落、灯台都算）。倒下的地方会留一片火，往同一片上再倒一瓢，火会一层层叠上去。${aimRule}`
+        : def.kind === 'aura'
+          ? ` 它没有枪管：**它的射程就是你自己的灯火半径**——灯照到哪儿就烤到哪儿，灯外面一点都够不着（吊在你光圈外的远程怪，这一件帮不上忙）。反过来，灯火越亮它打得越狠，拨了芯它跟着一起小下去；「燎灯」和拨芯那四件遗物是两条相反的路。`
         : '';
     this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${rule}${evo}`);
   }

@@ -7,6 +7,7 @@ import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
 import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
+import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { NOVA } from '../data/nova';
 
@@ -44,6 +45,8 @@ export interface PlayerContext {
   ) => void;
   /** 燃爆真正放出去的那一刻（用于悬赏计数等）。 */
   onNova: () => void;
+  /** 「燎灯」的一次脉冲真的烫到了 `hits` 只（图鉴记一条、成就数一次；空转不报）。 */
+  onAura: (hits: number) => void;
   /**
    * 伏灯：在地上布一颗雷。
    * 位置由玩家给（Player 只知道"我朝哪儿走"），落点判定与爆炸都在 Game 里。
@@ -199,6 +202,12 @@ export class Player {
   moving = false;
   private cooldowns = new Map<string, number>();
   private orbit: OrbitState = { angle: 0, hitCooldown: new Map() };
+  /**
+   * 「燎灯」的心跳：离下一遍"往外烫"还有多久，以及上一遍留下的余温（0~1，只给画面用）。
+   * 整盏灯只有一个计时器——不按怪挂冷却（见 data/aura.ts 里为什么）。
+   */
+  private auraCd = 0;
+  private auraPulse = 0;
   private hitFlash = 0;
   damageMult = 1;
   oilDecayPerSec = 0.018;
@@ -966,6 +975,42 @@ export class Player {
                 this.hitEnemy(e, dmg, ctx, st, e.x - ox, e.y - oy, id);
               }
             }
+          });
+        }
+        continue;
+      }
+
+      // 「燎灯」：唯一一件"不发射"的武器——它的射程就是灯火半径（燎野再往外多烧一截）。
+      // 判定写成脉冲，所以只有**一个**心跳：到点了就把光罩子里的一切挨个烫一遍。
+      // 它不走下面的"冷却 + 索敌 + 开火"那一套，因为这里根本不需要瞄准：
+      // 光罩到哪儿，就是打到哪儿。
+      if (def.kind === 'aura') {
+        this.auraPulse = Math.max(0, this.auraPulse - dt / AURA.pulseFade);
+        this.auraCd -= dt;
+        if (this.auraCd > 0) continue;
+        this.auraCd = st.cooldown * this.stats.cooldownMult;
+        this.auraPulse = 1;
+        const reach = this.lightRadius + st.range;
+        let hits = 0;
+        ctx.enemies.forEach((e) => {
+          const rr = reach + e.radius; // 大块头从边缘就开始被烤（和伏灯的触发判定同一个道理）
+          if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 > rr * rr) return;
+          this.hitEnemy(e, dmg, ctx, st, e.x - this.x, e.y - this.y, id);
+          hits += 1;
+        });
+        if (hits > 0) {
+          ctx.audio(AURA.sound);
+          ctx.onAura(hits);
+        }
+        // 边缘飞起的火星：这是"这盏灯在烧"唯一常驻的视觉，不烫到人时也看得见——
+        // 不然一件没打到东西的武器在屏幕上就是彻底不存在。
+        for (let i = 0; i < AURA.edgeEmbers; i += 1) {
+          const a = Math.random() * TAU;
+          const r = reach * (0.9 + Math.random() * 0.1);
+          ctx.particles.burst(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r, 1, def.color, {
+            speed: 26,
+            size: 2.4,
+            life: 0.5,
           });
         }
         continue;

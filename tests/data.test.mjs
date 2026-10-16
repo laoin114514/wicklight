@@ -21,9 +21,10 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   const ids = (arr) => arr.map((x) => x.id);
   const dup = (arr) => ids(arr).filter((id, i) => ids(arr).indexOf(id) !== i);
   // 掠影 / 伏灯 / 旋灯那一串调参值是"名字 → 数"的表，不是条目列表，单独按数值校验（见下）；
-  // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套。
+  // `wickFamily` 是一份 **id 名单**（拨芯这条线的四件，由 `mods` 认出来），同理不走"条目"这一套；
+  // `newWeaponPool` / `starterWeapons` 也是名单（见下面那一段）。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -31,6 +32,15 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
       assert.ok(item.name && item.blurb, `${name}.${item.id} 缺少名称或说明`);
     }
   }
+
+  // `aura`（v73）与 `wick` 同一类：一张"名字 → 数"的调参表（外加一个音效名），不是条目列表。
+  // 它这一版只有一个门槛数（一次脉冲烤到几只解成就），所以要盯的是它**不许被调松**。
+  const aura = data.aura;
+  assert.ok(aura, '构建产物应导出燎灯的调参表');
+  assert.ok(aura.crowd >= 6, `「照单全收」的门槛不该是"顺手就够"（实际 ${aura.crowd}）`);
+  assert.ok(aura.pulseFade > 0 && aura.pulseFade < 0.4, `脉冲余温该是"一眼看得出来在变"的量级（实际 ${aura.pulseFade}）`);
+  assert.ok(Number.isFinite(aura.edgeEmbers) && aura.edgeEmbers > 0, '边缘火星数应当是正数');
+  assert.equal(typeof aura.sound, 'string', '音效名该是字符串（它走的不是数值那套校验）');
 
   // `wickFamily` 是**导出的 id 名单**（拨芯这条线）：每个 id 都要真的能查回一件遗物，
   // 而且那份名单要和"改这几个数的遗物"完全一致——名单跟内容漂了，`Game.scanWickFamily`
@@ -235,6 +245,25 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   }
   assert.deepEqual(dup(catalog.affixes), [], '词缀存在重复 id');
   for (const a of catalog.affixes) assert.ok(a.name && a.blurb, `词缀 ${a.id} 缺少名称或说明`);
+
+  // ── 「新武器」候选表（v73）：它是一份 **id 名单**，而且必须是**派生**的 ──
+  // 手抄过一回，漏了两回：v62 的「旋灯」和 v73 的「燎灯」都没被补进去，于是两件武器的
+  // 数据、图鉴、成就、体检全在，玩家却一局都抽不到它（这种漏法不报错，只是少一个选项）。
+  // 所以这里逐个对账：非进化的一件都不能少、进化的一个都不能有、开局那六件不重复列。
+  for (const w of data.weapons) {
+    if (w.evolved) {
+      assert.ok(!data.newWeaponPool.includes(w.id), `进化形态「${w.name}」不该出现在"新武器"候选表里`);
+    } else if (!data.starterWeapons.includes(w.id)) {
+      assert.ok(data.newWeaponPool.includes(w.id), `「${w.name}」该在"新武器"候选表里（不然一局都抽不到）`);
+    }
+  }
+  assert.equal(new Set(data.newWeaponPool).size, data.newWeaponPool.length, '候选表存在重复 id');
+  assert.equal(new Set(data.starterWeapons).size, data.starterWeapons.length, '开局武器表存在重复 id');
+  for (const id of [...data.starterWeapons, ...data.newWeaponPool]) {
+    const def = data.weapons.find((w) => w.id === id);
+    assert.ok(def, `候选表里的 ${id} 不在武器表里`);
+    assert.ok(!def.evolved, `候选表里的 ${id} 是进化形态`);
+  }
 
   // ── 武器：等级曲线与进化链 ──
   const wmap = new Map(data.weapons.map((w) => [w.id, w]));

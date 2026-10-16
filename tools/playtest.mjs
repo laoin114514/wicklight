@@ -1397,6 +1397,113 @@ async function main() {
   });
   await sleep(200);
 
+  // ── 3a9b. 燎灯（v73）：灯光本身就是武器 ──
+  // 离线单测（tests/aura.test.mjs）盯的是"光里挨打、光外不动""拨芯压下去多少"这些数，
+  // 这里要在**真帧**里看住另外三件事——它们只有在真实的渲染循环 + 真实 DOM 里才成立：
+  //   ① 光罩子的半径真的是 `player.lightRadius`（量出来是它，不是别的什么）；
+  //   ② 一次脉冲把光里的**每一只**都烫一遍（一圈 10 只，一次心跳里 10 只全掉血）；
+  //   ③ 构筑总览那一行写得出"光里全体"（不然"伤害 10"会被读成一件很弱的武器）。
+  const aura = await page.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    window.__SAVED_WEAPONS4__ = [...p.weapons];
+    window.__AURA_DIR__ = { phase: g.director.phase, intro: g.director.introTimer, wave: g.director.wave };
+    p.weapons.clear();
+    p.addWeapon('aura');
+    p.recomputeStats();
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.oil = p.oilMax;
+    p.stats.maxHp = 1e6;
+    p.hp = 1e6;
+    g.xpToNext = 1e9;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.mines.length = 0;
+    g.grounds.length = 0;
+    g.director.phase = 'intro';
+    g.director.introTimer = 1e9;
+    g.director.hazardTimer = 1e9;
+    const R = p.lightRadius;
+    // 一圈 10 只：全都在光圈里（0.8R），但只留 6 只活着——脉冲那一下要**一次**全打中
+    const foes = [];
+    for (let i = 0; i < 10; i += 1) {
+      const a = (i / 10) * Math.PI * 2;
+      const e = g.enemies.spawn('shade', Math.cos(a) * R * 0.8, Math.sin(a) * R * 0.8, 1, 0);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.speed = 0;
+      e.damage = 0;
+      e.spawnTimer = 0;
+      foes.push(e);
+    }
+    // 一只站在圈外（1.4R）：它一下都不该挨
+    const out = g.enemies.spawn('shade', R * 1.4, 0, 1, 0);
+    out.hp = 1e6;
+    out.maxHp = 1e6;
+    out.speed = 0;
+    out.damage = 0;
+    out.spawnTimer = 0;
+    // 跑到"第一次脉冲"为止：逐帧看这一下打到了几只
+    const hp0 = foes.map((e) => e.hp);
+    const out0 = out.hp;
+    let best = 0;
+    for (let f = 0; f < 90; f += 1) {
+      g.setInput(0, 0, false, false);
+      g.update(1 / 60);
+      const hit = foes.filter((e, i) => e.hp < hp0[i]).length;
+      if (hit > best) best = hit;
+    }
+    return {
+      R: Math.round(R),
+      best,
+      outsideHp: out.hp === out0,
+      oil: +p.oilFrac.toFixed(2),
+      dps: Math.round(g.damageBySource.get('aura') ?? 0),
+    };
+  });
+  expect(aura.R > 240 && aura.R < 340, '燎灯的罩子就是玩家自己的灯火半径', JSON.stringify(aura));
+  expect(aura.best >= 8, '一次脉冲把光里的每一只都烫一遍（不是只打最近的那一只）', JSON.stringify(aura));
+  expect(aura.outsideHp, '光圈外的敌人一点都挨不到（它的射程写在灯火上）', JSON.stringify(aura));
+  await shot('03l-aura');
+
+  // 构筑总览那一行：光里全体
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const auraSheet = await page.evaluate(() => {
+    const row = [...document.querySelectorAll('.lo-row')].find((r) => r.textContent.includes('燎灯'));
+    return { text: row?.textContent?.replace(/\s+/g, ' ').trim() ?? '', layout: window.__PROBE__.layout('.panel') };
+  });
+  expect(/燎灯/.test(auraSheet.text) && /光里全体/.test(auraSheet.text), '构筑总览把燎灯读成"光里全体"', auraSheet.text);
+  expect(auraSheet.layout.issues.length === 0, '带燎灯的构筑总览布局正常', auraSheet.layout.issues.join('; '));
+  await page.keyboard.press('Tab');
+  await sleep(250);
+
+  // 收尾：把这一段借走的东西还回去
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    p.weapons.clear();
+    for (const [id, lv] of window.__SAVED_WEAPONS4__ ?? []) p.weapons.set(id, lv);
+    p.recomputeStats();
+    p.hp = p.stats.maxHp;
+    if (window.__AURA_DIR__) {
+      g.director.phase = window.__AURA_DIR__.phase;
+      g.director.introTimer = window.__AURA_DIR__.intro;
+      g.director.wave = window.__AURA_DIR__.wave;
+      delete window.__AURA_DIR__;
+    }
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    delete window.__SAVED_WEAPONS4__;
+  });
+  await sleep(200);
+
   // ── 3a-2. 「余烬风」：不动血，动油 ──
   // 这一版新加的险境，真实浏览器里要证明三件事：
   //   ① 火种真的从**上风**一侧一排排飘过来（不是凭空刷在脸上）；

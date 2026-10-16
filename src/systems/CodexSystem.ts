@@ -16,6 +16,7 @@ import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { HUNT } from '../data/hunt';
 import { MINE } from '../data/mines';
+import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { VORTEX } from '../data/vortex';
 import { PASSIVES, PASSIVE_MAP } from '../data/upgrades';
@@ -429,6 +430,30 @@ export function codexCatalog(): CodexEntry[] {
       ['首领', '不算数。首领有自己那一场，那么大一块突然加速也很假'],
     ],
     extra: '它出现的原因很实际：怪一律刷在 620~940px 外，而走得最慢的那几种（石守 34、喷糜者 40、游尸 52 px/s）光走过来就要十几二十秒。以前这段时间是"这一波打完了，但还没结束"——你站在场上等一个还在半路的东西。这一条只压缩"还在路上"的那一段，正在跟你打的那几只一点没变。',
+  });
+  // 燎灯（v73）：这一条讲的是"光本身就是武器"——它没有枪管，射程就是你自己的灯火。
+  // 所有数都从 `WEAPON_MAP` 与 `AURA` 现取，改调参图鉴会跟着变。
+  const auraDef = WEAPON_MAP.aura;
+  const wildDef = WEAPON_MAP.aura_wild;
+  const auraLast = auraDef.levels[auraDef.levels.length - 1];
+  const wildLast = wildDef.levels[wildDef.levels.length - 1];
+  out.push({
+    kind: 'mechanic',
+    id: 'aura',
+    name: '燎灯',
+    blurb: '你的灯光本身在烧：罩在光里的敌人，每隔一下就被烤一遍——它没有枪管，射程就是灯火半径。',
+    color: auraDef.color,
+    icon: '🕯️',
+    rows: [
+      ['它能打到谁', '**灯火半径以内的一切**（判到大块头的边缘）：灯照到哪儿就烤到哪儿。它的宽度不是升上去的，是你把灯烧多亮决定的'],
+      ['它打不到谁', '灯外面一点都够不着。远程怪吊在你光圈外面放冷枪的时候，这一件帮不上忙——它要的是"把怪放进来"'],
+      ['多久烫一下', `1 级 ${auraDef.levels[0].cooldown}s → 满级 ${auraLast.cooldown.toFixed(2)}s 一下（一次把光罩子里的一切各烫一遍，不是每帧扣血）`],
+      ['一下多重', `1 级 ${auraDef.levels[0].damage} → 满级 ${auraLast.damage}（还要乘灯火：油满 ≈ 1.35 倍、烧干 ≈ 0.65 倍）`],
+      ['和灯火的关系', '灯越亮打得越狠、罩得越宽——所以它和「拨芯」那套是**相反**的两条路：拨芯把半径砍一半（面积只剩四分之一），再叠上 ×0.65 那一刀，同一件武器在暗里的输出只剩两成上下'],
+      ['和范围加成', '不吃「广照」那条线：它的宽度写在灯火上，灯火自己有油量 / 灯火加成 / 灯焰高涨 / 拨芯四条路，再叠一层只会两边都说不清'],
+      ['进化', `满级 + 燎原 → 「${wildDef.name}」：心跳 ${wildLast.cooldown.toFixed(2)}s、一下 ${wildLast.damage}，而且每一跳都在敌人身上留一层火（灼烧那条账吃「燎原」的 +40%）；灯照不到的 ${wildLast.range}px 它也烧得到一点点——那是火，不是光`],
+    ],
+    extra: `一次脉冲同时烤到 ${AURA.crowd} 只会解「照单全收」（数的是只数，不是伤害——伤害要乘灯火，同一个操作能差两倍）。它是唯一一件"不用瞄准"的攻击武器：别的都要先把东西打出去，它只要你还亮着。代价也写在同一句话里——把它和「遮光 / 暗火 / 夜步 / 守芯」那四件摆在同一个构筑里，两边都在拆对方的台。`,
   });
   for (const s of STAGES) {
     out.push({

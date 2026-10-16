@@ -222,6 +222,15 @@ export class AudioEngine {
       case 'graze_dash':
         if (this.throttle('graze_dash', 90)) this.tone(2100, 0.07, 'sine', 0.036, 1500);
         break;
+      case 'aura_pulse':
+        // 燎灯：光往外烫一下。它每 0.3~0.44 秒就要响一次（一次脉冲一只），
+        // 所以是**一记很闷的低音**（"热浪推过来"），而且节流压得很紧——
+        // 这一声的作用是让玩家闭着眼睛也知道灯一直在烧，而不是让耳朵记住它。
+        if (this.throttle('aura_pulse', 160)) {
+          this.noise(0.26, 0.07, 420, 0.45);
+          this.tone(130, 0.22, 'sine', 0.075, 84);
+        }
+        break;
       default:
         break;
     }
