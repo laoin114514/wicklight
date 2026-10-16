@@ -8,6 +8,15 @@ import { haptic } from '../core/Haptics';
  */
 const DEAD_ZONE = 0.12;
 
+/**
+ * 手动瞄准（"屏幕右侧那块地方"）的两个距离阈值，单位是手指走过的像素：
+ * 12px 以内当作没在瞄（点一下、手抖都算），56px 推到满——和左手摇杆的行程同一个量级
+ * （摇杆直径 132，横屏收到 112，最大行程 0.42 × 直径 ≈ 47~55px）。
+ * 两个数之间线性映射成"推了多远"（0~1），游戏那边拿它决定这一瓢落在射程的几成处。
+ */
+const AIM_DEAD = 12;
+const AIM_FULL = 56;
+
 export class TouchControls {
   private root: HTMLElement;
   private stick: HTMLElement;
@@ -24,6 +33,13 @@ export class TouchControls {
   private nova = false;
   /** 分灯是一次性动作（按下就放，不需要按住），所以只记"这一帧按过" */
   private lampQueued = false;
+  /** 手动瞄准：手指正按着的那一根（identifier），起点与当前方向（见 bindAim） */
+  private aimId = -1;
+  private aimOn = false;
+  private aimX = 0;
+  private aimY = 0;
+  private aimOX = 0;
+  private aimOY = 0;
   private isTouch = false;
   /** 上屏状态（只在触屏上有意义）：null = 还没同步过 */
   private visible: boolean | null = null;
@@ -85,6 +101,91 @@ export class TouchControls {
     this.bindButton('[data-action="dash"]', 'dash', 12);
     this.bindButton('[data-action="nova"]', 'nova', 22);
     this.bindLampButton('[data-action="lamp"]', 16);
+    this.bindAim();
+  }
+
+  /**
+   * 手动瞄准：手指按住**屏幕右半边**拖着，这一瓢就往你指的方向倒（倾灯专用，见 Player）。
+   *
+   * 为什么挂 window 上、而不是像摇杆与按钮那样挂一个元素：
+   * 这是一块"屏幕区域"，不是一件控件。右侧那块地方上压着 HUD（记分 / 悬赏 / 灯台）
+   * 和右下角那三枚按钮，中间那点空地在 844×390 上只有 110px 高——挂一个元素上去，
+   * 要么盖住按钮（点击被它吃掉，暂停键也会失灵），要么小到按不准。
+   * 所以这里只认一个条件：**起点在右半边，而且没落在别的控件上**（按钮 / 摇杆 / 面板 / 暂停键）。
+   *
+   * 方向与力度都取自**手指自己的起点**（和左手摇杆同一套手感：按下处就是圆心）：
+   * 于是它指得向任何方向——包括往自己脚前倒。
+   * ⚠ `this.visible` 那道闸必须留着：菜单 / 升级 / 暂停面板开着的时候手指落下去不该在中场上画圈。
+   */
+  private bindAim(): void {
+    const skip = (t: EventTarget | null): boolean => {
+      const el = t as HTMLElement | null;
+      if (!el || typeof el.closest !== 'function') return true; // 认不出来的东西一律不接管
+      // 按钮（含暂停）/ 摇杆 / 面板 / 竖屏牌 / 启动画面：这些地方的手指不是"在瞄"
+      return !!el.closest('button, .touch-btn, #touch-stick, .screen, .rotate, .boot, .panel');
+    };
+    const start = (e: TouchEvent) => {
+      if (this.visible !== true || this.aimId >= 0) return;
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.clientX < window.innerWidth * 0.5) continue; // 左手那半是摇杆的地盘
+        if (skip(e.target)) continue;
+        this.aimId = t.identifier;
+        this.aimOX = t.clientX;
+        this.aimOY = t.clientY;
+        this.aimOn = false; // 还没推过死区：先不产生方向
+        this.aimX = 0;
+        this.aimY = 0;
+        break;
+      }
+    };
+    const move = (e: TouchEvent) => {
+      if (this.aimId < 0) return;
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier !== this.aimId) continue;
+        this.updateAim(t.clientX, t.clientY);
+      }
+    };
+    const end = (e: TouchEvent) => {
+      if (this.aimId < 0) return;
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier !== this.aimId) continue;
+        this.clearAim();
+      }
+    };
+    // ⚠ 不 preventDefault：这块地方底下就是画布，没有需要阻止的默认行为，
+    //   而 preventDefault 会把"双指缩放 / 系统手势"一起挡掉（别的地方这么做是因为按钮有自己的语义）。
+    window.addEventListener('touchstart', start, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', end, { passive: true });
+    window.addEventListener('touchcancel', end, { passive: true });
+  }
+
+  /** 手指推了多远 → 方向（单位向量）× 力度（0~1），直接就是 InputState 里那两个字段。 */
+  private updateAim(x: number, y: number): void {
+    const dx = x - this.aimOX;
+    const dy = y - this.aimOY;
+    const len = Math.hypot(dx, dy);
+    if (len < AIM_DEAD) {
+      // 死区内：这一帧不算在瞄（手指还按着，只是还没"指"出去）——
+      // 点一下、手抖都不该让这一瓢拐弯。
+      this.aimOn = false;
+      this.aimX = 0;
+      this.aimY = 0;
+      return;
+    }
+    // 力度就是推程（0~1）：过了死区之后**任何**非零长度都算"在瞄"，
+    // 剩下的（落在射程的几成处）由游戏那边按 `POUR.aimNear` 插值——一个真值，不在这儿再映射一次。
+    const pull = Math.max(0.04, Math.min(1, (len - AIM_DEAD) / (AIM_FULL - AIM_DEAD)));
+    this.aimOn = true;
+    this.aimX = (dx / len) * pull;
+    this.aimY = (dy / len) * pull;
+  }
+
+  private clearAim(): void {
+    this.aimId = -1;
+    this.aimOn = false;
+    this.aimX = 0;
+    this.aimY = 0;
   }
 
   /**
@@ -193,15 +294,28 @@ export class TouchControls {
     this.dash = false;
     this.nova = false;
     this.lampQueued = false;
+    this.clearAim();
     this.knob.style.transform = 'translate(-50%, -50%)';
   }
 
-  apply(target: { moveX: number; moveY: number; dash: boolean; nova: boolean; lamp: boolean }): void {
+  apply(target: {
+    moveX: number;
+    moveY: number;
+    dash: boolean;
+    nova: boolean;
+    lamp: boolean;
+    aim: boolean;
+    aimX: number;
+    aimY: number;
+  }): void {
     if (!this.isTouch) return;
     target.moveX = this.moveX;
     target.moveY = this.moveY;
     target.dash = this.dash;
     target.nova = this.nova;
+    target.aim = this.aimOn;
+    target.aimX = this.aimX;
+    target.aimY = this.aimY;
     if (this.lampQueued) {
       target.lamp = true;
       this.lampQueued = false;

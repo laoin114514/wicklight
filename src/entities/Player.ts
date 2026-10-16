@@ -165,6 +165,13 @@ export class Player {
   private heatDelay = 0;
   /** 刚擦过一下的那个脉冲（0~1，画在脚下那圈符文上用） */
   private grazePulse = 0;
+  /**
+   * 手动瞄准（触屏）：手指正按着在瞄时的角度，没在瞄就是 null。
+   * 见 TouchControls 里"屏幕右侧那块地方"那一段——倾灯那一瓢的方向与距离都从这里来。
+   */
+  private aimManual: number | null = null;
+  /** 同时按下去了多远（0~1）——倾灯那一瓢落在射程的几成处由它插值。 */
+  private aimPull = 0;
 
   /** 擦了一下：脚下那圈符文跳一下（冲刺穿弹幕跳得更狠）。 */
   pulseGraze(dashing = false): void {
@@ -464,7 +471,23 @@ export class Player {
     return true;
   }
 
-  update(dt: number, input: { moveX: number; moveY: number; dash: boolean; nova: boolean }, ctx: PlayerContext): void {
+  /**
+   * `input` 里那几个 `aim*` 是触屏的手动瞄准（见 InputState 上那一行）：
+   * 老式调用（测试 / 工具）只传前四项也照样跑——那就是"没在瞄"，这一版之前的行为一点没变。
+   */
+  update(
+    dt: number,
+    input: {
+      moveX: number;
+      moveY: number;
+      dash: boolean;
+      nova: boolean;
+      aim?: boolean;
+      aimX?: number;
+      aimY?: number;
+    },
+    ctx: PlayerContext,
+  ): void {
     const s = this.stats;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
@@ -569,6 +592,15 @@ export class Player {
     } else if (ml > 0.1) {
       this.angle = Math.atan2(mvy, mvx);
     }
+
+    // ── 手动瞄准（触屏）──
+    // 手指按着在瞄的时候，人**先转过去**：这一下和别的武器不一样，它是"把灯偏向一边"。
+    // 只有手里真有倾灯时才接手：没有这件武器的时候，手指在右半边划两下不该让人莫名其妙地转身。
+    const aimLen = Math.hypot(input.aimX ?? 0, input.aimY ?? 0);
+    this.aimManual = input.aim && aimLen > 0 ? Math.atan2(input.aimY ?? 0, input.aimX ?? 1) : null;
+    // 手指推了多远（0~1）：倾灯那一瓢落多远由它定，也由它画落点标记
+    this.aimPull = Math.min(1, aimLen);
+    if (this.aimManual !== null && this.hasPour) this.angle = this.aimManual;
 
     // Light
     ctx.addLight(this.x, this.y, this.lightRadius, this.brightness, 0.04);
@@ -714,6 +746,57 @@ export class Player {
   /** 炭衣：爆灯之后那几秒的减伤倍率（1 = 没减）。 */
   get ashGuard(): number {
     return this.ashTimer > 0 ? 1 - this.flags.overburnGuard : 1;
+  }
+
+  /** 手里有没有倾灯（含进化）：手动瞄准只给这一件武器接管朝向与落点。 */
+  private get hasPour(): boolean {
+    return this.weapons.has('pour') || this.weapons.has('pour_tide');
+  }
+
+  /** 手里那件倾灯的 id（「倾灯」→「灯潮」），没有就是空串。 */
+  private get pourId(): string {
+    if (this.weapons.has('pour_tide')) return 'pour_tide';
+    return this.weapons.has('pour') ? 'pour' : '';
+  }
+
+  /**
+   * 手动瞄准时"这一瓢倒多远"（占射程的比例）。
+   * 没在瞄、或者手里没有倾灯时是 1：也就是这一件原来的射程，一点都不变。
+   */
+  private get aimFar(): number {
+    if (this.aimManual === null || !this.hasPour) return 1;
+    return POUR.aimNear + (1 - POUR.aimNear) * this.aimPull;
+  }
+
+  /**
+   * 这一瓢现在会怎么飞：方向、落在多远、地上那片火多大，以及"离倒出下一瓢还有多远"。
+   * null = 现在没在手动瞄准，或者手里没有倾灯——两种都不该在场上画那个落点标记。
+   *
+   * `away` 是**离自己多远**（px），`pool` 是落地之后那片火的半径——
+   * 和 Game.explode 里那一句用的是同一串乘法（`spread` 与 `POUR.fireSpread` 各一次），
+   * 标记画的圈必须和真落下来的那片火一样大，不然这个标记就是在骗人。
+   *
+   * `charge`（0~1）是**这一件唯一能给出来的预告**：倾灯是自动开火的，
+   * 它响不响看的是"油够不够、冷却转完没有"，所以"上膛"这件事本身就是**一帧**的事
+   * （够了的那一帧它就出去了）。要标的是"离那一下还有多远"，于是取两个闸门里更慢的那一个：
+   * 油（`oilFrac / minOil`）与冷却（已经转过的比例）。圆环填满的那一帧，
+   * 就是这一瓢出去的同一帧——填满 = 倒出去，这条对应关系是玩家能自己看出来的。
+   */
+  get pourAim(): { angle: number; away: number; pool: number; charge: number } | null {
+    if (this.aimManual === null) return null;
+    const id = this.pourId;
+    if (!id) return null;
+    const st = weaponAt(id, this.weapons.get(id) ?? 1);
+    const spread = 1 + (this.stats.areaMult - 1) * 0.5;
+    const cool = st.cooldown * this.stats.cooldownMult;
+    const cdDone = cool > 0 ? 1 - (this.cooldowns.get(id) ?? 0) / cool : 1;
+    const oilDone = this.oilFrac / POUR.minOil;
+    return {
+      angle: this.aimManual,
+      away: st.range * this.aimFar,
+      pool: st.radius * POUR.fireSpread * spread,
+      charge: Math.max(0, Math.min(1, Math.min(cdDone, oilDone))),
+    };
   }
 
   private updateWeapons(dt: number, ctx: PlayerContext, target: Enemy | null): void {
@@ -901,9 +984,17 @@ export class Player {
         this.oil = Math.max(0, this.oil - cost);
         ctx.pour(st.pour ?? POUR.costHint);
         const count = this.countOf(st);
+        // 手动瞄准给这一件多出来的两件事（见 update 里"手动瞄准"那一段）：
+        // · **往哪儿倒**：手指按住的那几秒，方向归玩家，自动瞄准让位（`dir`）；
+        // · **倒多远**：手指推到底 = 原来那个射程，刚过死区 = 落在脚前一点点，中间线性
+        //   （`POUR.aimNear` 是近的那一端）。距离靠寿命来定——这一瓢飞到那儿刚好烧完，
+        //   落地由 ProjectileSystem 的 onExpire 收尾（`maxLife` 跟距离一起算，
+        //   不然"倒得近"就成了"倒得慢"）。
+        const far = this.aimFar;
+        const dir = this.aimManual ?? aim;
         for (let i = 0; i < count; i += 1) {
           // 一瓢是准的（自动瞄准锁着最近那只怪），三瓢（进化）才散开成一个扇面
-          const a = aim + (count > 1 ? (i - (count - 1) / 2) * st.spread : (Math.random() - 0.5) * 0.14);
+          const a = dir + (count > 1 ? (i - (count - 1) / 2) * st.spread : (Math.random() - 0.5) * 0.14);
           ctx.projectiles.spawn({
             x: this.x,
             y: this.y,
@@ -915,7 +1006,7 @@ export class Player {
             explode: st.radius,
             knockback: st.knockback,
             burn: st.burn,
-            maxLife: st.range / st.speed,
+            maxLife: (st.range * far) / st.speed,
             weaponId: id,
             poolRadius: st.radius * POUR.fireSpread,
             poolLife: POUR.fireLife,

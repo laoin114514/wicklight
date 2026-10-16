@@ -29,7 +29,7 @@ export class Input {
   private held = new Set<string>();
   private pressedThisFrame = new Set<string>();
   private releasedThisFrame = new Set<string>();
-  state: InputState = { moveX: 0, moveY: 0, aimX: 1, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false };
+  state: InputState = { moveX: 0, moveY: 0, aim: false, aimX: 0, aimY: 0, dash: false, nova: false, focus: false, pause: false, sheet: false, lamp: false };
   pointer: PointerState = { x: 0, y: 0, active: false };
   private listeners: Array<() => void> = [];
   private enabled = true;

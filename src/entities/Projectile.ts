@@ -36,7 +36,19 @@ export interface Projectile {
   poolLife: number;
 }
 
+/** 一发子弹飞完射程还没碰到东西时的那一下收尾（由 Game 注入，见 ProjectileSystem.onExpire）。 */
+export type ProjectileExpire = (p: Projectile) => void;
+
 export class ProjectileSystem {
+  /**
+   * 飞完射程还没落地的那一发怎么收尾。默认什么都不做（大多数子弹就是消失）。
+   *
+   * ⚠ 倾灯那一瓢**必须**有这一句：它是唯一一件"往哪儿倒由你决定"的武器，
+   * 而手动瞄准之后落点不再保证站着敌人——没有收尾的话，玩家花了 0.15 桶油，
+   * 那一瓢飞到射程尽头就凭空消失，地上一片火都没有（自动瞄准也有这条路：
+   * 锁着的那只怪先被打死了、或者周围根本没怪）。
+   */
+  onExpire: ProjectileExpire | null = null;
   private pool = new Pool<Projectile>(() => ({
     active: false,
     fromPlayer: true,
@@ -109,6 +121,7 @@ export class ProjectileSystem {
       p.life -= dt;
       if (p.life <= 0) {
         p.active = false;
+        this.onExpire?.(p);
         continue;
       }
       if (p.homing > 0) {

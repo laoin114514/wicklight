@@ -2106,6 +2106,57 @@ async function main() {
   );
   await mobile.screenshot({ path: join(SHOTS, '17-mobile-lamp.png') });
 
+  // 「倾灯」的手动瞄准（v63）：手指按住**屏幕右侧**拖着，这一瓢就往指的方向飞，松手还给自动瞄准。
+  // ⚠ 派发真的 touchstart/touchmove：主循环每一帧都会用真实（键鼠 / 触摸）输入覆盖 `setInput`，
+  //   从外面注入 `game.setInput(...)` 是打不过它的（v62 踩过一次）。
+  const pourAim = await mobile.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    p.weapons.clear();
+    p.addWeapon('pour');
+    p.recomputeStats();
+    p.oil = p.oilMax;
+    // 一只站在**右边**的怪：自动瞄准会锁它，所以"往左飞"只可能来自手指
+    const e = g.enemies.spawn('shade', p.x + 90, p.y, 1, 0);
+    e.hp = 1e6;
+    e.maxHp = 1e6;
+    e.speed = 0;
+    // 冷却留 0.5 秒：让那一瓢在手指按住之后才出去（不然它在拖动之前就按自动瞄准飞了）
+    p.cooldowns.set('pour', 0.5);
+    const fire = (type, x, y) =>
+      document.body.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [new Touch({ identifier: 51, target: document.body, clientX: x, clientY: y })],
+          targetTouches: [],
+          changedTouches: [new Touch({ identifier: 51, target: document.body, clientX: x, clientY: y })],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    const x0 = window.innerWidth * 0.8;
+    const y0 = window.innerHeight * 0.6;
+    fire('touchstart', x0, y0);
+    fire('touchmove', x0 - 60, y0); // 往左推 60px（超过 AIM_FULL = 56）
+    await new Promise((r) => setTimeout(r, 700));
+    const marks = (g.projectiles.all || []).filter((q) => q.active && q.poolRadius > 0);
+    const shot = marks[0];
+    const held = {
+      shots: marks.length,
+      vx: shot ? Math.round(shot.vx) : 0,
+      mark: p.pourAim ? { away: Math.round(p.pourAim.away), charge: p.pourAim.charge > 0.01 } : null,
+      oil: Math.round(p.oilFrac * 100),
+    };
+    fire('touchend', x0 - 60, y0);
+    await new Promise((r) => setTimeout(r, 140));
+    return { held, freed: p.pourAim === null, vxAfter: (g.projectiles.all || []).filter((q) => q.active && q.poolRadius > 0).map((q) => Math.round(q.vx)) };
+  });
+  expect(pourAim.held.shots >= 1, '手指按住右侧时倾灯照常开火（它是自动开火的武器）', JSON.stringify(pourAim));
+  expect(pourAim.held.vx < -1, '这一瓢往手指指的方向飞（怪在右边，自动瞄准会让它往右）', JSON.stringify(pourAim));
+  expect(pourAim.held.mark !== null, '按住时场上有落点标记（方向和距离都归玩家）', JSON.stringify(pourAim));
+  expect(pourAim.freed === true, '一松手就还给自动瞄准（标记也收起来）', JSON.stringify(pourAim));
+
   const mobPyre = await mobile.evaluate(() => window.__PROBE__.layout('.hud__pyre'));
   expect(mobPyre.issues.length === 0, '移动端灯台芯片布局正常', mobPyre.issues.join('; '));
   const mobPyreClash = await mobile.evaluate(() => [

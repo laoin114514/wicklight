@@ -466,7 +466,7 @@ export class Game {
   private frameCooldowns = { hurt: 0 };
   private emberTimer = 0;
   private moteTimer = 0;
-  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false };
+  private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, aim: false, aimX: 0, aimY: 0 };
   private startSeed = 1;
   /** 当前性能档位（掌上设备 / 桌面 × 画质），每帧开头刷新一次，全游戏只有这一处结论。 */
   profile: PerfProfile = perfProfile('high');
@@ -481,6 +481,12 @@ export class Game {
     // 设置里关掉震动（或不是掌上设备）时，下面这些调用会安静地什么都不做
     this.haptics = new CombatHaptics(() => this.settings.data.vibrate !== false);
     this.loot = new LootSystem(this.pickups);
+    // 飞完射程还没落地的那一发：只有倾灯那一瓢要收尾（留一片火），别的子弹就是消失。
+    // 为什么只放倾灯进来：别的带爆炸的子弹（爆裂火球）也是"打到东西才炸"，
+    // 那是它本来的手感——顺手一起改等于悄悄给火球加了一截射程。
+    this.projectiles.onExpire = (p) => {
+      if (p.poolRadius > 0) this.explode(p);
+    };
     this.save = this.storage.load();
     this.meta = new MetaSystem(this.save);
     this.achievements = new AchievementSystem(this.save, (id) => this.onAchievement(id));
@@ -1040,6 +1046,19 @@ export class Game {
     this.grazeFromX = this.player.x;
     this.grazeFromY = this.player.y;
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
+    // 手动瞄准的那盏灯：手指按下去的时候，灯也往那个方向偏一点。
+    // 两个理由，都不是装饰：① 落点标记必须看得见——射程能到 300px，而灯火最暗时视野只有 96px，
+    // 不给这一点光，暗处按下手指就是"盲倒"（那正是这件武器最贵的时候）；
+    // ② 这件事本来就叫"倾灯"——把灯提起来偏过去，光当然跟着偏。
+    // ⚠ 只有手指按着的那几秒有（`pourAim` 里带 `aimManual`），松手就还给自动瞄准。
+    const pourAim = this.player.pourAim;
+    if (pourAim) {
+      const ax = this.player.x + Math.cos(pourAim.angle) * pourAim.away;
+      const ay = this.player.y + Math.sin(pourAim.angle) * pourAim.away;
+      // 光跟着"还要多久"一起亮起来：圆环快填满时那一带也越来越亮——
+      // 这一件响不响看的是油，油快攒够的时候玩家本来就该看得见那片战场
+      this.light.addGlow(ax, ay, pourAim.pool * 1.25, 0.22 + 0.3 * pourAim.charge);
+    }
     const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
     this.player.x = clamped.x;
@@ -3069,9 +3088,14 @@ export class Game {
       : ' 这件没有进化线，但每一级都会更强。';
     // 「倾灯」得额外讲一句"它有时候为什么不响"：一件会自己停下来的武器，
     // 不把规矩说清楚就只会被当成坏了。
+    // 触屏上这一件多讲一条：它那一瓢的落点归玩家（手指按住屏幕右侧拖着，见 TouchControls）。
+    // 只在这件武器上教——别的武器不吃这一套，提前讲会让人以为屏幕坏了。
+    const touchRule = isTouchDevice()
+      ? ' 手机上：手指按住屏幕右侧拖着，这一瓢就「往你指的方向倒」——推得越远落得越远，松手还给自动瞄准。'
+      : '';
     const rule =
       def.kind === 'pour'
-        ? ` 它只在灯火 ≥ ${Math.round(POUR.minOil * 100)}% 时才倒——不满就整发不出手，所以它响不响看的是你补油快不快（擦身、击杀掉落、灯台都算）。倒下的地方会留一片火，往同一片火上再倒一瓢，火会一层层叠上去。`
+        ? ` 它只在灯火 ≥ ${Math.round(POUR.minOil * 100)}% 时才倒——不满就整发不出手，所以它响不响看的是你补油快不快（擦身、击杀掉落、灯台都算）。倒下的地方会留一片火，往同一片上再倒一瓢，火会一层层叠上去。${touchRule}`
         : '';
     this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${rule}${evo}`);
   }
@@ -3335,12 +3359,23 @@ export class Game {
 
   // ─────────────────────────── render ───────────────────────────
 
-  setInput(moveX: number, moveY: number, dash: boolean, nova: boolean, lamp = false): void {
+  setInput(
+    moveX: number,
+    moveY: number,
+    dash: boolean,
+    nova: boolean,
+    lamp = false,
+    aim: { x: number; y: number } | null = null,
+  ): void {
     this.inputSnapshot.moveX = moveX;
     this.inputSnapshot.moveY = moveY;
     this.inputSnapshot.dash = dash;
     this.inputSnapshot.nova = nova;
     if (lamp) this.inputSnapshot.lamp = true;
+    // 手动瞄准（触屏）：方向 + 力度合成一个向量，传 null 就是"没在瞄"（自动瞄准照旧）
+    this.inputSnapshot.aim = !!aim;
+    this.inputSnapshot.aimX = aim?.x ?? 0;
+    this.inputSnapshot.aimY = aim?.y ?? 0;
   }
 
   /** 主菜单 / 图鉴类界面：不放实时战斗，改画一张动态"守夜人剪影"海报。 */
@@ -3828,6 +3863,9 @@ export class Game {
     this.drawFloor(ctx, theme);
     this.drawDecals(ctx);
     this.drawGrounds(ctx);
+    // 手动瞄准的落点标记：和滞行雾 / 险境预警同一层（地上的规矩画在地上），
+    // 而且在敌人**之前**——一瓢落在人群里，那个圈本来就该被他们盖住。
+    this.drawPourAim(ctx);
     this.drawHazards(ctx);
     this.drawShrines(ctx);
     this.drawPyres(ctx);
@@ -4527,6 +4565,79 @@ export class Game {
       ctx.globalAlpha = 1;
     }
     if (any) ctx.restore();
+  }
+
+  /**
+   * 手动瞄准的落点标记（触屏，见 TouchControls 里"屏幕右侧那块地方"那一段）。
+   *
+   * 两件东西：脚下一个小扇面（"灯偏向这边"）+ 落点上那一圈**和那片火一样大**的圆——
+   * 半径是 Player.pourAim 按 Game.explode 里同一串乘法算出来的，不是另估一个数：
+   * 标记要是和真落下来的火对不上，这个标记就是在骗人。
+   *
+   * 画成什么样子是被这一版的教训定的：
+   * - 方位用**压扁的扇形**（和掠影符文、险境预警是同一套"画在地上 = 规则"的语言），
+   *   不画屏幕上飘的箭头：一片火是留在战场上的东西，箭头会让它读成 HUD；
+   * - 落点那一圈用**正圆**（和险境预警一样）：它标的是真圆的火，压扁会让人误判范围；
+   * - 中间那串点是"从灯到落点"的一条线，手指推得越远，点就撒得越开——
+   *   距离是这一版新给玩家的那半个自由度，得看得见；
+   * - 落地那圈是**只填一部分的**（从正上方顺时针，和掠影符文、按钮上的冷却圈同一套仪表语言）：
+   *   填满的那一帧就是这一瓢出去的那一帧。倾灯的"上膛"本来就只有一帧（它是自动开火的，
+   *   油够了的那一帧它就出去了），所以能预告的只有"离那一下还有多远"——
+   *   而这件事正好是玩家按住手指时最想知道的：**这一条线要举多久**。
+   */
+  private drawPourAim(ctx: CanvasRenderingContext2D): void {
+    const aim = this.player.pourAim;
+    if (!aim) return;
+    const p = this.player;
+    const ex = p.x + Math.cos(aim.angle) * aim.away;
+    const ey = p.y + Math.sin(aim.angle) * aim.away;
+    const charge = aim.charge;
+    const armed = charge >= 1;
+    const breath = 0.5 + Math.sin(this.time * 6) * 0.5;
+    ctx.save();
+    ctx.lineCap = 'round';
+
+    // 脚下的扇形：压扁（ry 只有 rx 的一半）——画在地上的东西都是扁的
+    ctx.globalAlpha = armed ? 0.34 + breath * 0.12 : 0.2 + charge * 0.1;
+    ctx.fillStyle = '#ffb14e';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 46, 24, 0, aim.angle - 0.42, aim.angle + 0.42);
+    ctx.closePath();
+    ctx.fill();
+
+    // 从灯到落点的一串点：手指推得越远，点撒得越开（距离是这一版新给的那半个自由度）
+    ctx.globalAlpha = 0.3 + charge * 0.25;
+    ctx.fillStyle = '#ffb14e';
+    for (let i = 1; i <= 4; i += 1) {
+      const t = i / 5;
+      ctx.beginPath();
+      ctx.arc(p.x + (ex - p.x) * t, p.y + (ey - p.y) * t, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 落点那一圈 = 真要落下来的那片火。底圈是"容器"，亮的那段弧是"离倒出去还有多远"
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#8a6a4a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ex, ey, aim.pool, 0, Math.PI * 2);
+    ctx.stroke();
+    // 从正上方顺时针填：填满 = 这一瓢出去（和按钮上那些冷却圈是同一种读法）
+    if (charge > 0.002) {
+      ctx.globalAlpha = armed ? 0.6 + breath * 0.3 : 0.42 + charge * 0.24;
+      ctx.strokeStyle = armed ? '#ffd07a' : '#ffb14e';
+      ctx.lineWidth = armed ? 3 : 2.4;
+      ctx.beginPath();
+      ctx.arc(ex, ey, aim.pool, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge);
+      ctx.stroke();
+    }
+    // 正中心那一小撮：这就是落点（爆开的那一圈，半径小得多）
+    ctx.globalAlpha = 0.35 + charge * 0.4;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd07a';
+    ctx.fill();
+    ctx.restore();
   }
 
   private drawHazards(ctx: CanvasRenderingContext2D): void {

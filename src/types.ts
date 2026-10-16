@@ -322,6 +322,15 @@ export interface SettingsData {
 export interface InputState {
   moveX: number;
   moveY: number;
+  /**
+   * 手动瞄准（触屏，见 TouchControls 里"屏幕右侧那块地方"那一段）：
+   * `aim` = 手指正按着在瞄；`aimX/aimY` 是一个二维向量，**方向**是"往哪儿倒"，
+   * **长度**（0~1）是"推了多远"——推到底 = 自动瞄准那个射程，刚过死区 = 落在脚前。
+   * 两者合成一个向量，是因为它们本来就来自同一根手指的同一段位移，
+   * 拆成"角度 + 力度"两个字段反而要写两遍钳位。
+   * 关掉（`aim === false`）时这三个字段都没有意义：自动瞄准照旧。
+   */
+  aim: boolean;
   aimX: number;
   aimY: number;
   dash: boolean;
