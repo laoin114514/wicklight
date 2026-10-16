@@ -47,6 +47,14 @@ export interface RelicMods {
   overburnEase?: number;
   /** 「爆灯」之后的短时减伤（0.45 = 少挨四成五） */
   overburnGuard?: number;
+  /** 拨着芯时的减伤（0.25 = 少挨两成五） */
+  wickGuard?: number;
+  /** 拨着芯时每次命中添的灼烧层数（1 = 一层，和烈焰鞭同一把尺子） */
+  wickEmber?: number;
+  /** 拨着芯时的移速加成（0.12 = 快 12%） */
+  wickStride?: number;
+  /** 拨着芯时每秒回多少灯油（0.003 = 每秒回 0.3% 的一桶油） */
+  wickThrift?: number;
 }
 
 export interface RelicDef {
@@ -139,6 +147,19 @@ export const RELICS: RelicDef[] = [
   { id: 'fuse', tribe: 'oil', name: '引线', blurb: '「爆灯」烧掉的油，一半会在 4 秒里从敌人身上烧回来。', icon: '🧨', color: '#ffd24e', rarity: 'epic', price: 105, mods: { overburnRefund: 0.5 } },
   { id: 'brazier', tribe: 'lamp', name: '火盆', blurb: '「爆灯」的门槛从 55% 灯火降到 30%——半桶就能点着。', icon: '🏺', color: '#ffe27a', rarity: 'epic', price: 95, mods: { overburnEase: 0.25 } },
   { id: 'charcoat', tribe: 'shade', name: '炭衣', blurb: '「爆灯」之后 3 秒内受到伤害 -45%。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 80, mods: { overburnGuard: 0.45 } },
+
+  // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
+  // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。
+  // 动词本身还不是打法——要成为打法，得有东西回答四个问题：
+  // **暗着走会不会被打死**（遮光）、**暗着打靠什么输出**（暗火：火不在这盏灯里，所以拨芯拨不到它）、
+  // **暗着走怎么走**（夜步）、**省下来的油去了哪儿、能不能更省**（守芯）。
+  // 和「焰路」一样**一族一件**：单拿一件只是把"赶路那一段"变好一点，四件凑起来才是另一种打法——
+  // 把油压在低位、灯火压到最小，用灼烧和身法在黑暗里打；它和「灯焰高涨」正好是一个反着的方向。
+  // 四件都只在 `player.dimmed`（拨到一半以上）时生效，数值都不大：它们买的是"另一种活法"，不是纯战力。
+  { id: 'wickveil', tribe: 'shade', name: '遮光', blurb: '拨着芯时受到伤害 -25%——黑里不容易被看见。', icon: '🌑', color: '#9a8cff', rarity: 'rare', price: 75, mods: { wickGuard: 0.25 } },
+  { id: 'wickember', tribe: 'flame', name: '暗火', blurb: '拨着芯时每次命中都为敌人添一层灼烧——火不在灯里，拨芯拨不到它。', icon: '🔥', color: '#ff7a2f', rarity: 'epic', price: 95, mods: { wickEmber: 1 } },
+  { id: 'wickstride', tribe: 'lamp', name: '夜步', blurb: '拨着芯时移动速度 +12%——火矮下去了，脚步反而放得开。', icon: '👣', color: '#7be0ff', rarity: 'common', price: 45, mods: { wickStride: 0.12 } },
+  { id: 'wickthrift', tribe: 'oil', name: '守芯', blurb: '拨着芯时灯油自己省回来：每秒 +0.3%（标准灯火下净烧速 0.63 → 0.33%/秒）。', icon: '🕯️', color: '#ffd24e', rarity: 'common', price: 50, mods: { wickThrift: 0.003 } },
 ];
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));

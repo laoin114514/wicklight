@@ -218,10 +218,11 @@ test('爆灯这条线：四件遗物各归一族、都进图鉴、价格与说�
     assert.ok(entry, `${id} 应进图鉴`);
     assert.equal(entry.name, def.name, `${id} 图鉴名应与遗物一致`);
   }
-  // 四件各补一族：四族仍然等量（第二档共鸣是 5 件，11 件照样够得到）
+  // 四件各补一族：四族仍然等量（第二档共鸣是 5 件，12 件照样够得到）
+  // v70 的「拨芯」四件也走同一条规矩，所以这个数是"每次加一族就一起加 1"
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 11, lamp: 11, oil: 11, shade: 11 }, '四族应各 11 件');
+  assert.deepEqual(counts, { flame: 12, lamp: 12, oil: 12, shade: 12 }, '四族应各 12 件');
   // 装上也真的不炸：四件同时在身上，属性算得出来
   const p = game.player;
   p.relics.clear();

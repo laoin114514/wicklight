@@ -87,6 +87,14 @@ export interface PlayerFlags {
   overburnEase: number;
   /** 「爆灯」之后的短时减伤（炭衣：0.45 = 少挨四成五） */
   overburnGuard: number;
+  /** 「拨芯」时的减伤（遮光：0.25 = 少挨两成五） */
+  wickGuard: number;
+  /** 「拨芯」时每次命中添的灼烧层数（暗火：1 = 一层） */
+  wickEmber: number;
+  /** 「拨芯」时的移速加成（夜步：0.12 = 快 12%） */
+  wickStride: number;
+  /** 「拨芯」时每秒回多少灯油（守芯：0.003 = 每秒 0.3%） */
+  wickThrift: number;
 }
 
 interface OrbitState {
@@ -107,7 +115,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -245,7 +253,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -347,7 +355,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -419,6 +427,13 @@ export class Player {
     flags.overburnRefund += m.overburnRefund ?? 0;
     flags.overburnEase += m.overburnEase ?? 0;
     if (m.overburnGuard) flags.overburnGuard = Math.max(flags.overburnGuard, m.overburnGuard);
+    // 「拨芯」这条线：四件遗物各自只动一个数，条件都是同一个 `player.dimmed`。
+    // 减伤取大（它是"少挨多少"的一个比例，重复拿到不该叠成无敌），其余三个往上加
+    // （和「焰路」「爆灯」那两条同一个写法）。
+    if (m.wickGuard) flags.wickGuard = Math.max(flags.wickGuard, m.wickGuard);
+    flags.wickEmber += m.wickEmber ?? 0;
+    flags.wickStride += m.wickStride ?? 0;
+    flags.wickThrift += m.wickThrift ?? 0;
   }
 
   /** 当前持有某一族遗物的数量。 */
@@ -505,6 +520,20 @@ export class Player {
   /** 现在在烧吗（结算、HUD 与测试都看这一个）。 */
   get blazing(): boolean {
     return this.blazeTimer > 0;
+  }
+
+  /**
+   * "拨着芯"这件事本身，四件遗物（遮光 / 暗火 / 夜步 / 守芯）、成就 `wickwalk`
+   * 和 HUD 油条上那枚牌子共用**同一个**门槛。
+   *
+   * 为什么是插值过半（0.5）而不是"按下去了"：`wickOn` 是玩家的意图，`wick` 是画面上真实的火——
+   * 按下去的头几帧火还没矮，这时候算"拨着芯"会让人拿到看不见的加成；
+   * 反过来按回来时火还没烧旺就被剥夺，也一样说不通。过半是个两边都说得过去的点
+   * （拨小 0.28 秒，也就是说按下之后 0.14 秒生效），而且它让"我现在算不算拨着芯"
+   * 有一个**能自己数出来**的答案——界面上不该存着两个"一半"。
+   */
+  get dimmed(): boolean {
+    return this.wick > 0.5;
   }
 
   /**
@@ -595,7 +624,7 @@ export class Player {
     const wickSpan = wickTarget > this.wick ? WICK.spanDown : WICK.spanUp;
     const wickStep = dt / wickSpan;
     this.wick = clamp(this.wick + clamp(wickTarget - this.wick, -wickStep, wickStep), 0, 1);
-    if (this.wick > 0.5) this.wickTime += dt;
+    if (this.dimmed) this.wickTime += dt;
     // 三个乘数都写成"从 1 插到那一头"：`wick = 0` 时它们**恰好是 1**，
     // 也就是说没拨芯的时候，这一版和上一版逐位相同（不是"看着差不多"）。
     const burnKeep = 1 - (1 - WICK.oilMult) * this.wick;
@@ -614,6 +643,14 @@ export class Player {
           burnKeep *
           dt,
     );
+    // 「守芯」：拨着芯时灯油自己省回来（每秒 +0.3%）。
+    // 它写在**衰减之后、判空之前**：先结这一帧的账、再补这一口，免得刚好卡在 0 上白扣一次血。
+    // 为什么要有这么一条"回油"（而不只是把油耗乘得更小）：漏进的油和乘出来的省是两回事——
+    // 乘出来的省再狠也只是"烧得慢"，而漏进来的这一口能**叠**在油壶 / 省油咒之上，
+    // 于是"拨着芯赶路"这套能在凑齐之后真的变成"油面不动"（见 data/relics.ts 里那一段）。
+    if (this.dimmed && this.flags.wickThrift > 0) {
+      this.oil = Math.min(this.oilMax, this.oil + this.flags.wickThrift * dt);
+    }
     if (this.oil <= 0) {
       this.hp -= 3 * dt;
       if (Math.random() < dt * 8) ctx.particles.burst(this.x, this.y, 1, '#3a4a7a', { speed: 30, size: 3, life: 0.5 });
@@ -674,7 +711,13 @@ export class Player {
       this.vy = this.dashDirY * ds;
     } else {
       const accel = 2400 * dt;
-      const walk = s.moveSpeed * this.terrainSlow * (this.blazeTimer > 0 ? GRAZE.blazeSpeed : 1);
+      // 「夜步」：拨着芯时脚步放得开（+12%）。它和「灯焰高涨」那条相反——
+      // 一个是把火烧旺、借光跑得快，一个是把火压住、摸黑走得快，两条都只作用在走路上（冲刺不吃）。
+      const walk =
+        s.moveSpeed *
+        this.terrainSlow *
+        (this.blazeTimer > 0 ? GRAZE.blazeSpeed : 1) *
+        (this.dimmed ? 1 + this.flags.wickStride : 1);
       this.vx += (mvx * walk - this.vx) * Math.min(1, accel / Math.max(1, s.moveSpeed));
       this.vy += (mvy * walk - this.vy) * Math.min(1, accel / Math.max(1, s.moveSpeed));
     }

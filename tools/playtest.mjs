@@ -13,6 +13,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+/** 「拨芯」这条线四件遗物的名字，移动端那条检查要拿它对面板上写出来的字（见 3a2c / 手机那段）。 */
+const RELIC_NAME = { wickveil: '遮光', wickember: '暗火', wickstride: '夜步', wickthrift: '守芯' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -321,6 +323,21 @@ async function main() {
         chip: document.querySelector('.bar--oil')?.classList.contains('is-dim') ?? null,
       };
     });
+  // ⚠ 像素那一条要先把场面清干净再量（v70 补的）：这一条量的是**拨芯**，
+  //   不该被"刚好有一座点着的灯台 / 一堆怪在眼前发光 / 地上还躺着一盏分出去的灯"影响——
+  //   那些光不跟着灯芯走，会把"暗下去多少"这个读数稀释掉（实测撞到过：litFrac 只掉了 17%）。
+  const cleanScene = () =>
+    page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      g.enemies.clear();
+      g.projectiles.clear();
+      g.pickups.clear();
+      g.particles.clear();
+      g.lamps.length = 0;
+      g.player.oil = 0.6;
+    });
+  await cleanScene();
+  await sleep(120);
   const lit0 = await page.evaluate(() => window.__PROBE__.canvasStats());
   const wick0 = await wickRead();
   await page.keyboard.press('KeyC');
@@ -381,6 +398,69 @@ async function main() {
   );
   await page.keyboard.press('KeyC'); // 拨回来，后面的检查照旧
   await sleep(650);
+
+  // ── 3a2c. 「拨芯」这条线（四件遗物）：界面得能把它读出来，面板也不许被撑破 ──
+  // 离线测试（tests/wickrelics.test.mjs）量的是四个数各自生效、以及"没拨芯时一个都不许动"。
+  // 这里量的是**另一件事**：四件都是有条件（拨着芯）的加成，而玩家唯一能读到这个条件的地方
+  // 就是「灯火」那一栏加上海报上那枚牌子——所以真浏览器里要看到它们被写出来，
+  // 而且多出的这一行不许把 1280×720 的面板撑出去（一行一行加下去，最容易撞到的就是这里）。
+  const familyIds = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, familyIds);
+  await page.keyboard.press('KeyC'); // 拨着芯
+  await sleep(650);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const famText = await page.evaluate(() => document.querySelector('.lo-light')?.textContent ?? '');
+  const famLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  // ⚠ 面板是 `max-height: 92vh; overflow: auto` 的滚动容器：这一栏本来就在折线以下，
+  //   所以要先把它滚进视野再量——量的不是"它恰好在第一屏里"，而是"它滚得进来、且不越界"
+  //   （面板一多行就滚不到底，那才是真会出事的那种坏法）。
+  await page.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const famLight = await page.evaluate(() => window.__PROBE__.layout('.lo-light'));
+  expect(famLight.issues.length === 0, '「灯火」那一栏滚得进视野、也不越界', famLight.issues.join('; '));
+  expect(famLayout.hOverflow === 0, '总览没有被撑出横向滚动', `hOverflow=${famLayout.hOverflow}`);
+  expect(famLayout.issues.length === 0, '带满四件拨芯遗物的构筑总览布局正常', famLayout.issues.join('; '));
+  for (const [name, bit] of [['遮光', '减伤 25%'], ['暗火', '+1 层灼烧'], ['夜步', '移速 +12%'], ['守芯', '每秒回油']]) {
+    expect(famText.includes(name) && famText.includes(bit), `「灯火」栏写出 ${name}（${bit}）`, famText.slice(0, 200));
+  }
+  expect(!/undefined|NaN/.test(famText), '「灯火」栏没有缺字段', famText);
+  await shot('03k-wick-family');
+
+  // 图鉴里那条「机制：拨芯」也要点出这四件：玩家是在那里学会"它们是为一件事准备的"
+  const codexWick = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:wick');
+    return { name: e?.name, text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    codexWick.text.includes('遮光') && codexWick.text.includes('守芯'),
+    '图鉴的「拨芯」条目里点出了这四件遗物',
+    codexWick.text.slice(-180),
+  );
+
+  // 收尾：这一局要还原（后面还有别的检查在跑，不能让这四件留在身上，也不能让灯芯留在拨小的状态）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.relics.delete(id);
+    g.player.recomputeStats();
+  }, familyIds);
+  await page.keyboard.press('KeyC'); // 拨回来
+  await sleep(650);
+  const famRestored = await page.evaluate(() => {
+    const p = window.__WICKLIGHT__.game.player;
+    return { on: p.wickOn, wick: +p.wick.toFixed(2), family: [...p.relics].filter((r) => r.startsWith('wick')).length };
+  });
+  expect(
+    famRestored.on === false && famRestored.wick === 0 && famRestored.family === 0,
+    '这一条检查完，灯芯与那四件都还原（后面的检查照旧）',
+    JSON.stringify(famRestored),
+  );
 
   // ── 3a3. 掠影：贴着危险擦过去算数、不挨打，脚边那圈符文真的画出来了 ──
   // 这一版新加的核心规则，所以用真键盘 + 真像素验一遍，而不是只跑离线测试。
@@ -2998,6 +3078,49 @@ async function main() {
   });
   expect(keyChips.total > 0 && keyChips.shown === 0, '手机上键盘提示全部藏掉', JSON.stringify(keyChips));
   expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
+
+  // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物）。
+  // 窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，所以这里也量一次
+  // （和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
+  // 为了把"最坏情况"量出来，先把四件都塞上：窄屏上那一栏最长就是这样
+  const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
+  await mobile.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, mFamily);
+  await mobile.click('[data-act="sheet"]');
+  await sleep(350);
+  await mobile.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const mobileSheet = await mobile.evaluate(() => {
+    const light = window.__PROBE__.layout('.lo-light');
+    const panel = window.__PROBE__.layout('.panel--loadout');
+    return {
+      count: light.count,
+      issues: light.issues,
+      hOverflow: panel.hOverflow,
+      text: document.querySelector('.lo-light')?.textContent ?? '',
+    };
+  });
+  expect(mobileSheet.count === 1, '手机上构筑总览也有「灯火」那一栏', JSON.stringify(mobileSheet));
+  expect(mobileSheet.issues.length === 0, '手机横带上「灯火」栏不越界', mobileSheet.issues.join('; '));
+  expect(mobileSheet.hOverflow === 0, '手机横带上总览没被撑出横向滚动', `hOverflow=${mobileSheet.hOverflow}`);
+  expect(
+    mFamily.every((id) => mobileSheet.text.includes(RELIC_NAME[id])),
+    '手机上也把四件拨芯遗物连条件一起写出来了',
+    mobileSheet.text.slice(-160),
+  );
+  await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
+  await mobile.click('[data-act="sheet-close"]');
+  await sleep(300);
+  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  await mobile.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.relics.delete(id);
+    g.player.recomputeStats();
+  }, mFamily);
+
   await mobile.click('[data-act="resume"]');
   await sleep(400);
 

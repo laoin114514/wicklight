@@ -1963,7 +1963,15 @@ export class Game {
     this.creditDamage(source, reduced);
     if (reduced > this.maxHit) this.maxHit = reduced;
     this.floaters.damage(e.x, e.y - e.radius - 6, reduced, crit);
-    if (opts.burn) this.enemies.applyBurn(e, opts.burn, source ?? null);
+    // 「暗火」：拨着芯时每次命中都为敌人添一层灼烧。
+    // 为什么要挂在这一层（而不是某一件武器里）：拨芯拨的是**这盏灯**，它该跟着"你打出去的每一下"，
+    // 而不是某一根枪管；而且灼烧那条账本来就在这一层（`opts.burn`）——同一句话写在一个地方，
+    // 结算里的「伤害构成」才不用为它单开一栏（谁打的那一下，这口火就算谁的）。
+    // 咒盾（`warded`）照旧免掉：那条规矩是"元素免疫连灼烧一起免"——暗火点的也是火，
+    // 它得走同一条规矩，而不是从旁边绕过去。
+    const ember = this.player.dimmed && !warded ? this.player.flags.wickEmber : 0;
+    const burn = (opts.burn ?? 0) + ember;
+    if (burn > 0) this.enemies.applyBurn(e, burn, source ?? null);
     if (opts.slow && opts.slow > 0 && e.active) e.slowTimer = Math.max(e.slowTimer, opts.slow);
     if (this.player.flags.lifesteal > 0) {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + reduced * this.player.flags.lifesteal);
@@ -2032,7 +2040,11 @@ export class Game {
     // 「影缝」：焰烧着的时候更难被打灭——贴着脸打总归要挨几下，这是那几下里的折扣。
     // 只在烧着的时候生效：它不是一件无条件的护甲，而是"贴着打"这套牌的兜底。
     // 「炭衣」同理，但它那几秒是"你自己点出来的"：爆出去的火挡在身前（ashGuard 是 1 或减伤后的倍率）。
-    const guard = (this.player.blazing ? 1 - this.player.flags.blazeGuard : 1) * this.player.ashGuard;
+    // 「遮光」：拨着芯时更难被打中——最危险的那一段（贴上去打）正好也是你最小的时候。
+    const guard =
+      (this.player.blazing ? 1 - this.player.flags.blazeGuard : 1) *
+      this.player.ashGuard *
+      (this.player.dimmed ? 1 - this.player.flags.wickGuard : 1);
     const scaled = amount * DIFFICULTIES[this.difficulty].dmgMult * guard;
     const applied = this.player.takeDamage(scaled, x, y, drain);
     if (!applied) return;

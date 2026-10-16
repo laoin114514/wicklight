@@ -196,6 +196,19 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   assert.ok(wick.spanDown >= 0.15 && wick.spanUp <= 0.8, '两个时长都该是"一眼看得出来在变"的那个量级（0.1 秒级 = 啪一下换画面）');
   assert.ok(wick.achieveSeconds >= 30, '成就那条线不该是"顺手按两下就解了"');
 
+  // ── 「拨芯」这条线上的四件遗物（v70）：它们都是**有条件的**加成，条件就是 `player.dimmed`。
+  // 数值区间单独钉一遍：这四件改的是同一个动词，任何一件给多了，它都会从"另一种活法"
+  // 变成"按下去就没有理由拨回来"——而拨芯的全部意思就是"随时可以拨回来"。
+  const wickFamily = data.relics.filter((r) => ['wickGuard', 'wickEmber', 'wickStride', 'wickThrift'].some((k) => k in r.mods));
+  assert.equal(wickFamily.length, 4, `拨芯这条线就是四件（实际 ${wickFamily.length}）`);
+  const mod = (k) => wickFamily.map((r) => r.mods[k]).find((v) => v !== undefined);
+  assert.ok(mod('wickGuard') > 0.1 && mod('wickGuard') < 0.4, `遮光的减伤该是"看得见的折扣"，不是无敌（实际 ${mod('wickGuard')}）`);
+  assert.ok(mod('wickEmber') >= 1 && mod('wickEmber') <= 2, `暗火每次命中添的层数不该超过"两层"（实际 ${mod('wickEmber')}）`);
+  assert.ok(mod('wickStride') > 0.05 && mod('wickStride') < 0.25, `夜步的移速该小于"轻羽 + 疾风靴"那种无条件加成（实际 ${mod('wickStride')}）`);
+  assert.ok(mod('wickThrift') > 0.001 && mod('wickThrift') < 0.005, `守芯每秒回的油要低于拨芯省下来的那一档（实际 ${mod('wickThrift')}）`);
+  // "它盖不掉拨着芯的油耗"这一条只能**量**出来（净烧速仍然大于零），
+  // 所以钉在 `wickrelics.test.mjs` 的「守芯」那一条里，这里只管调理参数区间。
+
   // ── 敌人 / 词缀目录（结构不同：无 blurb，改为校验数值与行为）──
   const catalog = globalThis.window.__WICKLIGHT__.catalog;
   assert.ok(catalog, '构建产物应导出敌人 / 词缀目录');

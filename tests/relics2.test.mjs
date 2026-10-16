@@ -42,11 +42,12 @@ test('新遗物：余温翻倍、灯更耐吹，以及三件新的取舍', async
   }
   // 每族各多一件：四族等量，第二档共鸣依然够得到
   // （v53 的「掠影」四件、v62 的「爆灯」四件各补了一族，所以现在是各 11 件。
+  //  v70 的「拨芯」四件（遮光 / 暗火 / 夜步 / 守芯）也是四族各一件，于是现在是各 12 件。
   //  这条断言刻意写死数量：四族**等量**才是这套共鸣能一直转下去的前提，
   //  哪天有人只给一族加了一件，第二档（5 件）的门槛就会先在某几族上变松。）
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 11, lamp: 11, oil: 11, shade: 11 }, '四族应各 11 件（第二档共鸣是 5 件）');
+  assert.deepEqual(counts, { flame: 12, lamp: 12, oil: 12, shade: 12 }, '四族应各 12 件（第二档共鸣是 5 件）');
 
   // ── 守夜灯：每座灯台的余温翻倍 ──
   const measure = (relic) => {

@@ -830,9 +830,11 @@ export class HUD implements HUDHost {
       if (hasPour) oilBar.style.setProperty('--pour-floor', `${(POUR.minOil * 100).toFixed(1)}%`);
       // 「拨芯」：灯芯拨小了，油条上挂一枚冷色的牌子。
       // 为什么挂在油条上：它省的是**这一条**（油），读到它的地方就该是油本身。
-      // 门槛用 `wick > 0.35` 而不是 `wickOn`：牌子和画面得几乎同时对得上——
+      // 门槛用 `player.dimmed`（插值过半）而不是 `wickOn`：牌子和画面得几乎同时对得上——
       // 按下的那一瞬间火其实还没矮下去，牌子却已经挂上了的话，玩家会以为游戏卡了。
-      const dimmed = g.player.wick > 0.35;
+      // v70 起它和四件拨芯遗物（遮光 / 暗火 / 夜步 / 守芯）、成就 `wickwalk` 共用同一个门槛：
+      // "拨着芯"在规则上是一个数，界面上就不该再存一个自己的——不然牌子亮着、遗物却没生效。
+      const dimmed = g.player.dimmed;
       if (dimmed !== oilBar.classList.contains('is-dim')) oilBar.classList.toggle('is-dim', dimmed);
     }
 

@@ -564,10 +564,20 @@ export class UIManager implements UIHost {
   private lightBlock(): string {
     const p = this.game.player;
     const dim = p.wickOn;
+    const f = p.flags;
+    // 「拨芯」这条线上的四件遗物（一族一件，见 data/relics.ts）：拿到哪件写哪件。
+    // 为什么写在这里：这一栏讲的就是"拨芯这笔账"，而那四件改的正是这笔账的四个角。
+    // 没拿的时候不写——空格子不叫信息。
+    const family: string[] = [];
+    if (f.wickGuard) family.push(`遮光 减伤 ${Math.round(f.wickGuard * 100)}%`);
+    if (f.wickEmber) family.push(`暗火 每次命中 +${f.wickEmber} 层灼烧`);
+    if (f.wickStride) family.push(`夜步 移速 +${Math.round(f.wickStride * 100)}%`);
+    if (f.wickThrift) family.push(`守芯 每秒回油 +${(f.wickThrift * 100).toFixed(1)}%`);
     const walk = p.wickTime >= 1 ? ` · 本局拨芯 ${Math.round(p.wickTime)}s` : '';
     return `<div class="lo-bounty lo-light ${dim ? 'is-dim' : ''}" style="--c:${WICK.color}">
         <b>${dim ? '🌒 拨芯中 · 微光' : '🔥 灯火全开'}</b>
         <span>灯火半径 ${Math.round(p.lightRadius)}px · 亮度 ×${p.brightness.toFixed(2)} · 火力 ×${p.damageScale.toFixed(2)}${walk}</span>
+        ${family.length ? `<span>拨芯这套：${family.join(' · ')}</span>` : ''}
         <span>${
           dim
             ? `灯油耗率 ×${WICK.oilMult} · 索敌跟着灯火一起变近 · 再按一下 C 拨回来`
