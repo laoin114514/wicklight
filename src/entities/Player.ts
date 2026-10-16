@@ -128,6 +128,16 @@ export interface PlayerFlags {
   mineMothOil: number;
   /** 「绊线」（遗物）：伏灯炸到的敌人被拖住多少（移速倍率） */
   mineSnare: number;
+  /** 「张网」（遗物）：旋灯吸入半径加成 */
+  vortexSpread: number;
+  /** 「张网」（遗物）：旋灯多转几秒 */
+  vortexTime: number;
+  /** 「标灯」（遗物）：被拽住的敌人受到所有伤害的加成 */
+  vortexMark: number;
+  /** 「榨油」（遗物）：收网打到的每一只回多少油 */
+  vortexHarvest: number;
+  /** 「缠网」（遗物）：圈里的敌人被拖住多少 */
+  vortexSnare: number;
 }
 
 interface OrbitState {
@@ -148,7 +158,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0, vortexSpread: 0, vortexTime: 0, vortexMark: 0, vortexHarvest: 0, vortexSnare: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -298,7 +308,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0, vortexSpread: 0, vortexTime: 0, vortexMark: 0, vortexHarvest: 0, vortexSnare: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -400,7 +410,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0, pourStacks: 0, pourSpread: 0, pourLife: 0, pourEmber: 0, pourShelter: 0, mineMax: 0, mineLife: 0, mineChain: 0, mineLure: 0, mineMothOil: 0, mineSnare: 0, vortexSpread: 0, vortexTime: 0, vortexMark: 0, vortexHarvest: 0, vortexSnare: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -498,6 +508,12 @@ export class Player {
     flags.mineLure += m.mineLure ?? 0;
     flags.mineMothOil += m.mineMothOil ?? 0;
     flags.mineSnare = Math.max(flags.mineSnare, m.mineSnare ?? 0);
+    // 「旋灯」这条线（v78）：前四个是"这一网本身"，直接相加；缠网是减速，取最强的那一件。
+    flags.vortexSpread += m.vortexSpread ?? 0;
+    flags.vortexTime += m.vortexTime ?? 0;
+    flags.vortexMark += m.vortexMark ?? 0;
+    flags.vortexHarvest += m.vortexHarvest ?? 0;
+    flags.vortexSnare = Math.max(flags.vortexSnare, m.vortexSnare ?? 0);
   }
 
   /** 当前持有某一族遗物的数量。 */

@@ -1992,7 +1992,12 @@ export class Game {
     // 咒盾：元素免疫 + 额外减伤，逼玩家在「堆元素」和「堆物理」之间做选择
     const warded = e.affix === 'warded';
     if (warded) opts = {};
-    const reduced = damage * (1 - e.dr) * (warded ? 0.75 : 1);
+    // 「标灯」（遗物）：被旋灯照出来的那几只，这一下多挨一份。
+    // ⚠ 它是**唯一**在 `applyHit` 里往上乘的一个数（别的遗物都在更前面改玩家的属性）——
+    //   所以它是"从这一下起生效"的：灼烧不吃它（灼烧是每帧从怪身上扣的，不经过这里），
+    //   和拨芯不吃灼烧是同一条规矩。咒盾也不免它：那条规矩讲的是"元素免疫"，而这是位置带来的。
+    const marked = e.vortexMark > 0 ? 1 + this.player.flags.vortexMark : 1;
+    const reduced = damage * (1 - e.dr) * (warded ? 0.75 : 1) * marked;
     const killed = this.enemies.damage(e, reduced, this.lightCtx(), kx, ky, knockback);
     this.creditDamage(source, reduced);
     if (reduced > this.maxHit) this.maxHit = reduced;
@@ -2718,12 +2723,18 @@ export class Game {
    * 剩下的都在这里：吸力、卷弹幕、收缩那一下。
    */
   placeVortex(x: number, y: number, damage: number, radius: number, burn: number, drag: number, source: string): void {
+    // 「张网」（遗物）：一网罩得更宽、也收得更慢。
+    // ⚠ 半径不是"只影响吸力"：收尾那一圈是 `radius × VORTEX.burst`（0.72），所以加宽吸入半径
+    //   也顺带加宽了收尾圈——两件事共用同一个数，是这件武器从一开始就定下的规矩
+    //   （"拢得多狠"和"收尾多疼"是同一件事），这一件只是把那个数放大，没有拆开它。
+    const spread = 1 + this.player.flags.vortexSpread;
+    const life = VORTEX.life + this.player.flags.vortexTime;
     this.vortexes.push({
       x,
       y,
-      life: VORTEX.life,
-      maxLife: VORTEX.life,
-      radius,
+      life,
+      maxLife: life,
+      radius: radius * spread,
       damage,
       burn,
       drag,
@@ -2772,7 +2783,7 @@ export class Game {
       this.vortexPayoff = Math.max(this.vortexPayoff, Math.round(dmg));
       if (netted) this.achievements.unlock('vortex_payoff');
       this.vortexes.splice(i, 1);
-      this.blast(v.x, v.y, v.radius * VORTEX.burst, dmg, {
+      const hits = this.blast(v.x, v.y, v.radius * VORTEX.burst, dmg, {
         knockback: 0,
         burn: v.burn,
         source: v.source,
@@ -2782,6 +2793,18 @@ export class Game {
         // 冷色的武器不该在地上留一道烧焦：这里只留一圈被"抽过风"的冷痕
         decal: 'rgba(16,22,44,0.5)',
       });
+      // 「榨油」（遗物）：这一网真的打到几只就回几份油。
+      // 数的是 `blast` 返回的 `hits`（真的吃到那一下的），不是 `caught`（进圈的那几只）——
+      // 和「收网」那枚成就口径一致：账要落在"打到了"，不能落在"看着进了圈"。
+      const harvest = this.player.flags.vortexHarvest;
+      if (harvest > 0 && hits > 0) {
+        const p = this.player;
+        const gain = Math.min(p.oilMax - p.oil, p.oilMax * harvest * hits);
+        if (gain > 0) {
+          p.oil += gain;
+          this.floaters.label(v.x, v.y + 12, `+${(gain * 100).toFixed(1)}% 油`, '#ffd24e', 12);
+        }
+      }
       // 拢得多，那一下就越大越响：多一圈外环、更重的屏震、头顶上一个数。
       // 为什么要做大：这一条改动本身是"拢得好有回报"，可回报要是看不见，玩家就学不会挑时机。
       if (caught >= 3) {
@@ -2876,6 +2899,12 @@ export class Game {
       const force = VORTEX.pull * (1 - d / v.radius) ** VORTEX.pullShape * resist;
       e.vx += (dx / d) * force;
       e.vy += (dy / d) * force;
+      // 「标灯」/「缠网」（遗物，v78）：进了这个圈的两件后续。
+      // 挂在这一行是刻意的——这里正是"它此刻在不在圈里"唯一被算出来的地方，
+      // 再写一遍距离判断就等于给"圈有多大"留了第二份真话（张网改的正是那个半径）。
+      const f = this.player.flags;
+      if (f.vortexMark > 0) e.vortexMark = VORTEX.markSpan;
+      if (f.vortexSnare > 0) applySlow(e, VORTEX.snareSpan, 1 - f.vortexSnare);
     }
   }
 

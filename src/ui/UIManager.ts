@@ -16,6 +16,7 @@ import { WICK } from '../data/wick';
 import { AURA } from '../data/aura';
 import { POUR } from '../data/pour';
 import { MINE } from '../data/mines';
+import { VORTEX } from '../data/vortex';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -505,6 +506,7 @@ export class UIManager implements UIHost {
 
     const graze = this.grazeBlock();
     const mineBlock = this.mineBlock();
+    const vortexBlock = this.vortexBlock();
 
     const b = g.bounties.state;
     const bounty = b
@@ -553,6 +555,7 @@ export class UIManager implements UIHost {
             <h4>掠影</h4>
             ${graze}
             ${mineBlock ? `<h4>伏灯</h4>${mineBlock}` : ''}
+            ${vortexBlock ? `<h4>旋灯</h4>${vortexBlock}` : ''}
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
@@ -665,6 +668,44 @@ export class UIManager implements UIHost {
           fam.length
             ? `伏灯这套：${fam.join(' · ')}`
             : `撒在身后、上弦 ${MINE.arm}s，之后谁踩上来就炸一圈；「灯蛾」在 ${MINE.lure}px 内会拐过来扑它——拿它当饵`
+        }</span>
+      </div>`;
+  }
+
+  /**
+   * 构筑总览里的「旋灯」栏（v78）：本局转了几盏、一次拽住几只、最狠的一网收了几只，
+   * 以及身上那四件遗物到底改了哪个数。
+   *
+   * 它和「伏灯」那一栏是同一种东西的两面：伏灯那一栏量的是"这一局的路铺得怎么样"，
+   * 这一栏量的是"这一局的网撒得怎么样"——旋灯是**不给伤害**的那件武器，
+   * 它的成绩单只能是"拢住了几只"和"收成多少"，所以这一栏把这几个数摆在最前面。
+   *
+   * 什么时候才画：手里有旋灯（或进化那一把）、或者身上挂着这一族的遗物——和伏灯同一条规矩
+   * （没有这件武器的玩家读到"本局转了 0 盏"是占地方）。
+   */
+  private vortexBlock(): string {
+    const g = this.game;
+    const p = g.player;
+    const f = p.flags;
+    const has = p.weapons.has('vortex') || p.weapons.has('vortex_maelstrom');
+    const fam: string[] = [];
+    if (f.vortexSpread || f.vortexTime) {
+      fam.push(`张网 吸入 +${Math.round(f.vortexSpread * 100)}% · 多转 ${f.vortexTime.toFixed(1)}s`);
+    }
+    if (f.vortexMark) fam.push(`标灯 被拽住的挨打 +${Math.round(f.vortexMark * 100)}% · 留 ${VORTEX.markSpan}s`);
+    if (f.vortexHarvest) fam.push(`榨油 每只回 ${(f.vortexHarvest * 100).toFixed(2)}%`);
+    if (f.vortexSnare) fam.push(`缠网 圈里慢 ${Math.round(f.vortexSnare * 100)}%`);
+    if (!has && !fam.length) return '';
+    const best = g.vortexBest > 1 ? `一次拽住 ${g.vortexBest} 只` : '';
+    const payoff = g.vortexCaught > 1 ? `最狠的一网 ${g.vortexCaught} 只 · ${g.vortexPayoff}` : '';
+    const score = [best, payoff].filter(Boolean).join(' · ');
+    return `<div class="lo-bounty lo-vortex" style="--c:#8fb8ff">
+        <b>🌀 旋灯 · 本局转了 ${g.vortexCount} 盏</b>
+        <span>${score || '这一局还没拢到过东西'}</span>
+        <span>${
+          fam.length
+            ? `旋灯这套：${fam.join(' · ')}`
+            : `转 ${VORTEX.life}s 然后把圈里那几只拢到一点收网——它不给伤害，它让别人打得疼`
         }</span>
       </div>`;
   }

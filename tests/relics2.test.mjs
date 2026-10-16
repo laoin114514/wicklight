@@ -50,7 +50,7 @@ test('新遗物：余温翻倍、灯更耐吹，以及三件新的取舍', async
   //  哪天有人只给一族加了一件，第二档（5 件）的门槛就会先在某几族上变松。）
   const counts = {};
   for (const r of data.relics) counts[r.tribe] = (counts[r.tribe] ?? 0) + 1;
-  assert.deepEqual(counts, { flame: 15, lamp: 15, oil: 15, shade: 15 }, '四族应各 15 件（第二档共鸣是 5 件）');
+  assert.deepEqual(counts, { flame: 16, lamp: 16, oil: 16, shade: 16 }, '四族应各 16 件（第二档共鸣是 5 件）');
 
   // ── 守夜灯：每座灯台的余温翻倍 ──
   const measure = (relic) => {

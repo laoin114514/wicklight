@@ -634,6 +634,21 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     ctx.globalAlpha = 1;
   }
 
+  // 「标灯」：被旋灯照出来的那几只挂一圈细环。刻意不用慢/灼烧那种**实心**光晕——
+  // 那两种是"状态"，这一种是"被标出来了"，环才读得出是这个意思（而且它常和缠网的蓝晕同时在场，
+  // 两个实心块叠在一起就分不出谁是谁了）。
+  if (e.vortexMark > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#d8c0ff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 1.3, 0, TAU);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
   if (e.burn > 0) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.45;

@@ -67,6 +67,16 @@ export interface RelicMods {
   mineMothOil?: number;
   /** 「伏灯」踩响时把炸到的怪拖住多少（0.5 = 移速砍一半） */
   mineSnare?: number;
+  /** 「旋灯」吸入半径加成（0.18 = +18%） */
+  vortexSpread?: number;
+  /** 「旋灯」多转几秒 */
+  vortexTime?: number;
+  /** 「旋灯」被拽住的敌人受到**所有**伤害的加成（0.25 = +25%） */
+  vortexMark?: number;
+  /** 「旋灯」收网打到的每一只回多少油（占油桶比例，0.004 = 0.4%） */
+  vortexHarvest?: number;
+  /** 「旋灯」圈里的敌人被拖住多少（0.35 = 移速 -35%） */
+  vortexSnare?: number;
   /** 「灯焰高涨」期间的减伤（0.3 = 少挨三成） */
   blazeGuard?: number;
   /** 「爆灯」之后的短时伤害加成（0.35 = 那 4 秒里伤害 +35%） */
@@ -225,6 +235,23 @@ export const RELICS: RelicDef[] = [
   { id: 'minelink', tribe: 'flame', name: '接火', blurb: '「伏灯」连爆够得着的半径 +45%——撒得开也串得起来，排成一列就是一条会自己烧过去的路。', icon: '🧨', color: '#ff8a3c', rarity: 'rare', price: 75, mods: { mineChain: 0.45 } },
   { id: 'minebait', tribe: 'oil', name: '香饵', blurb: '「伏灯」能引来的「灯蛾」远 50%（380 → 570px），而被它炸死的蛾每只回 0.5% 灯油——饵做香了，蛾自己把油送回来。', icon: '🪰', color: '#ffd24e', rarity: 'common', price: 55, mods: { mineLure: 0.5, mineMothOil: 0.005 } },
   { id: 'minetrip', tribe: 'shade', name: '绊线', blurb: '「伏灯」踩响时把炸到的敌人移速砍一半、拖住 1.4 秒——它替你拦下的那几步，就是你跑开的那几步。', icon: '🕸️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { mineSnare: 0.5 } },
+
+  // ── 「旋灯」这条线（v78）：把"你决定它们站在哪儿"接成一套牌 ──
+  // 旋灯（v62）是这个游戏里唯一一件**不制造伤害**的武器：它把一圈人拢到一点，让别的武器去打那一点。
+  // 它的身份是"位置"，所以四件都长在这件事上——但它和「伏灯」那一族（位置 = 攒起来等）不同，
+  // 旋灯是**当下**的那一下：圈多大、拢住的那几只接下来好不好打、这一网收成什么。
+  //   **一网能罩多宽、转多久**（张网，长明族：吸入半径 +18%、转 1.2 → 1.5 秒）、
+  //   **被拢住的那几只好不好打**（标灯，焰火族：圈里的敌人受到的**所有**伤害 +25%，离开后还留 0.5 秒）、
+  //   **这一网收成什么**（榨油，灯油族：收网打到的每一只回 0.4% 油）、
+  //   **圈里的走不走得动**（缠网，暗影族：圈里移速 -35%——吸力之外再拖一层）。
+  // 「标灯」是这一族里最像"支援"的那一件：它不给旋灯自己加伤害，而是让**别的**武器打得更疼——
+  // 这正是旋灯从 v57 起一直在补的那个方向（"铺垫做得好，自己也疼一下"）。
+  // 它刻意只放大**打出去的那一下**：灼烧是每帧从怪身上扣的（见 Enemy.burnSource），
+  // 不经过 `applyHit`，所以不吃这 25%——和拨芯不吃灼烧是同一条规矩。
+  { id: 'vortexnet', tribe: 'lamp', name: '张网', blurb: '「旋灯」吸入半径 +18%、多转 0.3 秒——一网罩得更宽，也收得更慢。', icon: '🕸️', color: '#ffe27a', rarity: 'rare', price: 75, mods: { vortexSpread: 0.18, vortexTime: 0.3 } },
+  { id: 'vortexmark', tribe: 'flame', name: '标灯', blurb: '被「旋灯」拽住的敌人受到的所有伤害 +25%（离开那圈后还留 0.5 秒）——拢起来，再一起打。', icon: '🎯', color: '#ff8a3c', rarity: 'epic', price: 95, mods: { vortexMark: 0.25 } },
+  { id: 'vortexpress', tribe: 'oil', name: '榨油', blurb: '「旋灯」收网打到的每一只回 0.4% 灯油——拢得越多，这一网收回来的越多。', icon: '🫙', color: '#ffd24e', rarity: 'common', price: 55, mods: { vortexHarvest: 0.004 } },
+  { id: 'vortexsnare', tribe: 'shade', name: '缠网', blurb: '「旋灯」圈里的敌人移速 -35%——除了往里拽，还让他们走不动。', icon: '🌀', color: '#9a8cff', rarity: 'rare', price: 70, mods: { vortexSnare: 0.35 } },
 
   // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
   // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。

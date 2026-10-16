@@ -21,6 +21,8 @@ const AURA_RELIC_NAME = { auraflare: '旺火', auralantern: '漫光', aurasiphon
 const POUR_RELIC_NAME = { pourstoke: '浇油', pourladle: '大瓢', pourgather: '拾油', pourward: '烬护' };
 /** 「伏灯」这条线四件遗物的名字（v77，见 3a5b / 手机那段）。 */
 const MINE_RELIC_NAME = { minerack: '灯阵', minelink: '接火', minebait: '香饵', minetrip: '绊线' };
+/** 「旋灯」这条线四件遗物的名字（v78，见 3a8b / 手机那段）。 */
+const VORTEX_RELIC_NAME = { vortexnet: '张网', vortexmark: '标灯', vortexpress: '榨油', vortexsnare: '缠网' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -1201,6 +1203,53 @@ async function main() {
   } else {
     fail('漩涡转到一半的那一帧存了下来', '采样器没抓到那一帧');
   }
+  // ── 3a8b. 「旋灯」这条线（四件遗物，v78）：把"你决定它们站在哪儿"这笔账也读出来 ──
+  // 离线单测（tests/vortexrelics.test.mjs）量的是四个数各自生效（吸入半径 +18%、多转 0.3 秒，
+  // 而且收尾圈跟着一起大；被拽住的挨打 ×1.25、出圈还留 0.5 秒；收网打到每一只回 0.4% 油；
+  // 圈里的脚力砍掉 35%，而且它不把更狠的减速顶回去）。
+  // 这里量的是**界面读不读得出来**：手里有旋灯（或挂着这一族的遗物）时，
+  // 构筑总览要多出「旋灯」那一栏，而且那四件要连条件一起写出来。
+  const vortexFamIds = ['vortexnet', 'vortexmark', 'vortexpress', 'vortexsnare'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, vortexFamIds);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const vortexFamText = await page.evaluate(() => document.querySelector('.lo-vortex')?.textContent ?? '');
+  const vortexFamLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(vortexFamLayout.hOverflow === 0, '加了旋灯那四件，总览仍没被撑出横向滚动', `hOverflow=${vortexFamLayout.hOverflow}`);
+  expect(vortexFamLayout.issues.length === 0, '带满四件旋灯遗物的构筑总览布局正常', vortexFamLayout.issues.join('; '));
+  await page.evaluate(() => document.querySelector('.lo-vortex')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const vortexFamBlock = await page.evaluate(() => window.__PROBE__.layout('.lo-vortex'));
+  expect(vortexFamBlock.count === 1, '挂着这一族的遗物时，构筑总览多出「旋灯」那一栏', JSON.stringify(vortexFamBlock));
+  expect(vortexFamBlock.issues.length === 0, '「旋灯」栏滚得进视野、也不越界', vortexFamBlock.issues.join('; '));
+  for (const bit of ['旋灯 · 本局转了', '张网 吸入 +18%', '多转 0.3s', '标灯 被拽住的挨打 +25%', '留 0.5s', '榨油 每只回 0.40%', '缠网 圈里慢 35%']) {
+    expect(vortexFamText.includes(bit), `「旋灯」栏写出「${bit}」`, vortexFamText.slice(-260));
+  }
+  expect(!/undefined|NaN/.test(vortexFamText), '「旋灯」栏没有缺字段', vortexFamText);
+  await shot('03l5-vortex-family');
+  const codexVortexFam = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:vortex');
+    return { text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    Object.values(VORTEX_RELIC_NAME).every((n) => codexVortexFam.text.includes(n)),
+    '图鉴的「旋灯」条目里点出了这四件遗物',
+    codexVortexFam.text.slice(-200),
+  );
+  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.removeRelic(id);
+    g.player.recomputeStats();
+  }, vortexFamIds);
+  await sleep(150);
+
   // 收尾：把这一段借走的东西还回去（武器、地上的漩涡、敌人、导演）
   await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -2087,9 +2136,18 @@ async function main() {
   await drainLevelUps();
 
   // ── 4. 暂停 ──
-  await page.keyboard.press('Escape');
-  await sleep(300);
-  const paused = await page.evaluate(() => window.__PROBE__.state());
+  // ⚠ 这一步原来是**看运气**的（v78 两跑一红，就红在这里）：`Escape` 只在 `state === 'playing'` 时才算数
+  //   （升级面板上按它什么都不做），而真实击杀随时可能在"排空升级面板"和"按下 Esc"之间那一瞬间
+  //   把面板再顶出来。它要量的是"Esc 能不能暂停"，不是"这几毫秒里有没有恰好升级"——
+  //   所以按完看一眼状态，没进暂停就先排空再按一次。
+  let paused = null;
+  for (let i = 0; i < 3; i += 1) {
+    await drainLevelUps();
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    paused = await page.evaluate(() => window.__PROBE__.state());
+    if (paused && paused.state === 'paused') break;
+  }
   expect(paused && paused.state === 'paused', 'Esc 能暂停', JSON.stringify(paused));
   const pauseLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
   expect(pauseLayout.issues.length === 0, '暂停面板布局正常', pauseLayout.issues.join('; '));
@@ -3420,25 +3478,29 @@ async function main() {
 
   // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
   // （燎灯那四件），v76 是**第三**行（倾灯那四件）——三族买的是同一桶油，所以都住在这一栏里。
-  // v77 又加了一栏「伏灯」（那一族买的是"位置"，所以它有自己的一栏，不长在灯火里）。
+  // v77 又加了一栏「伏灯」（那一族买的是"位置"，所以它有自己的一栏，不长在灯火里），
+  // v78 再加一栏「旋灯」（同一个理由：它买的是"你决定它们站在哪儿"）。
   // 窄屏横带上最容易出事的正是"多一行 / 多一栏把面板撑出横向溢出"，所以这里也量一次
   // （和桌面那条同一个做法：那几栏在滚动容器里，先滚进视野再量）。
-  // 为了把"最坏情况"量出来，**四族十六件全塞上**：窄屏上那两栏最长就是这样。
+  // 为了把"最坏情况"量出来，**五族二十件全塞上**：窄屏上那几栏最长就是这样。
   const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
   const mAuraFamily = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
   const mPourFamily = ['pourstoke', 'pourladle', 'pourgather', 'pourward'];
   const mMineFamily = ['minerack', 'minelink', 'minebait', 'minetrip'];
-  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily, ...mMineFamily];
+  const mVortexFamily = ['vortexnet', 'vortexmark', 'vortexpress', 'vortexsnare'];
+  const mTwelve = [...mFamily, ...mAuraFamily, ...mPourFamily, ...mMineFamily, ...mVortexFamily];
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.addRelic(id);
     g.player.recomputeStats();
   }, mTwelve);
-  // 手里也得有一把伏灯：那一栏只在"有伏灯（或者挂着这一族的遗物）"时才画
+  // 手里也得有伏灯与旋灯：那两栏只在"有这件武器（或者挂着这一族的遗物）"时才画
   await mobile.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
     window.__SAVED_MINE__ = g.player.weapons.has('mine');
     if (!window.__SAVED_MINE__) g.player.weapons.set('mine', 1);
+    window.__SAVED_VORTEX__ = g.player.weapons.has('vortex');
+    if (!window.__SAVED_VORTEX__) g.player.weapons.set('vortex', 1);
     g.player.recomputeStats();
   });
   await mobile.click('[data-act="sheet"]');
@@ -3474,25 +3536,46 @@ async function main() {
   expect(mobileMine.count === 1, '手机上也有「伏灯」那一栏', JSON.stringify(mobileMine));
   expect(mobileMine.issues.length === 0, '手机横带上「伏灯」栏不越界', mobileMine.issues.join('; '));
   expect(mobileMine.hOverflow === 0, '多出「伏灯」那一栏也没把手机上的总览撑出横向滚动', `hOverflow=${mobileMine.hOverflow}`);
+  // 「旋灯」那一栏在伏灯下面，同样得自己滚进来再量一次
+  await mobile.evaluate(() => document.querySelector('.lo-vortex')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const mobileVortex = await mobile.evaluate(() => {
+    const vx = window.__PROBE__.layout('.lo-vortex');
+    const panel = window.__PROBE__.layout('.panel--loadout');
+    return {
+      count: vx.count,
+      issues: vx.issues,
+      hOverflow: panel.hOverflow,
+      text: document.querySelector('.lo-vortex')?.textContent ?? '',
+    };
+  });
+  expect(mobileVortex.count === 1, '手机上也有「旋灯」那一栏', JSON.stringify(mobileVortex));
+  expect(mobileVortex.issues.length === 0, '手机横带上「旋灯」栏不越界', mobileVortex.issues.join('; '));
+  expect(mobileVortex.hOverflow === 0, '多出「旋灯」那一栏也没把手机上的总览撑出横向滚动', `hOverflow=${mobileVortex.hOverflow}`);
   const LIGHT_NAMES = { ...RELIC_NAME, ...AURA_RELIC_NAME, ...POUR_RELIC_NAME };
+  const OWN_NAMES = { ...MINE_RELIC_NAME, ...VORTEX_RELIC_NAME };
   expect(
-    mTwelve.every((id) => id in MINE_RELIC_NAME || LIGHT_NAMES[id]),
-    '这一条的前提：十六件遗物的名字都登记在案（少一件这一条就量不全）',
+    mTwelve.every((id) => id in OWN_NAMES || LIGHT_NAMES[id]),
+    '这一条的前提：二十件遗物的名字都登记在案（少一件这一条就量不全）',
     mTwelve.join('/'),
   );
   expect(
-    mTwelve.every((id) => (id in MINE_RELIC_NAME ? mobileMine.text : mobileSheet.text).includes(MINE_RELIC_NAME[id] ?? LIGHT_NAMES[id])),
-    '手机上也把四族十六件遗物连条件一起写出来了',
-    `${mobileSheet.text.slice(-160)} | ${mobileMine.text.slice(-160)}`,
+    mTwelve.every((id) => {
+      const where = id in VORTEX_RELIC_NAME ? mobileVortex.text : id in MINE_RELIC_NAME ? mobileMine.text : mobileSheet.text;
+      return where.includes(OWN_NAMES[id] ?? LIGHT_NAMES[id]);
+    }),
+    '手机上也把五族二十件遗物连条件一起写出来了',
+    `${mobileSheet.text.slice(-160)} | ${mobileMine.text.slice(-160)} | ${mobileVortex.text.slice(-160)}`,
   );
   await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
   await mobile.click('[data-act="sheet-close"]');
   await sleep(300);
-  // 收尾：把塞进去的十六件拿掉、把借来的那把伏灯还回去（后面的检查照旧）
+  // 收尾：把塞进去的二十件拿掉、把借来的那两把武器还回去（后面的检查照旧）
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.relics.delete(id);
     if (!window.__SAVED_MINE__) g.player.weapons.delete('mine');
+    if (!window.__SAVED_VORTEX__) g.player.weapons.delete('vortex');
     g.player.recomputeStats();
   }, mTwelve);
 

@@ -1308,6 +1308,8 @@ body.is-touch .hud__wave { display: none; }
 .lo-graze { border-left-color: #ffb14e; }
 /* 「伏灯」那一栏：它讲的是地上铺了什么，数字都是计数（几颗 / 几串 / 几只），对齐了才读得快 */
 .lo-mine b { font-variant-numeric: tabular-nums; }
+/* 「旋灯」那一栏：和伏灯同一种东西的另一面（一个量"路铺得怎么样"，一个量"网撒得怎么样"） */
+.lo-vortex b { font-variant-numeric: tabular-nums; }
 /* 灯火栏：拨着芯的时候整块冷下来——它和「掠影」那一栏的暖光正好是一对（一个把火压住、一个把火撩旺） */
 .lo-light b { font-variant-numeric: tabular-nums; }
 .lo-light.is-dim { background: color-mix(in srgb, #8fa7ff 12%, rgba(255, 255, 255, 0.04)); box-shadow: inset 0 0 18px rgba(143, 167, 255, 0.16); }

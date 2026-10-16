@@ -35,6 +35,13 @@ export interface Enemy {
    */
   burnSource: string | null;
   slowTimer: number;
+  /**
+   * 「标灯」（遗物，v78）：被旋灯拽住的这几只"被照出来了"，剩下的时间里它们受到的**所有**
+   * 打出去的伤害都多一份（倍率在 `Game.applyHit` 里读，强度在 `player.flags.vortexMark` 上）。
+   * 它和减速一样是**每帧续的**状态：在圈里就一直亮着，出圈之后再留 `VORTEX.markSpan` 秒——
+   * 所以它记住的是"刚才被拢过"，而不是"此刻在圈里"（玩家补的那一下正好落在收网之后）。
+   */
+  vortexMark: number;
   /** 当前减速的强度（0.5 = 移速砍一半）。多条线都能减速，合并规矩见 `applySlow` */
   slowFactor: number;
   hitFlash: number;
@@ -198,6 +205,7 @@ export class EnemySystem {
     burnSource: null,
     slowTimer: 0,
     slowFactor: 0.5,
+    vortexMark: 0,
     hitFlash: 0,
     attackCd: 0,
     bossCd: 0,
@@ -247,6 +255,7 @@ export class EnemySystem {
     e.burnSource = null;
     e.slowTimer = 0;
     e.slowFactor = 0.5;
+    e.vortexMark = 0;
     e.hitFlash = 0;
     e.attackCd = 1;
     e.bossCd = 1.4;
@@ -374,6 +383,7 @@ export class EnemySystem {
       }
       if (e.hitFlash > 0) e.hitFlash -= dt;
       if (e.slowTimer > 0) e.slowTimer -= dt;
+      if (e.vortexMark > 0) e.vortexMark -= dt;
       if (e.burnTimer > 0) {
         e.burnTimer -= dt;
         const burnDmg = ctx.burnDps * e.burn * dt;
