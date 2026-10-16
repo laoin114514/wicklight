@@ -82,7 +82,11 @@ test('热键：数字键（含小键盘）读成"第几张"，R / 回车各归�
   assert.equal(press(env, input, 'Numpad2').pick, 2, '小键盘也得认——右手正在小键盘上的人不该被漏掉');
   assert.equal(press(env, input, 'Digit3').pick, 3);
   assert.equal(press(env, input, 'Digit4').pick, 4);
-  assert.equal(press(env, input, 'Digit5').pick, 0, '没接的键不该凭空变成"第 5 张"');
+  // 1~6：升级卡与祭坛只有三件，但**商店的货架是六件**——只要认 1~4 的话，
+  // 最下面那两件（热汤 / 满壶灯油）永远得挪手去点鼠标，而那两件正好是"打残了先买一口"的时候要按的
+  assert.equal(press(env, input, 'Digit5').pick, 5, '商店第六件也得按得动');
+  assert.equal(press(env, input, 'Numpad6').pick, 6, '小键盘的 6 一样');
+  assert.equal(press(env, input, 'Digit9').pick, 0, '没接的键不该凭空变成"第 9 张"');
   assert.equal(press(env, input, 'KeyR').reroll, true);
   assert.equal(press(env, input, 'Enter').confirm, true);
   assert.equal(press(env, input, 'NumpadEnter').confirm, true, '小键盘的回车也是回车');
@@ -206,6 +210,19 @@ test('热键：商店按第 n 件买第 n 件、R 刷新，且只认自己的那
   assert.equal(game.gold, goldBefore - price0);
   game.panelHotkeys(1, false);
   assert.equal(game.gold, goldBefore - price0, '已经卖掉的商品再按一次不该再扣一遍钱');
+
+  // 货架最下面那两件：v81 之前键盘只认 1~4，这两件（回血 / 回油）永远得挪手去点鼠标
+  const heal = game.shopItems[4];
+  const oil = game.shopItems[5];
+  assert.ok(heal && oil, `货架该有六件，量得出第 5 / 6 件（实际 ${game.shopItems.length} 件）`);
+  const goldHeal = game.gold;
+  game.panelHotkeys(5, false);
+  assert.equal(heal.sold, true, '按 5 买的是第五件（热汤）');
+  assert.equal(game.gold, goldHeal - heal.price, '扣的该正好是那一件的价');
+  const goldOil = game.gold;
+  game.panelHotkeys(6, false);
+  assert.equal(oil.sold, true, '按 6 买的是第六件（满壶灯油）');
+  assert.equal(game.gold, goldOil - oil.price, '第六件同样只扣一次');
 
   // 不在商店里：连金币都不该看一眼
   game.state = 'playing';

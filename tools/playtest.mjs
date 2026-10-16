@@ -2604,6 +2604,27 @@ async function main() {
     fail('商店热键', `第二件买不了（价 ${shopKeys.price} / 已售 ${shopKeys.sold}）`);
   }
 
+  // 货架最下面那两件（热汤 / 满壶灯油）：v81 起键盘也认 5 / 6——之前只认 1~4，
+  // 这两件永远得挪手去点鼠标，而那正是"打残了先买一口"的时候
+  const shopLow = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    g.gold = Math.max(g.gold, 400);
+    g.ui.showScreen('shop');
+    return { gold: g.gold, n: g.shopItems.length, price: g.shopItems[4]?.price ?? null, sold: g.shopItems[4]?.sold ?? null };
+  });
+  if (shopLow.price !== null && !shopLow.sold) {
+    await page.keyboard.press('Digit5');
+    await sleep(350);
+    const five = await page.evaluate(() => {
+      const g = window.__WICKLIGHT__.game;
+      return { gold: g.gold, sold: g.shopItems.map((it) => it.sold) };
+    });
+    expect(five.sold.length === shopLow.n && five.sold[4] === true, '按 5 买的是第五件', JSON.stringify(five.sold));
+    expect(five.gold === shopLow.gold - shopLow.price, '扣的该正好是那一件的价', JSON.stringify({ before: shopLow.gold, price: shopLow.price, after: five.gold }));
+  } else {
+    fail('商店热键 5 / 6', `第五件买不了（货架 ${shopLow.n} 件 / 价 ${shopLow.price} / 已售 ${shopLow.sold}）`);
+  }
+
   // ── 6b. 熔铸台：真的把一件已有遗物换掉 ──
   const forge = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
@@ -3071,6 +3092,104 @@ async function main() {
     (await page.evaluate(() => window.__PROBE__.vibes.log.length)) === 0,
     '桌面（非掌上设备）全程不震动',
   );
+
+  // ── 10c. 手柄（v81）：真浏览器里插一只手柄，一路量到角色真的动了 ──
+  // 离线那套（tests/gamepad.test.mjs）量的是"`poll` 出来的意图对不对"；这里量的是
+  // **同一条路在真主循环里走通**：`navigator.getGamepads` → 主循环 → 角色 / 面板 / 底部那行说明。
+  // 浏览器里没有"合成手柄按键"这种东西（Gamepad API 是设备级的，不是 DOM 事件），所以做法是
+  // 把 `navigator.getGamepads` 换成一份**我们捏着走**的读数——主循环读到的东西和真手柄逐字段一样。
+  const padFrames = (n) =>
+    page.evaluate(
+      (k) =>
+        new Promise((res) => {
+          let i = 0;
+          const tick = () => {
+            i += 1;
+            if (i >= k) res(i);
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      n,
+    );
+  const padBefore = await page.evaluate(() => ({
+    connected: window.__WICKLIGHT__.game.padConnected,
+    hint: document.querySelector('.js-hint')?.textContent ?? '',
+  }));
+  expect(padBefore.connected === false, '插上之前游戏认得出来"没手柄"', JSON.stringify(padBefore));
+  expect(/空格/.test(padBefore.hint), '没手柄时底部那行说的还是键盘', padBefore.hint);
+  await page.evaluate(() => {
+    window.__PAD__ = { buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] };
+    navigator.getGamepads = () => [
+      { id: 'Playwright Pad (STANDARD GAMEPAD)', index: 0, connected: true, buttons: window.__PAD__.buttons, axes: window.__PAD__.axes },
+    ];
+    window.__WICKLIGHT__.game.enemies.clear();
+  });
+  await padFrames(4);
+  const padOn = await page.evaluate(() => {
+    const el = document.querySelector('.js-hint');
+    return {
+      connected: window.__WICKLIGHT__.game.padConnected,
+      text: el?.textContent ?? '',
+      isPad: el?.classList.contains('is-pad') ?? false,
+      h: Math.round(el?.getBoundingClientRect().height ?? 0),
+      tip: window.__WICKLIGHT__.game.save.tips.includes('input:gamepad'),
+    };
+  });
+  expect(padOn.connected === true, '插上之后主循环认得出手柄', JSON.stringify(padOn));
+  expect(padOn.isPad && /摇杆/.test(padOn.text) && !/空格/.test(padOn.text), '底部那行当场换成手柄那一份（不写键盘的键）', padOn.text);
+  expect(padOn.h > 0, '换成的那行真的画在屏幕上（不是换了个藏起来的元素）', String(padOn.h));
+
+  // 走位：死区里那点漂移不该让角色动，推到底才动——而且动的是**真角色**，不是"意图对象"
+  const padWalk = await page.evaluate(async () => {
+    const g = window.__WICKLIGHT__.game;
+    const start = { x: g.player.x, y: g.player.y };
+    window.__PAD__.axes[0] = 0.15; // 手搭在摇杆上
+    await new Promise((r) => setTimeout(r, 200));
+    const drift = { x: g.player.x - start.x, y: g.player.y - start.y };
+    window.__PAD__.axes[0] = 1; // 推到底
+    await new Promise((r) => setTimeout(r, 260));
+    const moved = { x: g.player.x - start.x, y: g.player.y - start.y };
+    window.__PAD__.axes[0] = 0;
+    // Ⓨ 拨芯：按下的那一帧就翻（意图不等插值，见 Player.dimmed）
+    const before = g.player.wickOn;
+    window.__PAD__.buttons[3] = { pressed: true, value: 1 };
+    await new Promise((r) => setTimeout(r, 120));
+    const after = g.player.wickOn;
+    await new Promise((r) => setTimeout(r, 260)); // 按住不放
+    const held = g.player.wickOn;
+    window.__PAD__.buttons[3] = { pressed: false, value: 0 };
+    // Start：暂停，再按一下回来
+    window.__PAD__.buttons[9] = { pressed: true, value: 1 };
+    await new Promise((r) => setTimeout(r, 120));
+    const paused = g.state;
+    window.__PAD__.buttons[9] = { pressed: false, value: 0 };
+    await new Promise((r) => setTimeout(r, 120));
+    window.__PAD__.buttons[9] = { pressed: true, value: 1 };
+    await new Promise((r) => setTimeout(r, 120));
+    const resumed = g.state;
+    window.__PAD__.buttons[9] = { pressed: false, value: 0 };
+    return { drift, moved, before, after, held, paused, resumed };
+  });
+  expect(Math.abs(padWalk.drift.x) < 0.01 && Math.abs(padWalk.drift.y) < 0.01, '手搭在摇杆上角色不漂（死区真的在起作用）', JSON.stringify(padWalk.drift));
+  expect(padWalk.moved.x > 20, '推着摇杆角色就真的走起来（真主循环，不是离线桩件）', JSON.stringify(padWalk.moved));
+  expect(padWalk.before === false && padWalk.after === true, 'Ⓨ 按一下当场拨上芯', JSON.stringify(padWalk));
+  expect(padWalk.held === true, '按住不放也只翻一格（一秒 60 格就废了）', JSON.stringify(padWalk));
+  expect(padWalk.paused === 'paused' && padWalk.resumed === 'playing', 'Start 是暂停开关', JSON.stringify(padWalk));
+  await shot('13e-pad');
+
+  // 拔掉：那行说明要换回键盘那一份，游戏也要认得出来（别把"没手柄"当成"手柄一动不动"）
+  await page.evaluate(() => {
+    delete navigator.getGamepads;
+    window.__WICKLIGHT__.game.enemies.clear();
+  });
+  await padFrames(3);
+  const padOff = await page.evaluate(() => {
+    const el = document.querySelector('.js-hint');
+    return { connected: window.__WICKLIGHT__.game.padConnected, text: el?.textContent ?? '', isPad: el?.classList.contains('is-pad') ?? true };
+  });
+  expect(padOff.connected === false, '拔掉之后认得出来', JSON.stringify(padOff));
+  expect(/空格/.test(padOff.text) && !padOff.isPad, '底部那行换回键盘那一份', padOff.text);
 
   // ── 11. 今日灯芯：全服同一个夜晚 ──
   await page.evaluate(() => window.__WICKLIGHT__.game.goMenu());
@@ -3674,6 +3793,41 @@ async function main() {
   });
   expect(keyChips.total > 0 && keyChips.shown === 0, '手机上键盘提示全部藏掉', JSON.stringify(keyChips));
   expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
+
+  // 手机上接了手柄（安卓上很常见）：底部那行说明平时是藏着的（没有键盘可用），
+  // 但手柄那一份要露出来——`body.is-touch .hud__hint.is-pad` 那条规则只有在这儿量得到。
+  await mobile.evaluate(() => {
+    window.__PAD__ = { buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] };
+    navigator.getGamepads = () => [
+      { id: 'BT Pad (STANDARD GAMEPAD)', index: 0, connected: true, buttons: window.__PAD__.buttons, axes: window.__PAD__.axes },
+    ];
+  });
+  await sleep(300);
+  const mobilePad = await mobile.evaluate(() => {
+    const el = document.querySelector('.js-hint');
+    const cs = getComputedStyle(el);
+    return {
+      connected: window.__WICKLIGHT__.game.padConnected,
+      text: el.textContent,
+      isPad: el.classList.contains('is-pad'),
+      display: cs.display,
+      h: Math.round(el.getBoundingClientRect().height),
+      scroll: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  expect(mobilePad.connected && mobilePad.isPad && /摇杆/.test(mobilePad.text), '手机上接了手柄，底部那行换成手柄那一份', mobilePad.text);
+  expect(mobilePad.display === 'block' && mobilePad.h > 0, '触屏上也真的露出来（键盘那份藏掉，手柄这份露出来）', JSON.stringify(mobilePad));
+  expect(mobilePad.scroll <= 1, '多出来的那行没把页面撑出横向滚动', String(mobilePad.scroll));
+  await mobile.evaluate(() => {
+    delete navigator.getGamepads;
+  });
+  await sleep(300);
+  const mobilePadOff = await mobile.evaluate(() => {
+    const el = document.querySelector('.js-hint');
+    return { connected: window.__WICKLIGHT__.game.padConnected, display: getComputedStyle(el).display, isPad: el.classList.contains('is-pad') };
+  });
+  expect(mobilePadOff.connected === false && mobilePadOff.isPad === false, '拔掉手柄后那行回到键盘那一份', JSON.stringify(mobilePadOff));
+  expect(mobilePadOff.display === 'none', '触屏上"空格冲刺"那行还是藏着的（没有键盘可用）', JSON.stringify(mobilePadOff));
 
   // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
   // （燎灯那四件），v76 是**第三**行（倾灯那四件）——三族买的是同一桶油，所以都住在这一栏里。

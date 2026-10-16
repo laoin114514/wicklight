@@ -26,7 +26,7 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   // `pacts`（v79）与 `fire`（v80）都是**包**：一张表 + 几个纯函数（合并 / 定价 / 解锁 / 价格阶梯），
   // 所以它们也跳过去——跳过去之后在下面按各自的形状单独校验。
   for (const [name, arr] of Object.entries(data)) {
-    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts' || name === 'fire') continue;
+    if (name === 'graze' || name === 'mines' || name === 'vortex' || name === 'pour' || name === 'nova' || name === 'emberwind' || name === 'hunt' || name === 'arrival' || name === 'wick' || name === 'wickFamily' || name === 'aura' || name === 'newWeaponPool' || name === 'starterWeapons' || name === 'pacts' || name === 'fire' || name === 'pad') continue;
     assert.ok(arr.length > 0, `${name} 不应为空`);
     assert.deepEqual(dup(arr), [], `${name} 存在重复 id`);
     for (const item of arr) {
@@ -98,6 +98,45 @@ test('武器 / 遗物 / 夜咒 / 被动数据表', async (t) => {
   }, 0);
   assert.equal(fireTotal, 19170, `薪火全烧满该是 19170 余烬（实际 ${fireTotal}）`);
   assert.equal(fire.FIRE_LEVELS_TOTAL, fire.FIRE_LINES.reduce((a, l) => a + l.levels, 0), '级数上限那个分母要跟表一致');
+
+  // ── 「手柄」那一套（v81）：键位映射 + 两个死区 + 两行文案 ──
+  // 这一份全是"改了不会报错、只会让人按错键"的那一类：按钮号是**标准布局的约定**，
+  // 换掉一个数不会抛异常，只会让"Ⓑ 分灯"变成"Ⓧ 分灯"——玩家按下去才发现。
+  const pad = data.pad;
+  assert.ok(pad, '构建产物应导出手柄这份表');
+  assert.deepEqual(
+    pad.PAD_BUTTON,
+    { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, back: 8, start: 9, dup: 12, ddown: 13, dleft: 14, dright: 15 },
+    '按钮号是标准布局的约定，不许随手改（改了就是"Ⓑ 分灯"变"Ⓧ 分灯"）',
+  );
+  assert.equal(
+    new Set(Object.values(pad.PAD_BUTTON)).size,
+    Object.keys(pad.PAD_BUTTON).length,
+    '一个按钮不该挂在两个名字上',
+  );
+  // 肩键那两枚是给商店的第 5 / 6 件留的（四个面键不够六件货架），名字不许和 LT / RT 混
+  assert.equal(pad.PAD_BUTTON.lb, 4, 'LB = 4（肩键，商店第 5 件）');
+  assert.equal(pad.PAD_BUTTON.rb, 5, 'RB = 5（肩键，商店第 6 件）');
+  // 死区：0 = 手一搭就漂，1 = 推到底才动。两个数都要落在"推得动又不会自己漂"这一段，
+  // 而且瞄准那个比走位大——推一点点就开始改落点，手感上像在跟游戏抢那盏灯（见 Gamepad 文件头）。
+  assert.ok(pad.PAD_DEADZONE > 0.1 && pad.PAD_DEADZONE < 0.3, `走位死区该是"手搭着不漂"的量级（实际 ${pad.PAD_DEADZONE}）`);
+  assert.ok(
+    pad.PAD_AIM_DEAD > pad.PAD_DEADZONE && pad.PAD_AIM_DEAD < 0.5,
+    `瞄准死区该比走位大、又没大到推不动（${pad.PAD_DEADZONE} → ${pad.PAD_AIM_DEAD}）`,
+  );
+  // 底部那行说明：写的是手柄的键，不能混着键盘的键——接了手柄的人看"空格冲刺"是没有用的。
+  assert.equal(typeof pad.PAD_HINT, 'string', '底部那行说明该是个字符串');
+  for (const key of ['摇杆', 'Ⓐ', 'Ⓨ', 'Start', 'Back']) {
+    assert.ok(pad.PAD_HINT.includes(key), `手柄那行说明该写上「${key}」（实际 ${pad.PAD_HINT}）`);
+  }
+  for (const bad of ['空格', 'WASD', 'Esc']) {
+    assert.ok(!pad.PAD_HINT.includes(bad), `手柄那行说明里不该出现键盘的键「${bad}」`);
+  }
+  // 第一次接上讲的那张卡：除了键位，还得写上面板那套换键（不然玩家在升级面板上会乱按）
+  assert.ok(pad.PAD_TIP && pad.PAD_TIP.title && pad.PAD_TIP.text, '那张「首次接上手柄」的卡要有标题和正文');
+  for (const key of ['摇杆', '面板', 'Start', 'Back']) {
+    assert.ok(pad.PAD_TIP.text.includes(key), `那张卡该写上「${key}」`);
+  }
 
   // `wickFamily` 是**导出的 id 名单**（拨芯这条线）：每个 id 都要真的能查回一件遗物，
   // 而且那份名单要和"改这几个数的遗物"完全一致——名单跟内容漂了，`Game.scanWickFamily`

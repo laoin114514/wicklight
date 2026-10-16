@@ -29,14 +29,21 @@ const KEYMAP: KeyMap = {
   Tab: 'sheet',
   // 面板热键（见 InputState 上那一段）：数字键选第几张卡 / R 重掷 / 回车确认。
   // 小键盘也认——右手正在小键盘上的人不该被漏掉。
+  // 1~6 而不是 1~4：升级卡与祭坛只有三件，但**商店的货架是六件**（三件遗物 + 一张升级卡
+  // + 热汤 + 满壶灯油），只认前四个的话，最下面那两件（回血 / 回油）永远得挪手去点鼠标——
+  // 而它们正好是"打残了先买一口"的那两件，最需要不离开 WASD 的时候。
   Digit1: 'pick1',
   Digit2: 'pick2',
   Digit3: 'pick3',
   Digit4: 'pick4',
+  Digit5: 'pick5',
+  Digit6: 'pick6',
   Numpad1: 'pick1',
   Numpad2: 'pick2',
   Numpad3: 'pick3',
   Numpad4: 'pick4',
+  Numpad5: 'pick5',
+  Numpad6: 'pick6',
   KeyR: 'reroll',
   Enter: 'confirm',
   NumpadEnter: 'confirm',
@@ -204,7 +211,7 @@ export class Input {
     s.dim = this.wasPressed('dim');
     // 数字键折成一个数：下游只问"选了第几张"，不该看见四个布尔
     let pick = 0;
-    for (let i = 1; i <= 4; i += 1) if (this.wasPressed(`pick${i}`)) pick = i;
+    for (let i = 1; i <= 6; i += 1) if (this.wasPressed(`pick${i}`)) pick = i;
     s.pick = pick;
     s.reroll = this.wasPressed('reroll');
     s.confirm = this.wasPressed('confirm');

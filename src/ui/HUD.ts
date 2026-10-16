@@ -37,6 +37,9 @@ export class HUD implements HUDHost {
   private bountyEl!: HTMLElement;
   private bountySig = '~';
   private pyreEl!: HTMLElement;
+  /** 底部那行常驻说明：接了手柄要换成手柄那一份（见 Game.setPadState）。 */
+  private hintEl!: HTMLElement;
+  private defaultHint = '';
   private pyreSig = '~';
   /** 上一次量到的"右上那一列"上沿（Infinity = 那一列没占着横带）：见 refitCards。 */
   private chipTopSig = Infinity;
@@ -126,7 +129,7 @@ export class HUD implements HUDHost {
       <div class="hud__curse js-curse"></div>
       <div class="hud__bounty js-bounty"></div>
       <div class="hud__pyre js-pyre"></div>
-      <div class="hud__hint">WASD 移动 · 空格冲刺 · Q 燃爆 · E 分灯 · C 拨芯 · 自动开火 · Esc 暂停</div>
+      <div class="hud__hint js-hint">WASD 移动 · 空格冲刺 · Q 燃爆 · E 分灯 · C 拨芯 · 自动开火 · Esc 暂停</div>
     `;
     this.root.appendChild(hud);
     this.hudEl = hud;
@@ -156,6 +159,7 @@ export class HUD implements HUDHost {
     this.curseEl = q('.js-curse');
     this.bountyEl = q('.js-bounty');
     this.pyreEl = q('.js-pyre');
+    this.hintEl = q('.js-hint');
 
     const build = document.createElement('div');
     build.className = 'hud__build';
@@ -230,6 +234,24 @@ export class HUD implements HUDHost {
       this.text(slot.name, b.name);
       this.width(slot.fill, b.frac);
     });
+  }
+
+  /**
+   * 底部那行常驻说明：桌面是键盘那一行，接了手柄就换成手柄那一行。
+   *
+   * 为什么不做成"两行都挂着"：它是**一行**（bottom: 12px，屏幕正中下方），
+   * 两个设备同时插着的时候把两套键位挤在一起，两边都读不清。而默认那一行要留着——
+   * 手柄拔掉之后就该回到"空格冲刺 / Q 燃爆"。
+   */
+  setHint(text: string | null): void {
+    if (!this.hintEl) return;
+    if (!this.defaultHint) this.defaultHint = this.hintEl.textContent ?? '';
+    const next = text ?? this.defaultHint;
+    // `is-pad` 是为了手机上那一条 `body.is-touch .hud__hint { display: none }`：
+    // 触屏 + 蓝牙手柄（安卓上很常见）时，藏着的是"空格冲刺"那一行，不该连手柄那行一起藏掉
+    this.hintEl.classList.toggle('is-pad', text !== null);
+    if (this.hintEl.textContent === next) return;
+    this.hintEl.textContent = next;
   }
 
   toast(text: string): void {

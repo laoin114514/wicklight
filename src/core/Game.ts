@@ -45,6 +45,7 @@ import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { PACTS, PACT_MAP, noPacts, pactEmberMult, pactMods, pactsUnlocked, type PactMods } from '../data/pacts';
 import { FIRE_LINES, FIRE_MAP } from '../data/meta';
+import { PAD_HINT, PAD_TIP } from './Gamepad';
 import { POUR } from '../data/pour';
 import { AURA } from '../data/aura';
 import { EMBERWIND } from '../data/emberwind';
@@ -301,6 +302,8 @@ export interface HUDHost {
   /** 首次遭遇的提示卡（标题 + 一行说明）。 */
   tip(title: string, text: string): void;
   announce(text: string, big?: boolean): void;
+  /** 底部那行常驻说明换一份（接了手柄就换成手柄那一行；传 null = 换回键盘那一行）。 */
+  setHint(text: string | null): void;
   /** 清掉屏幕上挂着的卡片与排队待讲的（新开一局时用）。 */
   clearCards(): void;
 }
@@ -495,6 +498,10 @@ export class Game {
   lastKiller: { name: string; color: string } | null = null;
   /** 首局的开局引导队列（剩下的条目），跑完就不再出现。 */
   private hintQueue: { at: number; text: string }[] = [];
+  /** 这一局里"接手柄那张卡"该在第几秒讲（-1 = 不讲，见 setPadState）。 */
+  private padTipAt = -1;
+  /** 现在接没接手柄（HUD 底部那行说明与那张卡都看它）。 */
+  padConnected = false;
   /** 本关灯台总数（HUD 显示 n/m）。 */
   pyreTotal = 0;
   /** 地上的弃灯（「分灯」放下的那盏小灯）。 */
@@ -708,6 +715,10 @@ export class Game {
       (endless ? '无尽之夜 · 开始' : `${stage.theme.name} · ${difficultyLabel(difficulty)}`) + pactTag,
       true,
     );
+    // 接着手柄、而且从来没讲过：排到第 26 秒（躲开开局那两秒的乱与关卡提示卡）。
+    // 讲的是**完整映射**（那张卡），不是一行 toast——手柄玩家看不到 HUD 底部那行键盘提示，
+    // 而这一套键位有八条，塞进 toast 只会挤成一条看不清的横线。
+    this.padTipAt = this.padConnected && !this.save.tips?.includes('input:gamepad') ? 26 : -1;
     // 首局的开局引导：一次性的三条提示，之后 HUD 底部那行常驻说明就够了
     this.hintQueue = this.save.hintsSeen
       ? []
@@ -1150,6 +1161,11 @@ export class Game {
       }
     }
     if (lampPressed) this.tryPlantLamp();
+    // 接着手柄、又没讲过那套键位：到点了就把那张卡放出来（和上面那三条引导一个做法）
+    if (this.padTipAt >= 0 && this.runTime >= this.padTipAt) {
+      this.padTipAt = -1;
+      this.showTip('input:gamepad', PAD_TIP.title, PAD_TIP.text);
+    }
     if (this.hintQueue.length && this.runTime >= this.hintQueue[0].at) {
       const hint = this.hintQueue.shift();
       if (hint) this.hud?.toast(hint.text);
@@ -2370,6 +2386,28 @@ export class Game {
       '遮光 / 暗火 / 夜步 / 守芯这四件只在把灯芯拨小的时候生效：按 C（手机点右下角的「拨芯」）' +
         '把火压住——看得近一半、打得轻三成五，换来的是一桶油多烧近两倍；再按一下拨回来。',
     );
+  }
+
+  /**
+   * 手柄那一帧的状态（v81）。主循环每帧调一次，这里做三件事：
+   *   · **接上 / 拔掉**：HUD 底部那行说明跟着换（手柄玩家看"空格冲刺"是没有用的）；
+   *   · **接上的那一刻**：一句 toast（手柄插上时屏幕没有任何反应才是真的让人困惑）；
+   *   · **第一次**（存档里没有 `input:gamepad`）：讲一次完整映射。
+   *     在战斗里就当场讲，在菜单里就排到下一局第 26 秒（`padTipAt`）——
+   *     开局那两秒屏幕上已经很满了，再糊一张八行的卡进去只会让人按掉它。
+   */
+  setPadState(state: { connected: boolean; id: string } | null): void {
+    const connected = !!state?.connected;
+    if (connected === this.padConnected) return;
+    this.padConnected = connected;
+    this.hud?.setHint(connected ? PAD_HINT : null);
+    if (!connected) return;
+    this.hud?.toast('🎮 手柄已连接');
+    if (this.state === 'playing') {
+      this.showTip('input:gamepad', PAD_TIP.title, PAD_TIP.text);
+    } else if (!this.save.tips?.includes('input:gamepad')) {
+      this.padTipAt = 0;
+    }
   }
 
   /** 弹一张提示卡（同一条只弹一次，之后写进存档）。 */

@@ -2,6 +2,14 @@ import './styles/main.css';
 import { Game } from './core/Game';
 import { Loop } from './core/Loop';
 import { Input } from './core/Input';
+import {
+  Gamepad,
+  PAD_AIM_DEAD as PAD_AIM,
+  PAD_BUTTON as PAD_BUTTON_MAP,
+  PAD_DEADZONE as PAD_DEAD,
+  PAD_HINT,
+  PAD_TIP,
+} from './core/Gamepad';
 import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
@@ -40,6 +48,7 @@ function boot(): void {
   const hud = new HUD(game);
   const touch = new TouchControls(game);
   const input = new Input(canvas);
+  const pad = new Gamepad();
   const wake = new WakeLock();
   // 手机上按返回（或侧滑返回）时不要直接离开页面：暂停，让玩家自己决定
   const backGuard = new BackGuard(() => {
@@ -61,6 +70,10 @@ function boot(): void {
     touch,
     backGuard,
     wake,
+    pad,
+    // 手柄那个类本身也交给测试：映射表（哪个键是哪件事）可以脱离浏览器单量——
+    // 喂一只假手柄进去就行，不用真的插一只手柄（CI 里也没有）。
+    Gamepad,
     // 供测试/调试读取的静态数据表（无副作用）
     // graze / mines / vortex / pour / nova / wick 也放进来：掠影、伏灯、旋灯、倾灯、爆灯、拨芯那几串调参值
     // （带子宽度、引信、吸力、油价、爆灯的代价与门槛……）
@@ -78,6 +91,9 @@ function boot(): void {
       // 「薪火」（v80）：那三条可重复的梯子 + 价格函数。同样是一个**包**（表 + 纯函数），
       // `tests/data.test.mjs` 那张列表也要把它跳过去——理由和上面 `pacts` 那一段一样。
       fire: { FIRE_LINES, FIRE_LEVELS_TOTAL, fireCost },
+      // 手柄那一套（v81）：映射表 + 那两个常量（死区、瞄准死区）+ 两段文案。
+      // 测试要对着它断"哪个键是哪件事"，而这段文案只该有一份（HUD 那行提示与那张卡共用）。
+      pad: { PAD_BUTTON: PAD_BUTTON_MAP, PAD_DEADZONE: PAD_DEAD, PAD_AIM_DEAD: PAD_AIM, PAD_HINT, PAD_TIP },
     },
     daily,
     // 敌人 / 词缀表结构不同（没有 blurb），单独放一份
@@ -107,14 +123,36 @@ function boot(): void {
     update: (dt) => {
       input.update();
       const st = input.state;
+      // 手柄（v81）：和键盘 / 触摸**同一个出口**——它读出一帧的意图，这里合进同一个 snap。
+      // 那几块"选第几张"的面板（升级 / 商店 / 祭坛）上，手柄换一套键位
+      // （脸键 = 第 1~4 张、LB / RB = 商店的第 5、6 件、Back = 重掷，见 Gamepad 文件头第三条）。
+      // 结算屏（阵亡 / 通关）也算"面板"：那一屏上只有一颗按钮（回车 = 那颗主按钮），
+      // 所以 Start 在那儿该是确认而不是暂停——不然手柄打到死就卡住了，只能去摸鼠标。
+      const panelMode =
+        game.state === 'levelup' ||
+        game.state === 'shop' ||
+        game.state === 'shrine' ||
+        game.state === 'dead' ||
+        game.state === 'victory';
+      const ps = pad.poll(panelMode ? 'panel' : 'run');
+      game.setPadState(ps ? { connected: true, id: ps.id } : null);
+      // 两只手可以同时搭在键盘和手柄上（有人就是这么玩的）：两边的走位加起来再归一，
+      // 不然"手柄推一半 + 键盘按一下"会跑出一个人的 1.5 倍速
+      let moveX = st.moveX + (ps?.moveX ?? 0);
+      let moveY = st.moveY + (ps?.moveY ?? 0);
+      const moveLen = Math.hypot(moveX, moveY);
+      if (moveLen > 1) {
+        moveX /= moveLen;
+        moveY /= moveLen;
+      }
       const snap = {
-        moveX: st.moveX,
-        moveY: st.moveY,
-        dash: st.dash,
-        nova: st.nova,
-        lamp: st.lamp,
+        moveX,
+        moveY,
+        dash: st.dash || !!ps?.dash,
+        nova: st.nova || !!ps?.nova,
+        lamp: st.lamp || !!ps?.lamp,
         // 拨芯（见 InputState.dim）：一次性输入、翻的是玩家身上那个开关
-        dim: st.dim,
+        dim: st.dim || !!ps?.dim,
         // 手动瞄准（触屏）：方向 + 力度合成一个向量，见 InputState 上那一段
         aim: false,
         aimX: 0,
@@ -129,19 +167,22 @@ function boot(): void {
       // · 桌面：**按住鼠标右键**，指针指哪儿这一瓢就倒哪儿（见 Input.aimVector）。
       // 两条路各自量自己的行程（手指按下的那一点 / 指针到屏幕中心），主循环只负责二选一：
       // 手指按着的时候以触屏为准——同一个玩家身上两种设备都在时，刚按下去的那根手指说了算。
+      // 手动瞄准现在是三条路（见 InputState.aim）：触屏那根手指 → 手柄右摇杆 → 鼠标右键。
+      // 优先级按"谁更明确"排：手指按着的时候以触屏为准，其次是推着右摇杆的人，
+      // 最后才是鼠标（它没有起点、只能拿屏幕当行程，是三条里最含糊的一条）。
       const aim = snap.aim
         ? { x: snap.aimX, y: snap.aimY }
-        : input.aimVector(game.renderer.width, game.renderer.height);
+        : ps?.aim ?? input.aimVector(game.renderer.width, game.renderer.height);
       game.setInput(snap.moveX, snap.moveY, snap.dash, snap.nova, snap.lamp, aim, snap.dim);
-      if (st.pause) {
+      if (st.pause || ps?.pause) {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'loadout') game.togglePause();
       }
-      if (st.sheet) game.toggleSheet();
+      if (st.sheet || ps?.sheet) game.toggleSheet();
       // 面板热键（见 InputState 上那一整段）：三块会打断战斗的面板——升级卡 / 祭坛 / 商店——
       // 都能用键盘走完，手不必从 WASD 上拿开。规则全在 `Game.panelHotkeys` 里，
       // 这里只把这一帧的键盘状态交过去；回车那一下换的是面板，归界面管。
-      game.panelHotkeys(st.pick, st.reroll);
-      if (st.confirm) ui.panelPrimary();
+      game.panelHotkeys(st.pick || (ps?.pick ?? 0), st.reroll || !!ps?.reroll);
+      if (st.confirm || ps?.confirm) ui.panelPrimary();
       game.update(dt);
       // 战斗里 HUD 整块跟着走；其他界面（暂停 / 结算 / 菜单）也要推卡片与公告的计时，
       // 不然"按了返回键 · 已暂停"这种排队上屏的消息会一直等在那里
@@ -164,6 +205,8 @@ function boot(): void {
   // 玩家会先挨一顿打才反应过来。回来时停在暂停面板上，由玩家自己决定何时继续。
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && game.state === 'playing') game.togglePause();
+    // 切回来的那一帧不该补响"切走时按着的键"（手柄的边沿检测记着上一帧，见 Gamepad）
+    if (document.hidden) pad.reset();
   });
 
   const orientation = setupOrientation((blocked) => {

@@ -1067,6 +1067,8 @@ body.is-touch .hud__build {
   max-width: 52vw;
 }
 body.is-touch .hud__hint { display: none; }
+/* 手机上接了手柄：藏着的那一行是键盘那一份（空格 / Q），手柄那一份要露出来 */
+body.is-touch .hud__hint.is-pad { display: block; }
 
 @media (max-width: 720px) {
   .shrine-grid { grid-template-columns: 1fr; }
