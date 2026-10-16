@@ -27,15 +27,82 @@ export function resolveCircleRect(cx: number, cy: number, r: number, rect: Rect)
 }
 
 export function collideWalls(x: number, y: number, r: number, walls: readonly Rect[]): { x: number; y: number } {
+  const res = collideWallsAt(x, y, r, walls);
+  return { x: res.x, y: res.y };
+}
+
+/**
+ * `collideWalls` 的带出处版本：除了落点，还告诉你**是哪一堵墙**把它推出来的。
+ *
+ * 为什么需要"哪一堵"：怪正对着墙面撞上来的时候要靠**这堵墙的两个端点在哪儿**才能决定往哪边绕
+ * （见 `EnemySystem` 里的 `nearerEnd`）——只有一个落点是不够的，撞在 1200px 长墙的哪一段，
+ * 决定了它该往左绕还是往右绕，而这两条路的长度能差一个数量级。
+ *
+ * 多堵墙同时压着（凹角）时报**推得最狠**的那一堵：那才是它此刻真正贴着的那一面。
+ */
+export function collideWallsAt(
+  x: number,
+  y: number,
+  r: number,
+  walls: readonly Rect[],
+): { x: number; y: number; wall: Rect | null } {
   let px = x;
   let py = y;
+  let wall: Rect | null = null;
+  let deepest = 0;
   for (const w of walls) {
     if (px + r < w.x || px - r > w.x + w.w || py + r < w.y || py - r > w.y + w.h) continue;
     const res = resolveCircleRect(px, py, r, w);
+    const push = Math.hypot(res.x - px, res.y - py);
+    if (push > deepest) {
+      deepest = push;
+      wall = w;
+    }
     px = res.x;
     py = res.y;
   }
-  return { x: px, y: py };
+  return { x: px, y: py, wall };
+}
+
+/**
+ * 一个半径 `r` 的圆从 (x,y) 走 (dx,dy)——撞上墙就**贴着墙面滑**，返回它落在哪儿。
+ *
+ * `hit` 为真时 `nx/ny` 是"被墙推开的那一侧"的单位法线。调用方拿它转 90° 就是切向，
+ * 也就是"沿着这面墙的两个方向里往哪边滑"。这一路输出不是多余的：撞停的那一帧光看落点
+ * 是不知道该往哪儿绕的（见 `EnemySystem.moveWithWalls`）。
+ *
+ * 这里刻意**只**做几何：位移进去、落点出来，怪自己的速度一个字节都不改。
+ * 速度是行为那条线算的（追谁、多快、被旋灯拽着），每帧都要重算一遍；
+ * 在几何这一步去改它，"贴着墙滑"就会变成一种黏住不放手的状态。
+ */
+export interface SlideResult {
+  x: number;
+  y: number;
+  hit: boolean;
+  nx: number;
+  ny: number;
+  /** 把它推出来的那一堵墙（`hit` 为假时是 null）。见 `collideWallsAt`。 */
+  wall: Rect | null;
+}
+
+export function slideStep(
+  x: number,
+  y: number,
+  r: number,
+  dx: number,
+  dy: number,
+  walls: readonly Rect[],
+): SlideResult {
+  const wantX = x + dx;
+  const wantY = y + dy;
+  const res = collideWallsAt(wantX, wantY, r, walls);
+  const px = res.x - wantX;
+  const py = res.y - wantY;
+  const push = Math.hypot(px, py);
+  // 推出去的距离是浮点噪声级别（1e-6 以下）就不算撞：贴着墙走的时候每一帧都会擦到，
+  // 按"撞了"处理会让怪一路都在往切向掰、连直线都走不直。
+  if (push <= 1e-6) return { x: wantX, y: wantY, hit: false, nx: 0, ny: 0, wall: null };
+  return { x: res.x, y: res.y, hit: true, nx: px / push, ny: py / push, wall: res.wall };
 }
 
 export function clampToArena(x: number, y: number, r: number, halfW: number, halfH: number): { x: number; y: number } {

@@ -1835,6 +1835,10 @@ export class Game {
       mineLure: (x, y) => this.nearestArmedMine(x, y, MINE.lure * (1 + this.player.flags.mineLure)),
       pull: (e) => this.applyVortexPull(e),
       quench: (x, y, dt) => this.quenchPyre(x, y, dt),
+      // 墙：怪的位移要过它们（v84）。这是**唯一**一处把墙交给 EnemySystem 的地方——
+      // 别处（弹、玩家、拾取物）各自有各自的判据，不从这里转发。
+      walls: this.level.walls,
+      bash: () => this.audio.play('bash'),
       regen: this.curse?.mods.enemyRegen ?? 0,
       // 「循灯」窗口由 Director 判定（见 data/hunt.ts）：一整波打完了、只剩最后几只的时候，
       // 还没到场的那几只直奔玩家，玩家不用回头把它们一个个捡回来
@@ -1929,7 +1933,13 @@ export class Game {
       const dist = speed ? clamp(base + (this.rng.next() * 2 - 1) * jitter, near, ARRIVAL.max) : base;
       const x = clamp(this.player.x + Math.cos(a) * dist, -this.level.halfW + 40, this.level.halfW - 40);
       const y = clamp(this.player.y + Math.sin(a) * dist, -this.level.halfH + 40, this.level.halfH - 40);
-      if (!pointInWalls(x, y, this.level.walls, 26)) return { x, y };
+      // 离墙至少留出的空当：普通怪按最大的身体（石守半径 22）给到 26 就够；
+      // 精英 / 首领那一路（没传 `speed`）要按**它自己的半径**留——终夜半径 66，
+      // 只留 26 的话它有半个身子生在墙里，而 v84 起怪是会撞墙的：那一帧会被"推出去"
+      //（一帧跳几十像素）。刷怪点本来就在 620~940px 外、屏幕看不见，但"生出来就在墙里"
+      // 这件事不该靠"反正看不见"来兜。
+      const pad = speed ? 26 : 70;
+      if (!pointInWalls(x, y, this.level.walls, pad)) return { x, y };
     }
     return { x: this.player.x + base, y: this.player.y };
   }

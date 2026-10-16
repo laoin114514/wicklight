@@ -28,6 +28,9 @@ test('新敌人 / 词缀 / 夜咒（回响 · 织雾者 · 噬灯魅）', async 
 
   game.bootDone();
   game.newRun('warden', 'normal', false);
+  // 墙（v84 起会真的挡住怪）：这一份里凡是"把怪摆在外头、看它往哪儿走"的用例
+  // 都得先撤墙——量的是行为（回响追脚印 / 织雾者织雾），不是这一局随机生成的地图。
+  game.level.walls.length = 0;
   game.player.stats.maxHp = 1_000_000;
   game.player.hp = 1_000_000;
 

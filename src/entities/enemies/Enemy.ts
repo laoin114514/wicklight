@@ -3,6 +3,59 @@ import { ENEMY_MAP } from '../../data/enemies';
 import { HUNT } from '../../data/hunt';
 import type { EnemyDef } from '../../types';
 import { drawEnemy } from './EnemyArt';
+import { slideStep } from '../../systems/CollisionSystem';
+import type { Rect } from '../../systems/LevelGen';
+
+/**
+ * 冲刺撞在墙上之后，那只怪在原地发呆多久（秒）。
+ *
+ * 这一个数就是「墙从障碍变成掩体」的全部：刺脊的预警线画出来之后，把那次冲锋骗到墙面上，
+ * 换来的就是这一段。它必须长到够你转身走两步、或者把一发重武器打完，又必须短到不会让
+ * 每一面墙都变成一台刷怪机——刺脊自己的一次出手周期是 0.6s 蓄力 + 2.3s 冷却 = 2.9s，
+ * 撞一次墙发呆 0.55s，等于它每次撞墙白丢自己五分之一的出手机会。
+ */
+const WALL_BASH_STUN = 0.55;
+
+/**
+ * 贴着墙磨了这么久还没挪窝就算"卡死"，下帧换个方向重来（秒）。
+ * 只有凹角 / 太窄的缝才会走到这一步——它是兜底，不是常规路径。
+ */
+const WALL_STUCK_SPAN = 0.8;
+
+/**
+ * 离开所有墙多久之后才算"这一轮绕行结束了"（秒）。
+ *
+ * 绕过凸角的那一两帧本来就不碰墙（圆心刚过角点、切向还在往外走，0.03s 量级），
+ * 一离开就清记忆的话，下一帧蹭回墙面上会被当成"新的一轮绕行"，重新按"玩家在哪边"选一次方向——
+ * 于是它转身沿着刚走完的那面墙原路折返回去。所以这一轮绕行**按时间**收尾：0.5 秒自由行走
+ * （影蛭 68px/s 已经是 34px 的直线距离，比绕角那一下宽两个数量级）足够走过这段缝，
+ * 又不至于让它绕完一面墙走出老远还记着上一次的方向。
+ */
+const WALL_MEM_SPAN = 0.5;
+
+/**
+ * 正对着墙面撞上来的时候（切向点积 ≈ 0），左右两边"离玩家的方位"一样远——这时候绕**近的那一头**。
+ *
+ * 原先这里按 `e.id` 的奇偶掷硬币。它的问题不是"随机"（掷出来是多少，同一只怪这一辈子都是那个数），
+ * 而是掷出来的那个数跟"哪一头近"没有任何关系：台架 `tools/bench-wall.mjs --only=wide` 那一栏
+ * （1200px 的墙、撞点离右端 100px、4 颗种子 × 4 只怪）量出来——改前最后一只 39.9s，
+ * 改后 14.3s（首只都是 10.3s）。窄墙上两头一样近，两者没区别；宽墙上差一个数量级。
+ *
+ * 输入是**切向的正方向**（法线转 90°），返回 `+1 / −1`：谁的投影更近就归谁。
+ */
+function nearerEnd(wall: Rect | null, x: number, y: number, tx: number, ty: number): number {
+  if (!wall) return 1;
+  let plus = 0;
+  let minus = 0;
+  for (const cx of [wall.x, wall.x + wall.w]) {
+    for (const cy of [wall.y, wall.y + wall.h]) {
+      const p = (cx - x) * tx + (cy - y) * ty;
+      if (p > plus) plus = p;
+      if (-p > minus) minus = -p;
+    }
+  }
+  return plus <= minus ? 1 : -1;
+}
 
 export interface Enemy {
   active: boolean;
@@ -69,6 +122,25 @@ export interface Enemy {
    */
   hunt: boolean;
   huntSpeed: number;
+  /**
+   * 撞上墙之后打算**从哪一侧绕过去**（+1 / −1，0 = 这一轮绕行已经结束）。
+   *
+   * 一次选定就绕到底，中途不改主意（见 `moveWithWalls`）——每帧重算的话，
+   * 目标正对着墙面的时候点积会正负翻转，怪就在墙面中间左右横跳，永远走不到拐角。
+   */
+  wallSide: number;
+  /** 离墙之后过了多久（秒，见 `WALL_MEM_SPAN`）：它决定 `wallSide` 什么时候作废。 */
+  wallGapT: number;
+  /**
+   * 冲刺撞在墙上之后剩下的发呆时间（秒）。大于 0 时它既不动也不出手——
+   * 这是玩家把冲锋骗进墙里换来的那段空档，也是"墙是掩体"这句话唯一能被兑现的地方。
+   */
+  wallStun: number;
+  /**
+   * 贴着墙磨了多久还没挪窝（秒，见 `moveWithWalls`）：用来判"真的卡死了吗"。
+   * 不挪窝不是"速度慢"——贴着墙面滑的时候它仍然是满速的，只有两边都堵住才会动不了。
+   */
+  wallStuckT: number;
   /**
    * 掠影记账：这只怪**已经贴着玩家多久了**（连续待在掠影带里的秒数）。
    * 「掠影」是擦身而过，不是搂着不放——同一只怪贴久了贡献会一路衰减到 0
@@ -142,6 +214,13 @@ export interface EnemyContext {
   pull?: (e: Enemy) => void;
   /** 站在灯台边把灯焰抽掉一点（吹灯客） */
   quench: (x: number, y: number, dt: number) => void;
+  /**
+   * 场上的墙（`level.walls`）。到 v83 为止怪的位移从来没有问过墙——只有玩家走 `collideWalls`，
+   * 怪是直接穿墙走过来的。空数组 = 这一局没有墙可撞，movement 就退回老样子那两行裸加法。
+   */
+  walls?: readonly Rect[];
+  /** 冲刺一头撞在墙上那一下（音频 / 屏震用；离线台架里可以不接） */
+  bash?: () => void;
   /** 夜咒「低语」：敌人每秒回复的最大生命比例 */
   regen: number;
   /**
@@ -224,6 +303,10 @@ export class EnemySystem {
     huntSpeed: 1,
     grazeCd: 0,
     grazeHold: 0,
+    wallSide: 0,
+    wallGapT: 0,
+    wallStun: 0,
+    wallStuckT: 0,
   }), 256);
 
   spawn(defId: string, x: number, y: number, hpMult: number, damageMult: number): Enemy {
@@ -274,6 +357,10 @@ export class EnemySystem {
     e.huntSpeed = 1;
     e.grazeCd = 0;
     e.grazeHold = 0;
+    e.wallSide = 0;
+    e.wallGapT = 0;
+    e.wallStun = 0;
+    e.wallStuckT = 0;
     return e;
   }
 
@@ -401,8 +488,19 @@ export class EnemySystem {
       }
       if (e.dashing > 0) {
         e.dashing -= dt;
-        e.x += e.dashVx * dt;
-        e.y += e.dashVy * dt;
+        // 冲刺也走"会撞墙"的那一步：一头撞进墙里就是自己把这次出手撞掉了
+        const bash = this.moveWithWalls(e, e.dashVx * dt, e.dashVy * dt, dt, ctx);
+        if (bash) {
+          e.dashing = 0;
+          e.dashVx = 0;
+          e.dashVy = 0;
+          e.wallStun = WALL_BASH_STUN;
+          // 得看得见、听得见：一道灰白的尘 + 一记闷响 + 一点点屏震（就一点点，
+          // 它每 2.9 秒就可能撞一次，震大了一局下来屏幕会一直抖）
+          ctx.burst(e.x, e.y, 10, '#cbd4e8', { speed: 130, size: 3, life: 0.5 });
+          ctx.shake(0.16);
+          ctx.bash?.();
+        }
         e.dashVx *= 1 - Math.min(1, 3 * dt);
         e.dashVy *= 1 - Math.min(1, 3 * dt);
         const dx = ctx.px - e.x;
@@ -415,7 +513,17 @@ export class EnemySystem {
       }
 
       const slow = e.slowTimer > 0 ? e.slowFactor : 1;
-      this.behave(e, dt, ctx, slow);
+      if (e.wallStun > 0) {
+        // 撞晕：这一小段里它既不走也不出手（`behave` 整段跳过）——但身上的火照烧、
+        // 减速 / 标灯的计时照走，因为那些是**别人**记在它身上的账，不该被它自己撞了一下就免掉。
+        // 唯一没被跳过的是"贴身那一口"：它还是一具身体（见 `contactDamage`）。
+        e.wallStun -= dt;
+        e.vx *= 1 - Math.min(1, 8 * dt);
+        e.vy *= 1 - Math.min(1, 8 * dt);
+        this.contactDamage(e, ctx);
+      } else {
+        this.behave(e, dt, ctx, slow);
+      }
       if (e.boss) this.bossAura(e, dt, ctx);
     }
   }
@@ -654,13 +762,114 @@ export class EnemySystem {
 
     ctx.pull?.(e);
 
-    e.x += e.vx * dt;
-    e.y += e.vy * dt;
+    // 这一步是怪**唯一**的位移入口（冲刺那条走的是同一个函数）。见 `moveWithWalls`：
+    // 到 v83 为止这里只有两行裸加法，怪是直接穿过墙走过来的。
+    this.moveWithWalls(e, e.vx * dt, e.vy * dt, dt, ctx);
 
-    if (e.def.behavior !== 'bomber' && d < e.radius + 16) {
-      const drain = e.def.behavior === 'drain' ? 22 : e.affix === 'thorn' ? 9 : 0;
-      ctx.damagePlayer(e.damage, e.x, e.y, drain, e.defId);
+    this.contactDamage(e, ctx);
+  }
+
+  /**
+   * 贴到玩家身上那一口。
+   *
+   * 抽出来是因为它有**两条**调用路径：寻常那一帧在 `behave` 的最后一步，撞晕（`wallStun`）那一帧
+   * 走的是 update 里另一条分支。发呆归发呆，它还是**一具身体**——站在一只撞晕的刺脊怀里
+   * 照样该挨咬，不然"把冲锋骗进墙里，再站上去白打"就成了一套免费的点数。
+   *
+   * ⚠ 判据用的是**到你**的距离，不是"这一帧它在往哪儿走"。`behave` 里那个 `d` 是"离这一帧的目标"
+   *（地上有弃灯时，它的目标是那盏灯）：拿它当接触距离的话，地上摆一盏灯之后，**贴在你身上**的怪
+   * 反倒不咬了（它离灯远）——同一个 `d` 在两条线上是两个意思，这种错在画面上完全看不出来。
+   */
+  private contactDamage(e: Enemy, ctx: EnemyContext): void {
+    if (e.def.behavior === 'bomber') return;
+    const dx = ctx.px - e.x;
+    const dy = ctx.py - e.y;
+    if (dx * dx + dy * dy >= (e.radius + 16) ** 2) return;
+    const drain = e.def.behavior === 'drain' ? 22 : e.affix === 'thorn' ? 9 : 0;
+    ctx.damagePlayer(e.damage, e.x, e.y, drain, e.defId);
+  }
+
+  /**
+   * 把这一帧的位移积分进坐标里，撞上墙就**贴着墙面滑**。返回被推开的那一侧法线（没撞墙是 null）。
+   *
+   * 为什么不能只是"推出去"：正对着墙面撞的那一帧，推出去等于原地不动——怪会永远贴在墙上
+   * （玩家蹲在墙背面就成了白嫖）。所以撞上之后沿墙面滑一步：法线转 90° 就是切向，
+   * 切向的速度大小仍然是它自己该有的速度（"撞墙不掉速，只是要绕远路"）。
+   *
+   * 两边选哪一边，规矩是**一次选定就绕到底**（`wallSide`，直到不再撞墙为止）。
+   * 这一条是被逼出来的：切向和"目标方向"做点积、每帧重算的话，怪贴在 400px 宽的墙面中间、
+   * 目标正对着墙面的时候，点积会随着它左右挪动正负翻转——它就在墙中间来回横跳，
+   * 永远走不到拐角，看起来就是"卡住了"。选定之后不再改主意，凸的矩形上滑到头自然绕过拐角。
+   *
+   * 而"一次选定"的**边界**在哪儿，是量出来的：绕凸角时会有一两帧完全不碰墙（圆心刚过角点），
+   * 要是那一帧就把选择清掉，下一帧蹭回墙上会被当成"新的一轮绕行"重选一次——按"玩家在哪边"
+   * 重选出来的往往是**反方向**，它就沿着刚走完的那面墙折返回去（实测白走 400px：口袋里的
+   * 8 只影蛭从 17 秒变成 23 秒，相位差的那几次到 33 秒）。所以这一轮绕行的边界是**时间**：
+   * 离开所有墙满 `WALL_MEM_SPAN` 秒才算绕完（换成"撞的是不是同一堵墙"也能挡住折返，
+   * 但那样要多记一个字段、多一条分支，而这条分支在变异测试里没有任何用例能区分——不留）。
+   *
+   * 万一真的磨死了（两边都堵：凹角 / 缝太窄），`moved` 那一段会数出来——
+   * 连续 WALL_STUCK_SPAN 秒几乎没挪窝就换个方向重来（不换的话那就是永久卡死）。
+   */
+  private moveWithWalls(
+    e: Enemy,
+    stepX: number,
+    stepY: number,
+    dt: number,
+    ctx: EnemyContext,
+  ): { nx: number; ny: number } | null {
+    const walls = ctx.walls;
+    if (!walls || walls.length === 0) {
+      e.x += stepX;
+      e.y += stepY;
+      return null;
     }
+    const res = slideStep(e.x, e.y, e.radius, stepX, stepY, walls);
+    if (!res.hit) {
+      e.x = res.x;
+      e.y = res.y;
+      // 这一帧没碰墙 ≠ 绕墙绕完了：绕过凸角那一下本来就有几帧自由行走（见 `WALL_MEM_SPAN`）。
+      // 选择过了这个窗口才作废，中间那一两帧蹭回墙上照旧用原来那一侧。
+      e.wallGapT += dt;
+      if (e.wallGapT > WALL_MEM_SPAN) {
+        e.wallSide = 0;
+        e.wallGapT = 0;
+      }
+      e.wallStuckT = 0;
+      return null;
+    }
+    const fromX = e.x;
+    const fromY = e.y;
+    const speed = Math.hypot(stepX, stepY);
+    if (e.wallSide === 0) {
+      // 新的一轮绕行（上一轮已经过期，见 `WALL_MEM_SPAN`）：切向（法线转 90°）往"它想去的那一侧"滑。
+      // 正对着脸撞上来的时候点积是 0，两边一样远——那就绕近的那一头（见 `nearerEnd`）。
+      const along = -res.ny * Math.cos(e.angle) + res.nx * Math.sin(e.angle);
+      e.wallSide =
+        Math.abs(along) < 0.05 ? nearerEnd(res.wall, e.x, e.y, -res.ny, res.nx) : along > 0 ? 1 : -1;
+    }
+    e.wallGapT = 0;
+    const tx = -res.ny * e.wallSide;
+    const ty = res.nx * e.wallSide;
+    const slide = slideStep(e.x, e.y, e.radius, tx * speed, ty * speed, walls);
+    if (slide.hit) {
+      // 沿墙面滑也撞（拐角 / 夹缝）：留在"推出去"那个落点上，下一帧再试——绝不会停在墙里
+      e.x = res.x;
+      e.y = res.y;
+    } else {
+      e.x = slide.x;
+      e.y = slide.y;
+    }
+    if (Math.hypot(e.x - fromX, e.y - fromY) < speed * 0.5) {
+      e.wallStuckT += dt;
+      if (e.wallStuckT > WALL_STUCK_SPAN) {
+        e.wallSide = -e.wallSide;
+        e.wallStuckT = 0;
+      }
+    } else {
+      e.wallStuckT = 0;
+    }
+    return { nx: res.nx, ny: res.ny };
   }
 
   private bossAura(e: Enemy, dt: number, ctx: EnemyContext): void {

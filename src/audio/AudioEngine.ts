@@ -168,6 +168,15 @@ export class AudioEngine {
         this.noise(0.42, 0.15, 900, 0.5);
         this.tone(300, 0.4, 'sine', 0.07, 90);
         break;
+      case 'bash':
+        // 冲刺撞在墙上：一记又低又闷的"咚"。它必须和 `hurt`（你被咬了）分得开——
+        // 这一声是**好消息**：那只怪把自己的一次出手撞掉了。所以压得比 hurt 更低、尾巴更短，
+        // 不往"痛"那边走；一群怪同时撞的时候只留一声（节流）。
+        if (this.throttle('bash', 90)) {
+          this.noise(0.14, 0.11, 320, 0.5);
+          this.tone(150, 0.2, 'sine', 0.1, 72);
+        }
+        break;
       case 'evolve':
         this.tone(440, 0.5, 'triangle', 0.14, 1320);
         break;

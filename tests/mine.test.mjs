@@ -49,6 +49,9 @@ async function open(t, tag = '', px = 700, py = 700) {
     py.x = 9e5;
     py.y = 9e5;
   }
+  // 墙（v84 起会真的挡住怪）：这份用例量的是**规则**，不是这一局的地图——
+  // 关卡是按种子随机生成的，怪要穿过的那一段路上不该横着一堵墙。
+  game.level.walls.length = 0;
   game.enemies.clear();
   game.projectiles.clear();
   game.player.x = px;

@@ -42,6 +42,9 @@ async function open(t, tag = '') {
     py.x = 9e5;
     py.y = 9e5;
   }
+  // 墙（v84 起会真的挡住怪）：这份用例量的是**规则**，不是这一局的地图——
+  // 关卡是按种子随机生成的，怪要穿过的那一段路上不该横着一堵墙。
+  game.level.walls.length = 0;
   game.enemies.clear();
   game.projectiles.clear();
   game.player.x = 0;
@@ -71,6 +74,9 @@ const run = (game, frames, mx = 0, my = 0) => {
 function heatOver(game, relic) {
   game.newRun('warden', 'normal', false);
   game.director.introTimer = 1e9;
+  // 墙（v84 起会真的挡住怪）：这一段量的是"贴着走能攒多少"，怪得先走到你边上——
+  // 路上横着一堵墙，量出来的就是"它没贴上来"（同一个坑见文件头那份 `open`）。
+  game.level.walls.length = 0;
   game.enemies.clear();
   game.player.x = 0;
   game.player.y = 0;
