@@ -1,7 +1,7 @@
 import { baseStats, PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
 import { RELIC_MAP, TRIBES, type RelicMods, type RelicTribeId } from '../data/relics';
 import { weaponAt, WEAPON_MAP } from '../data/weapons';
-import type { Enemy, EnemySystem } from './enemies/Enemy';
+import { applySlow, type Enemy, type EnemySystem } from './enemies/Enemy';
 import type { ParticleSystem } from './Particle';
 import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
@@ -98,6 +98,14 @@ export interface PlayerFlags {
   wickStride: number;
   /** 「拨芯」时每秒回多少灯油（守芯：0.003 = 每秒 0.3%） */
   wickThrift: number;
+  /** 「漫光」（遗物）：灯火半径 +10% —— 它和拨芯是两条相反的路 */
+  lightSpread: number;
+  /** 「旺火」（遗物）：光里每多一只，那一下每只多受的倍率 */
+  auraCrowd: number;
+  /** 「吮灯」（遗物）：每烫到一只敌人回的灯油（占油桶比例） */
+  auraSiphon: number;
+  /** 「烟熏」（遗物）：被烫到的敌人减速多少 */
+  auraSnare: number;
 }
 
 interface OrbitState {
@@ -118,7 +126,7 @@ export class Player {
   weapons = new Map<string, number>();
   passives = new Map<string, number>();
   relics = new Set<string>();
-  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
+  flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
   oil = 1;
   oilMax = 1;
   /** 本局内由祭坛带来的长期修正（recomputeStats 会重新套用）。 */
@@ -261,7 +269,7 @@ export class Player {
     this.weapons.clear();
     this.passives.clear();
     this.relics.clear();
-    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
+    this.flags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
     this.shrineMods = { damageMult: 1, maxHpMult: 1, oilDecayMult: 1, moveSpeedMult: 1, critChance: 0, goldMult: 1 };
     this.pyreMods = { damageMult: 1, lightMult: 1 };
     this.weapons.set(model.weapon, 1);
@@ -363,7 +371,7 @@ export class Player {
     if (passiveOverride && !this.passives.has(passiveOverride.id)) {
       PASSIVE_MAP[passiveOverride.id]?.apply(stats, passiveOverride.level);
     }
-    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0 };
+    const flags: PlayerFlags = { extraProjectiles: 0, lifesteal: 0, chill: 0, contactMult: 1, goldMult: 1, novaHeal: 0, lowOilDamage: 0, novaBuff: 0, pyreBonus: 1, pyreGuard: 1, grazeHeat: 0, grazeOil: 0, blazeTime: 0, blazeGuard: 0, overburnDamage: 0, overburnRefund: 0, overburnEase: 0, overburnGuard: 0, wickGuard: 0, wickEmber: 0, wickStride: 0, wickThrift: 0, lightSpread: 0, auraCrowd: 0, auraSiphon: 0, auraSnare: 0 };
     for (const id of this.relics) {
       const m = RELIC_MAP[id]?.mods;
       if (m) this.applyRelicMods(m, stats, flags);
@@ -442,6 +450,12 @@ export class Player {
     flags.wickEmber += m.wickEmber ?? 0;
     flags.wickStride += m.wickStride ?? 0;
     flags.wickThrift += m.wickThrift ?? 0;
+    // 「燎灯」这条线（v75）：四个键各记各的账。`lightSpread` 刻意不叫 auraLight——
+    // 它改的是**这盏灯**的半径，照到的东西不止燎灯一件（别的武器靠它索敌更远）。
+    flags.lightSpread += m.lightSpread ?? 0;
+    flags.auraCrowd += m.auraCrowd ?? 0;
+    flags.auraSiphon += m.auraSiphon ?? 0;
+    flags.auraSnare = Math.max(flags.auraSnare, m.auraSnare ?? 0);
   }
 
   /** 当前持有某一族遗物的数量。 */
@@ -670,6 +684,7 @@ export class Player {
       WICK.minRadius,
       (96 + this.oilFrac * 224) *
         this.pyreMods.lightMult *
+        (1 + this.flags.lightSpread) *
         this.terrainLight *
         this.baseLightMult *
         (this.blazeTimer > 0 ? GRAZE.blazeLight : 1) *
@@ -992,14 +1007,26 @@ export class Player {
         // 于是"烫到哪儿"和"照着哪儿"是同一个圈（见 AURA.pulseFade）。走的是这个游戏
         // 一直在用的那套话（燃爆 / 收网 / 灯台都是它），而不是另画一条线。
         ctx.particles.shockwave(this.x, this.y, def.color, reach, AURA.pulseFade);
+        // 「旺火」（遗物）先数再打：一次脉冲里光里挤着几只，决定**这一下**每只多重。
+        // 数两遍（先数、再打）是刻意的——一遍数一遍打的话，"打到第几只"会跟着
+        // "前面那几只死没死"变，人越多越旺就变成了人越多越乱。
         let hits = 0;
         ctx.enemies.forEach((e) => {
           const rr = reach + e.radius; // 大块头从边缘就开始被烤（和伏灯的触发判定同一个道理）
-          if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 > rr * rr) return;
-          this.hitEnemy(e, dmg, ctx, st, e.x - this.x, e.y - this.y, id);
-          hits += 1;
+          if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 <= rr * rr) hits += 1;
         });
         if (hits > 0) {
+          const crowd = Math.min(AURA.crowdBonusMax, (hits - 1) * this.flags.auraCrowd);
+          const pulse = dmg * (1 + crowd);
+          const snare = this.flags.auraSnare > 0 ? AURA.snareSpan : 0;
+          ctx.enemies.forEach((e) => {
+            const rr = reach + e.radius;
+            if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 > rr * rr) return;
+            this.hitEnemy(e, pulse, ctx, st, e.x - this.x, e.y - this.y, id);
+            // 「烟熏」（遗物）：光里的地方他们走不开。强度记在 `slowFactor` 上——
+            // 霜棱 / 霜印那 0.5 倍是另一条线的事，合并规矩只有一份（`applySlow`：谁更狠听谁的）。
+            if (snare > 0 && e.active) applySlow(e, snare, 1 - this.flags.auraSnare);
+          });
           ctx.audio(AURA.sound);
           ctx.onAura(hits);
         }

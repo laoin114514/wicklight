@@ -13,6 +13,7 @@ import { BOUNTY_MAP } from '../data/bounties';
 import { CURSE_MAP } from '../data/curses';
 import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
+import { AURA } from '../data/aura';
 import type { Game, GameState, UIHost } from '../core/Game';
 import { haptic, hapticsAvailable } from '../core/Haptics';
 import { isHandheld } from '../core/Perf';
@@ -577,11 +578,25 @@ export class UIManager implements UIHost {
     if (f.wickEmber) family.push(`暗火 每次命中 +${f.wickEmber} 层灼烧`);
     if (f.wickStride) family.push(`夜步 移速 +${Math.round(f.wickStride * 100)}%`);
     if (f.wickThrift) family.push(`守芯 每秒回油 +${(f.wickThrift * 100).toFixed(1)}%`);
+    // 「燎灯」这条线上的四件（v75，一族一件，见 data/relics.ts）：和拨芯那四件**同住一栏**是刻意的——
+    // 玩家要读到的正是它们**在打架**（一边说"收小省油"，一边说"照宽多烧"），
+    // 摆成两栏等于让"一次开局只该选一边"这句话没有地方可写。
+    // 漫光的代价挂在**同一个数的旁边**（半径 +10% 用的是 `lightSpread`，油烧快 12% 是另一条 mod）：
+    // 只写收益不写代价，这一行就成了店里那张说明的残句。
+    const auraFam: string[] = [];
+    if (f.auraCrowd) auraFam.push(`旺火 每多一只 +${Math.round(f.auraCrowd * 100)}%（最多 +${Math.round(AURA.crowdBonusMax * 100)}%）`);
+    if (f.lightSpread) {
+      const cost = RELIC_MAP.auralantern?.mods.oilDecayMult ?? 0;
+      auraFam.push(`漫光 灯火半径 +${Math.round(f.lightSpread * 100)}% · 油烧快 ${Math.round(cost * 100)}%`);
+    }
+    if (f.auraSiphon) auraFam.push(`吮灯 每烫到一只回油 ${(f.auraSiphon * 100).toFixed(2)}%`);
+    if (f.auraSnare) auraFam.push(`烟熏 被烫到的慢 ${Math.round(f.auraSnare * 100)}% · ${AURA.snareSpan}s`);
     const walk = p.wickTime >= 1 ? ` · 本局拨芯 ${Math.round(p.wickTime)}s` : '';
     return `<div class="lo-bounty lo-light ${dim ? 'is-dim' : ''}" style="--c:${WICK.color}">
         <b>${dim ? '🌒 拨芯中 · 微光' : '🔥 灯火全开'}</b>
         <span>灯火半径 ${Math.round(p.lightRadius)}px · 亮度 ×${p.brightness.toFixed(2)} · 火力 ×${p.damageScale.toFixed(2)}${walk}</span>
         ${family.length ? `<span>拨芯这套：${family.join(' · ')}</span>` : ''}
+        ${auraFam.length ? `<span>燎灯这套：${auraFam.join(' · ')}</span>` : ''}
         <span>${
           dim
             ? `灯油耗率 ×${WICK.oilMult} · 索敌跟着灯火一起变近 · 再按一下 C 拨回来`

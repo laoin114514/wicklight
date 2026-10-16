@@ -15,6 +15,8 @@ const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 /** 「拨芯」这条线四件遗物的名字，移动端那条检查要拿它对面板上写出来的字（见 3a2c / 手机那段）。 */
 const RELIC_NAME = { wickveil: '遮光', wickember: '暗火', wickstride: '夜步', wickthrift: '守芯' };
+/** 「燎灯」这条线四件遗物的名字（v75，见 3a9c / 手机那段）。 */
+const AURA_RELIC_NAME = { auraflare: '旺火', auralantern: '漫光', aurasiphon: '吮灯', aurasmother: '烟熏' };
 const DIST = join(ROOT, 'dist');
 const SHOTS = '/tmp/wl/shots';
 
@@ -1519,6 +1521,59 @@ async function main() {
   });
   await sleep(200);
 
+  // ── 3a9c. 「燎灯」这条线（四件遗物，v75）：界面得能把它读出来，而且和拨芯**共用同一栏** ──
+  // 离线单测（tests/aurarelics.test.mjs）量的是四个数各自生效、同一拍里每只同价、空拍不回油。
+  // 这里量的是**另一件事**：这四件改的是"亮着烧"这笔账的四个角，而玩家唯一能读到它们的地方
+  // 就是构筑总览的「灯火」栏——四个数（三个加成 + 一个代价）要连条件一起被写出来，
+  // 而且多出的这一行不许把 1280×720 的面板撑出去。它们和拨芯那四件**住在同一栏**是刻意的：
+  // 玩家要读到的正是"一边收小、一边照宽，一局只该选一边"。
+  const auraFamIds = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.addRelic(id);
+    g.player.recomputeStats();
+  }, auraFamIds);
+  await page.keyboard.press('Tab');
+  await sleep(300);
+  const auraFamText = await page.evaluate(() => document.querySelector('.lo-light')?.textContent ?? '');
+  const auraFamLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
+  expect(auraFamLayout.hOverflow === 0, '加了燎灯那四件，总览仍没被撑出横向滚动', `hOverflow=${auraFamLayout.hOverflow}`);
+  expect(auraFamLayout.issues.length === 0, '带满四件燎灯遗物的构筑总览布局正常', auraFamLayout.issues.join('; '));
+  // ⚠ 这一栏在 `max-height: 92vh; overflow: auto` 的面板里、本来就在折线以下：
+  //   先把它滚进视野再量（和 3a2c 同一个做法）——量的是"滚得进来、且不越界"，
+  //   面板一行一行加下去最容易出事的地方就是这里（滚不到底）。
+  await page.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
+  await sleep(150);
+  const auraFamLight = await page.evaluate(() => window.__PROBE__.layout('.lo-light'));
+  expect(auraFamLight.issues.length === 0, '「灯火」栏滚得进视野、也不越界', auraFamLight.issues.join('; '));
+  // 三个加成 + 漫光那一笔代价，一个都不能少：这一栏短一句，店里的说明就白写了
+  for (const bit of ['旺火', '每多一只 +6%', '漫光', '灯火半径 +10%', '油烧快 12%', '吮灯', '烟熏']) {
+    expect(auraFamText.includes(bit), `「灯火」栏写出「${bit}」`, auraFamText.slice(0, 240));
+  }
+  expect(!/undefined|NaN/.test(auraFamText), '「灯火」栏没有缺字段', auraFamText);
+  await shot('03l2-aura-family');
+  // 图鉴里那条「机制：燎灯」也要点出这四件（玩家是在那里学会"它们是为一件事准备的"）
+  const codexAuraFam = await page.evaluate(() => {
+    const e = window.__WICKLIGHT__.game.codex.entry('mechanic:aura');
+    return { text: JSON.stringify(e?.rows ?? []) + (e?.extra ?? '') };
+  });
+  expect(
+    Object.values({ auraflare: '旺火', auralantern: '漫光', aurasiphon: '吮灯', aurasmother: '烟熏' }).every((n) =>
+      codexAuraFam.text.includes(n),
+    ),
+    '图鉴的「燎灯」条目里点出了这四件遗物',
+    codexAuraFam.text.slice(-180),
+  );
+  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  await page.keyboard.press('Tab');
+  await sleep(250);
+  await page.evaluate((ids) => {
+    const g = window.__WICKLIGHT__.game;
+    for (const id of ids) g.player.removeRelic(id);
+    g.player.recomputeStats();
+  }, auraFamIds);
+  await sleep(150);
+
   // ── 3a-2. 「余烬风」：不动血，动油 ──
   // 这一版新加的险境，真实浏览器里要证明三件事：
   //   ① 火种真的从**上风**一侧一排排飘过来（不是凭空刷在脸上）；
@@ -2063,7 +2118,12 @@ async function main() {
   expect(Math.abs(dmgBlock.sumFrac - 1) < 1e-6, '各来源占比加起来正好是 1', `sumFrac=${dmgBlock.sumFrac}`);
   // 每条按占比画；细得看不见的那几条会被垫到最小 2%（所以总量最多被抬到 100% + 2% × (条数-1)）。
   // 这个上界就是"最小宽度"这条规则的边界——超过了说明有别的脏东西在撑宽。
-  expect(dmgBlock.barSum >= 99.9 && dmgBlock.barSum <= 100 + 2 * (dmgBlock.rows - 1) + 0.5, '条长之和就是总量（顶多被最小宽度垫高一点）', `barSum=${dmgBlock.barSum} rows=${dmgBlock.rows}`);
+  // ⚠ 下界不能写成 99.9（v75 修）：那一条宽度是 `frac * 100` **四舍五入到 0.1%** 之后写进 style 的
+  //   （见 UIManager 那行 `Math.max(2, r.frac * 100).toFixed(1)`），所以每条最多短 0.05%，
+  //   六条加起来正好可能落在 99.90 —— 再被浮点加法磨成 99.89999999999999，就红在一个"本来没错"的数上。
+  //   这里量得出的就是"舍入的代价"：下界 = 100 − 0.05% × 条数，上界 = 最小宽度垫出来的那点余量。
+  const barLow = 100 - 0.05 * dmgBlock.rows - 1e-9;
+  expect(dmgBlock.barSum >= barLow && dmgBlock.barSum <= 100 + 2 * (dmgBlock.rows - 1) + 0.5, '条长之和就是总量（上下两头都是舍入的边界）', `barSum=${dmgBlock.barSum} rows=${dmgBlock.rows} 允许区间 [${barLow}, ${100 + 2 * (dmgBlock.rows - 1) + 0.5}]`);
   expect(dmgBlock.maxPxErr < 0.6, '条在桌上真的画了那么长（不是只有 DOM 上写着）', `maxPxErr=${dmgBlock.maxPxErr}`);
   expect(dmgBlock.pctOk, '百分比写的是这一行自己的占比', JSON.stringify(dmgBlock.names));
   expect(dmgBlock.sorted, '行按伤害从多到少排（扛的那件在最上面）', JSON.stringify(dmgBlock.names));
@@ -3260,16 +3320,18 @@ async function main() {
   expect(keyChips.total > 0 && keyChips.shown === 0, '手机上键盘提示全部藏掉', JSON.stringify(keyChips));
   expect(pausedByTap.wake === false, '暂停后放掉屏幕常亮', JSON.stringify(pausedByTap));
 
-  // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物）。
-  // 窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，所以这里也量一次
-  // （和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
-  // 为了把"最坏情况"量出来，先把四件都塞上：窄屏上那一栏最长就是这样
+  // 手机上那本构筑总览：v70 往「灯火」栏里加了一行（拨芯那四件遗物），v75 又加了**第二**行
+  // （燎灯那四件，见 3a9c）。窄屏横带上最容易出事的正是"多一行把面板撑出横向溢出"，
+  // 所以这里也量一次（和桌面那条同一个做法：这一栏在滚动容器里，先滚进视野再量）。
+  // 为了把"最坏情况"量出来，**两族八件全塞上**：窄屏上这一栏最长就是这样。
   const mFamily = ['wickveil', 'wickember', 'wickstride', 'wickthrift'];
+  const mAuraFamily = ['auraflare', 'auralantern', 'aurasiphon', 'aurasmother'];
+  const mEight = [...mFamily, ...mAuraFamily];
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.addRelic(id);
     g.player.recomputeStats();
-  }, mFamily);
+  }, mEight);
   await mobile.click('[data-act="sheet"]');
   await sleep(350);
   await mobile.evaluate(() => document.querySelector('.lo-light')?.scrollIntoView({ block: 'center' }));
@@ -3288,19 +3350,19 @@ async function main() {
   expect(mobileSheet.issues.length === 0, '手机横带上「灯火」栏不越界', mobileSheet.issues.join('; '));
   expect(mobileSheet.hOverflow === 0, '手机横带上总览没被撑出横向滚动', `hOverflow=${mobileSheet.hOverflow}`);
   expect(
-    mFamily.every((id) => mobileSheet.text.includes(RELIC_NAME[id])),
-    '手机上也把四件拨芯遗物连条件一起写出来了',
-    mobileSheet.text.slice(-160),
+    mEight.every((id) => mobileSheet.text.includes({ ...RELIC_NAME, ...AURA_RELIC_NAME }[id])),
+    '手机上也把两族八件遗物连条件一起写出来了',
+    mobileSheet.text.slice(-200),
   );
   await mobile.screenshot({ path: join(SHOTS, '17c-mobile-light.png') });
   await mobile.click('[data-act="sheet-close"]');
   await sleep(300);
-  // 收尾：把塞进去的四件拿掉（后面的检查照旧）
+  // 收尾：把塞进去的八件拿掉（后面的检查照旧）
   await mobile.evaluate((ids) => {
     const g = window.__WICKLIGHT__.game;
     for (const id of ids) g.player.relics.delete(id);
     g.player.recomputeStats();
-  }, mFamily);
+  }, mEight);
 
   await mobile.click('[data-act="resume"]');
   await sleep(400);

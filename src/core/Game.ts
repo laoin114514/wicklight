@@ -12,7 +12,7 @@ import { CombatHaptics } from './Haptics';
 import { isTouchDevice, perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
 import { Player, type PlayerContext } from '../entities/Player';
-import { EnemySystem, type Enemy, type EnemyContext, type LightCtx } from '../entities/enemies/Enemy';
+import { EnemySystem, applySlow, type Enemy, type EnemyContext, type LightCtx } from '../entities/enemies/Enemy';
 import { ParticleSystem } from '../entities/Particle';
 import { FloatingTextSystem } from '../entities/FloatingText';
 import { PickupSystem, type Pickup } from '../entities/Pickup';
@@ -1621,6 +1621,13 @@ export class Game {
       onAura: (hits) => {
         this.codex.discover('mechanic', 'aura');
         if (hits >= AURA.crowd) this.achievements.unlock('aura_crowd');
+        // 「吮灯」（遗物）：烫到就回油，一次脉冲封顶（见 AURA.siphonMax）。
+        // 它只在**真的烫到东西**时结账——空转的那一下不补，不然"对着空气也能回油"就没有代价了。
+        const siphon = this.player.flags.auraSiphon;
+        if (siphon > 0) {
+          const p = this.player;
+          p.oil = Math.min(p.oilMax, p.oil + p.oilMax * Math.min(AURA.siphonMax, siphon * hits));
+        }
       },
       mine: (x, y, damage, radius, trigger, fire, source) =>
         this.placeMine(x, y, damage, radius, trigger, fire, source),
@@ -1640,7 +1647,6 @@ export class Game {
       lightRadius: this.player.lightRadius,
       time: this.time,
       burnDps: 6 * this.player.stats.burnMult,
-      slowFactor: 1,
       visionUpgrade: this.player.stats.luck,
       damagePlayer: (amount, x, y, drain, source) => this.damagePlayer(amount, x, y, drain, source),
       shoot: (x, y, angle, speed, damage, color, enemy, owner) => {
@@ -1960,7 +1966,7 @@ export class Game {
     kx: number,
     ky: number,
     knockback: number,
-    opts: { burn?: number; slow?: number; source?: string } = {},
+    opts: { burn?: number; slow?: number; slowPower?: number; source?: string } = {},
   ): boolean {
     if (!this.enemies.isVulnerable(e, this.lightCtx())) return false;
     // ⚠ 来源要在咒盾清空 opts **之前**抄下来：`opts = {}` 那一句是为了"元素免疫连灼烧一起免掉"，
@@ -1983,7 +1989,8 @@ export class Game {
     const ember = this.player.dimmed && !warded ? this.player.flags.wickEmber : 0;
     const burn = (opts.burn ?? 0) + ember;
     if (burn > 0) this.enemies.applyBurn(e, burn, source ?? null);
-    if (opts.slow && opts.slow > 0 && e.active) e.slowTimer = Math.max(e.slowTimer, opts.slow);
+    // 减速的合并规矩（谁更狠听谁的）只有一份，在 `applySlow` 里——燎灯那一拍也走它。
+    if (opts.slow && opts.slow > 0 && e.active) applySlow(e, opts.slow, opts.slowPower ?? 0.5);
     if (this.player.flags.lifesteal > 0) {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + reduced * this.player.flags.lifesteal);
     }

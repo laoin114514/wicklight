@@ -37,6 +37,14 @@ export interface RelicMods {
   grazeOil?: number;
   /** 「灯焰高涨」持续时长加成（0.5 = 六秒变九秒） */
   blazeTime?: number;
+  /** 灯火半径加成（0.1 = 半径 +10%） */
+  lightSpread?: number;
+  /** 「燎灯」一次脉冲每多罩住一只，那一下每只多受的倍率（0.06 = 每只 +6%） */
+  auraCrowd?: number;
+  /** 「燎灯」每烫到一只敌人回的灯油（占油桶的比例，0.0005 = 0.05%） */
+  auraSiphon?: number;
+  /** 「燎灯」烫到的敌人减速多少（0.22 = 移速 -22%） */
+  auraSnare?: number;
   /** 「灯焰高涨」期间的减伤（0.3 = 少挨三成） */
   blazeGuard?: number;
   /** 「爆灯」之后的短时伤害加成（0.35 = 那 4 秒里伤害 +35%） */
@@ -147,6 +155,20 @@ export const RELICS: RelicDef[] = [
   { id: 'fuse', tribe: 'oil', name: '引线', blurb: '「爆灯」烧掉的油，一半会在 4 秒里从敌人身上烧回来。', icon: '🧨', color: '#ffd24e', rarity: 'epic', price: 105, mods: { overburnRefund: 0.5 } },
   { id: 'brazier', tribe: 'lamp', name: '火盆', blurb: '「爆灯」的门槛从 55% 灯火降到 30%——半桶就能点着。', icon: '🏺', color: '#ffe27a', rarity: 'epic', price: 95, mods: { overburnEase: 0.25 } },
   { id: 'charcoat', tribe: 'shade', name: '炭衣', blurb: '「爆灯」之后 3 秒内受到伤害 -45%。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 80, mods: { overburnGuard: 0.45 } },
+
+  // ── 「燎灯」这条线（v75）：把"亮着烧"接成一套牌 ──
+  // 燎灯（v73）把**你自己这盏灯**变成了武器：射程 = 灯火半径，罩到谁就烤谁。它交出来的
+  // 也是一句话而不是一套牌——要成为打法，同样得回答四个问题（照「焰路」「爆灯」「拨芯」那三条线的规矩，
+  // **一族一件**）：
+  //   **人挤进来之后打得多重**（旺火，焰火族：光里每多一只，那一下每只都更重）、
+  //   **光有多大、代价是什么**（漫光，长明族：灯火半径 +10%，但油烧快 12%——它是拨芯的反面）、
+  //   **烧掉的这一口油从哪儿回来**（吮灯，灯油族：烫到就回，光里清场就是补油）、
+  //   **放进来的怪会不会把你围死**（烟熏，暗影族：光里的怪走不动）。
+  // 四件凑起来才是"把怪放进来、亮着烧、烧回来的油接着烧"；单拿一件只是把这一件变好一点。
+  { id: 'auraflare', tribe: 'flame', name: '旺火', blurb: '「燎灯」一次脉冲每多罩住一只敌人，那一下每只就多受 6%（最多 +60%）——人越挤，光越旺。', icon: '🔥', color: '#ff8a3c', rarity: 'rare', price: 85, mods: { auraCrowd: 0.06 } },
+  { id: 'auralantern', tribe: 'lamp', name: '漫光', blurb: '灯火半径 +10%（光罩得更宽），但灯油烧快 12%——多烧一点、照得更远。', icon: '🏮', color: '#ffe27a', rarity: 'rare', price: 80, mods: { lightSpread: 0.1, oilDecayMult: 0.12 } },
+  { id: 'aurasiphon', tribe: 'oil', name: '吮灯', blurb: '「燎灯」每烫到一只敌人回 0.05% 灯油（一次最多 0.5%）——光里清场就是补油。', icon: '🕯️', color: '#ffd24e', rarity: 'common', price: 55, mods: { auraSiphon: 0.0005 } },
+  { id: 'aurasmother', tribe: 'shade', name: '烟熏', blurb: '被「燎灯」烫到的敌人移速 -22%，持续 1.2 秒——光里的那块地方，他们走不开。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { auraSnare: 0.22 } },
 
   // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
   // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。

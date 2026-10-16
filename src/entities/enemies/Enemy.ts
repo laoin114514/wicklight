@@ -35,6 +35,8 @@ export interface Enemy {
    */
   burnSource: string | null;
   slowTimer: number;
+  /** 当前减速的强度（0.5 = 移速砍一半）。多条线都能减速，合并规矩见 `applySlow` */
+  slowFactor: number;
   hitFlash: number;
   attackCd: number;
   /** 首领专属招式的独立计时器（不和行为共用，免得贴脸时放不出招牌技） */
@@ -80,7 +82,6 @@ export interface EnemyContext {
   lightRadius: number;
   time: number;
   burnDps: number;
-  slowFactor: number;
   visionUpgrade: number;
   damagePlayer: (amount: number, x: number, y: number, drain?: number, source?: string) => void;
   shoot: (
@@ -148,6 +149,22 @@ export interface EnemyContext {
 /** 蛾能从多远发现地上那盏灯（和 data/mines.ts 的 `lure` 是同一个意思，这里只用来查表） */
 const MINE_LURE = 380;
 
+/**
+ * 给一只怪挂上减速——**所有**减速都从这里过（v75）。
+ *
+ * 能减速的线不止一条：霜棱 / 霜印那一路是固定的 0.5 倍，燎灯的「烟熏」是 -22%（0.78 倍）。
+ * 规矩是**谁更狠听谁的**：已经慢着的时候不许被一个更弱的减速"顶回快的"，
+ * 但时长取长的那个（新的那一路就算更弱，它也续上了自己该续的那一段）。
+ *
+ * 为什么把它抽成一个函数：这条规矩原来是**手写两遍**的（`Game.applyHit` 里一遍、
+ * 燎灯那一拍里一遍）。两遍的写法只要有一遍写漏了 `Math.min`，在界面上完全看不出来——
+ * 玩家只会觉得"这件遗物怎么有时候不灵"。而那句"我们其实写了两遍"正是这种错最爱藏的地方。
+ */
+export function applySlow(e: Enemy, span: number, power: number): void {
+  e.slowFactor = e.slowTimer > 0 ? Math.min(e.slowFactor, power) : power;
+  e.slowTimer = Math.max(e.slowTimer, span);
+}
+
 export class EnemySystem {
   private nextId = 1;
   private ctxRef: EnemyContext | null = null;
@@ -178,6 +195,7 @@ export class EnemySystem {
     burnTimer: 0,
     burnSource: null,
     slowTimer: 0,
+    slowFactor: 0.5,
     hitFlash: 0,
     attackCd: 0,
     bossCd: 0,
@@ -226,6 +244,7 @@ export class EnemySystem {
     e.burnTimer = 0;
     e.burnSource = null;
     e.slowTimer = 0;
+    e.slowFactor = 0.5;
     e.hitFlash = 0;
     e.attackCd = 1;
     e.bossCd = 1.4;
@@ -383,7 +402,7 @@ export class EnemySystem {
         continue;
       }
 
-      const slow = e.slowTimer > 0 ? 0.5 : 1;
+      const slow = e.slowTimer > 0 ? e.slowFactor : 1;
       this.behave(e, dt, ctx, slow);
       if (e.boss) this.bossAura(e, dt, ctx);
     }
