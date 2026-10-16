@@ -18,6 +18,26 @@ import { installDomStubs } from './dom-stubs.mjs';
 
 const ENTRY = new URL('../dist/app.js', import.meta.url);
 
+/**
+ * 一条直线段上有没有墙（贴着墙边 20px 以内也算）。
+ *
+ * 为什么需要它：`Game.resolveProjectiles` 会把**贴进墙里**的弹直接判死（不管是谁打的）。
+ * 这份用例在固定坐标上摆弹幕，而关卡是按种子随机生成的——地图要是在那段路上长出一堵墙，
+ * 弹就会在半路消失，看起来像"旋灯连自己的弹都吃"。所以每条"弹要飞过去"的用例
+ * 都先明说这个前提：它量的是旋灯的规则，不是这一局的地图。
+ */
+function laneClear(game, x0, y0, x1, y1, pad = 20) {
+  for (let t = 0; t <= 1.0001; t += 0.05) {
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    const hit = game.level.walls.some(
+      (w) => x > w.x - pad && x < w.x + w.w + pad && y > w.y - pad && y < w.y + w.h + pad,
+    );
+    if (hit) return false;
+  }
+  return true;
+}
+
 /** 和 mine.test.mjs 一样：开一局干净的，人挪到 700px 外，场面全由测试自己摆。 */
 async function open(t, tag = '') {
   const env = installDomStubs();
@@ -29,7 +49,17 @@ async function open(t, tag = '') {
     game.audio.dispose();
   });
   game.bootDone();
+  // ⚠ 关卡是按种子随机生成的（`newRun` 用 `Math.random()` 取种子），而这一整份用例量的是
+  // "把东西摆在一段路上、看它怎么动"——种子一变，那段路上可能正好横着一堵墙：怪撞在墙上走不动，
+  // 弹贴进墙里被直接判死（见 `Game.resolveProjectiles` 里那条 `pointInWalls`）。
+  // 实测：不钉种子时这份用例单独连跑 120 次里有 10 次红（8%），钉住之后 120 次全绿。
+  // 所以把种子**钉死**——它量的是**规则**，不是这一局的地图；下面每条用例开头还会明说那句前提，
+  // 万一地图生成改了，报出来的该是"这段路上有墙，换一个种子"，而不是"引力失效了"这种假原因。
+  // （同样的做法见 `tests/emberwind.test.mjs` 里替换 `Math.random` 的那一段。）
+  const realRandom = Math.random;
+  Math.random = () => 0.20250815;
   game.newRun('warden', 'normal', false);
+  Math.random = realRandom;
   game.director.introTimer = 1e9;
   for (const s of game.level.shrines) {
     s.x = 9e5;
@@ -269,6 +299,11 @@ test('旋灯：进化那把连弹幕一起卷（卷到中心就吞掉）', async
   const tang = (fromPlayer) =>
     game.projectiles.spawn({ x: 90, y: 0, vx: 0, vy: 120, damage: 12, fromPlayer, radius: 5, color: '#c9a3ff', maxLife: 20 });
   // 自己的子弹：正对着中心飞**穿**过去（一路都在吸入圈里），证明它一根汗毛都没掉
+  // ⚠ 前提（两条，见 `laneClear`）：这一条在固定坐标上摆弹幕，而地图是随机的——
+  //   那两颗弹要飞过的路上都不该有墙，不然量出来的是"它撞墙了"。
+  assert.ok(laneClear(game, 140, 0, 0, 0), '钉住的这个种子里，(0,0)~(140,0) 不该有墙——地图生成改了的话换一个种子');
+  assert.ok(laneClear(game, 0, 0, 0, 0), '漩涡中心本身也得在空地上');
+  assert.ok(laneClear(game, 90, 0, 90, 130), '钉住的这个种子里，(90,0)~(90,130) 不该有墙');
   const mine = game.projectiles.spawn({ x: 140, y: 0, vx: -120, vy: 0, damage: 12, fromPlayer: true, radius: 5, color: '#fff', maxLife: 20 });
   game.placeVortex(0, 0, 20, 200, 0, 1); // drag = 1：漩涡灯
   const bullet = tang(false);
@@ -281,6 +316,7 @@ test('旋灯：进化那把连弹幕一起卷（卷到中心就吞掉）', async
 
   // 没进化的那一把不卷弹幕：同一颗切向弹直着飞出去，掉毛都不掉
   const plain = await open(t, 'no-drag');
+  assert.ok(laneClear(plain, 90, 0, 90, 130), '钉住的这个种子里，(90,0)~(90,130) 不该有墙——地图变了就换一个种子');
   plain.placeVortex(0, 0, 20, 200, 0, 0);
   const b2 = plain.projectiles.spawn({ x: 90, y: 0, vx: 0, vy: 120, damage: 12, fromPlayer: false, radius: 5, color: '#c9a3ff', maxLife: 20 });
   run(plain, 60);

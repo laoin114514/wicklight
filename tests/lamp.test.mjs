@@ -14,6 +14,25 @@ import { installDomStubs } from './dom-stubs.mjs';
 
 const ENTRY = new URL('../dist/app.js', import.meta.url);
 
+/**
+ * 一条直线段上有没有墙（贴着墙边 20px 以内也算）。
+ *
+ * 为什么需要它：怪和弹都走直线，而关卡是按种子随机生成的——那段路上要是有堵墙，
+ * 量出来的就是"它撞墙了"，可断言那句话看着却像"分灯的引力失效"（最难查的那类红）。
+ * 所以先把前提说明白：这些用例量的是规则，不是这一局的地图。
+ */
+function laneClear(game, x0, y0, x1, y1, pad = 20) {
+  for (let t = 0; t <= 1.0001; t += 0.05) {
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    const hit = game.level.walls.some(
+      (w) => x > w.x - pad && x < w.x + w.w + pad && y > w.y - pad && y < w.y + w.h + pad,
+    );
+    if (hit) return false;
+  }
+  return true;
+}
+
 /** 开局：血厚到打不死，免得几百帧的观察变成一局死亡结算。 */
 async function open(t) {
   const env = installDomStubs();
@@ -25,7 +44,17 @@ async function open(t) {
     game.audio.dispose();
   });
   game.bootDone();
+  // ⚠ 关卡是按种子随机生成的（`newRun` 用 `Math.random()` 取种子），而这一整份用例量的是
+  // "把东西摆在一段路上、看它怎么动"——种子一变，那段路上可能正好横着一堵墙：怪撞在墙上走不动，
+  // 弹贴进墙里被直接判死（见 `Game.resolveProjectiles` 里那条 `pointInWalls`）。
+  // 实测：不钉种子时这份用例单独连跑 120 次里有 10 次红（8%），钉住之后 120 次全绿。
+  // 所以把种子**钉死**——它量的是**规则**，不是这一局的地图；下面每条用例开头还会明说那句前提，
+  // 万一地图生成改了，报出来的该是"这段路上有墙，换一个种子"，而不是"引力失效了"这种假原因。
+  // （同样的做法见 `tests/emberwind.test.mjs` 里替换 `Math.random` 的那一段。）
+  const realRandom = Math.random;
+  Math.random = () => 0.20250815;
   game.newRun('warden', 'normal', false);
+  Math.random = realRandom;
   game.player.stats.maxHp = 1e6;
   game.player.hp = 1e6;
   return game;
@@ -95,6 +124,10 @@ test('分灯：朝你来的怪会改朝那盏灯走', async (t) => {
   game.player.y = 0;
   game.enemies.clear();
   const e = game.enemies.spawn('shade', lamp.x + 300, lamp.y, 1, 1);
+
+  // ⚠ 前提（见文件顶上的 `laneClear`）：从怪到灯这一段得是空地——量的是引力，不是这一局的地图。
+  assert.ok(laneClear(game, e.x, e.y, lamp.x, lamp.y), '钉住的这个种子里，怪到灯这一段不该有墙——地图生成改了的话换一个种子');
+
   const dLamp0 = Math.hypot(e.x - lamp.x, e.y - lamp.y);
   const dPlayer0 = Math.hypot(e.x - game.player.x, e.y - game.player.y);
 
