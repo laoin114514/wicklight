@@ -93,6 +93,18 @@ const GRID_STEP = 150;
 /** 墙体精灵外扩：投影往右下偏 (6, 8)，2px 描边还有一半在框外，留 12px 富余。 */
 const WALL_SPRITE_PAD = 12;
 
+/**
+ * 糜液打在墙面上会溅开多远（px，v92）。
+ *
+ * 它不是第二颗子弹：墙照旧拦住那一条直线，只在**刚打中的这堵墙**两侧溅一小圈。
+ * 52 这个数是从"贴墙"量出来的：墙厚 20、玩家半径 14、子弹一帧往墙里走 4px，
+ * 贴着墙背站的人离落点约 38px——够得着；再退开 20px 就掉到 60px 外，够不着。
+ * 也就是说它罚的是"把脸贴在墙上"，不是"墙后有掩体"这件事本身。
+ */
+const SPIT_WALL_SPLASH_R = 52;
+/** 溅到的那一下只算这一口的五成：墙面挡掉的是"正中"，不是"一点都不漏"。 */
+const SPIT_WALL_SPLASH_FRAC = 0.5;
+
 
 interface WallSprite {
   canvas: HTMLCanvasElement;
@@ -2751,11 +2763,11 @@ export class Game {
   }
 
   private resolveProjectiles(dt: number): void {
-    void dt;
     for (const p of this.projectiles.all) {
       if (!p.active) continue;
       if (pointInWalls(p.x, p.y, this.level.walls, 0)) {
         if (p.explode > 0) this.explode(p);
+        else if (!p.fromPlayer && p.ownerId === 'spitter') this.spitWallSplash(p, dt);
         p.active = false;
         continue;
       }
@@ -2800,6 +2812,44 @@ export class Game {
         }
       }
     }
+  }
+
+  /**
+   * 喷糜者那一口撞墙时，在落点溅一小圈糜液（v92）。
+   *
+   * 墙从 v84 起就是实心的：子弹进墙就死。可"实心"只回答了**正中那一下**——
+   * 一面墙不会把一整口糜液擦得干干净净。这一版让它在墙面落点溅开：
+   * 贴墙站的人会吃到半口，退开一步就没事。
+   *
+   * 三个边界是刻意的：
+   *   · 只接 `spitter`。首领「焚天」的环形齐射、别的怪的子弹、玩家自己的弹道都不走这里——
+   *     那不是"一口糜液"，不该共享这条手感；
+   *   · 只放过**刚打中的那堵墙**（`rest`）：糜液是贴着墙面溅开的，不是把墙变成透明；
+   *     第二堵墙照旧挡得住，墙后的人也不会被整条弹道穿过去；
+   *   · 落点取"这一帧进墙之前"的位置（`p - v * dt`）：`p` 已经在墙里了，拿它当圆心
+   *     会让厚墙自动多送几像素的射程。速度 250、60fps 时两者只差 4px，但规矩要写对。
+   */
+  private spitWallSplash(p: Projectile, dt: number): void {
+    const walls = this.level.walls;
+    const back = Math.max(0, dt);
+    let sx = p.x - p.vx * back;
+    let sy = p.y - p.vy * back;
+    if (pointInWalls(sx, sy, walls, 0)) {
+      sx = p.x;
+      sy = p.y;
+    }
+    const hitWall = walls.find(
+      (w) => p.x >= w.x && p.x <= w.x + w.w && p.y >= w.y && p.y <= w.y + w.h,
+    ) ?? null;
+    const rest = hitWall ? walls.filter((w) => w !== hitWall) : walls;
+    this.particles.burst(sx, sy, 7, '#c9a3ff', { speed: 90, size: 2.4, life: 0.35 });
+    this.particles.shockwave(sx, sy, '#8f6db8', SPIT_WALL_SPLASH_R * 0.9, 0.28);
+    this.audio.play('spit_splash');
+    const dx = this.player.x - sx;
+    const dy = this.player.y - sy;
+    if (dx * dx + dy * dy > SPIT_WALL_SPLASH_R * SPIT_WALL_SPLASH_R) return;
+    if (wallBetween(sx, sy, this.player.x, this.player.y, rest)) return;
+    this.damagePlayer(p.damage * SPIT_WALL_SPLASH_FRAC, sx, sy, 0, p.ownerId || undefined);
   }
 
   private explode(p: Projectile): void {

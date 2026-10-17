@@ -57,6 +57,11 @@
  *                  `zig` 0.6s 一条腿、侧向摆 ±96px。改前（v90）只有"站着"会挨打（40 发 40 中），
  *                  另外四种全是 40 发 1 中（那一发还是地图上落下来的陨火）；改后 `run` 追平 40 发 40 中，
  *                  而拐弯 / 急停 / 折线照旧一发不中——**"改方向就躲得掉"是这一版的判据**。
+ *   · `spitsplash`（v92）—— **糜液砸在墙上会不会溅到墙背**：从 (96,0) 往 +x 发一颗喷糜者的弹，
+ *                  墙在 x=100~120，玩家分别站在无墙（整口 9）/ 贴墙背（38px，半口 4.5）/
+ *                  退 20px（58px，0）/ 退 40px（78px，0）/ 第二堵墙背后（48px，0）。
+ *                  最后两格是同一件事的两条边界：**离墙一步就安全**，**第二堵墙照旧挡得住**。
+ *                  这一栏用同一颗弹、同一帧、同一套伤害读数，种子只影响地图外的随机数。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -79,7 +84,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,spitaim,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,spitaim,spitsplash,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -600,6 +605,65 @@ async function runSpitAim(seed, pattern) {
   return { shots, hits };
 }
 
+/**
+ * v92：糜液溅墙。这里不摆怪，直接发一颗喷糜者的弹——这一栏量的是"弹进墙那一帧"
+ * 这一条规则本身，不是它隔多久开一枪。弹从 96 出发、墙在 100~120，一帧后就进墙。
+ * `playerX` 是玩家圆心：134 = 贴着墙背（身体半径 14），154 = 退开 20px。
+ */
+const SPLASH_WALL = { x: 100, y: -300, w: 20, h: 600 };
+const SPLASH_WALL2 = { x: 120, y: -300, w: 10, h: 600 };
+const SPLASH_CELLS = [
+  { id: 'open', name: '无墙', x: 134, walls: [] },
+  { id: 'hug', name: '贴墙', x: 134, walls: [SPLASH_WALL] },
+  { id: 'step20', name: '退20px', x: 154, walls: [SPLASH_WALL] },
+  { id: 'step40', name: '退40px', x: 174, walls: [SPLASH_WALL] },
+  { id: 'second', name: '第二堵墙', x: 144, walls: [SPLASH_WALL, SPLASH_WALL2] },
+];
+
+async function runSpitSplash(seed, cell) {
+  const { game, p } = await open(seed, `spitsplash-${cell.id}`);
+  game.enemies.clear();
+  game.projectiles.clear();
+  game.grounds.length = 0;
+  game.hazards.length = 0;
+  game.level.walls.length = 0;
+  for (const w of cell.walls) game.level.walls.push(w);
+  p.x = cell.x;
+  p.y = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.oil = p.oilMax;
+  p.stats.maxHp = 1e9;
+  p.hp = 1e9;
+  p.invuln = 0;
+  p.dashTimer = 0;
+  let hits = 0;
+  let amount = 0;
+  const realDamage = game.damagePlayer.bind(game);
+  game.damagePlayer = (a, hx, hy, drain, source) => {
+    if (source === 'spitter') {
+      hits += 1;
+      amount += a;
+    }
+    return realDamage(a, hx, hy, drain, source);
+  };
+  game.projectiles.spawn({
+    x: 96, y: 0, vx: 250, vy: 0, damage: 9, radius: 7,
+    fromPlayer: false, ownerId: 'spitter', maxLife: 3, color: '#c9a3ff',
+  });
+  for (let i = 0; i < 60; i += 1) {
+    p.x = cell.x;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+  }
+  game.damagePlayer = realDamage;
+  return { hits, amount, hpLost: 1e9 - p.hp };
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -688,6 +752,24 @@ if (ONLY.includes('spitblind')) {
   row('它开了几枪(20s)', cell.shots);
   row('命中你几次', cell.hits);
   row('它挪了多远(px)', cell.moved);
+}
+if (ONLY.includes('spitsplash')) {
+  console.log('');
+  console.log(`${pad('糜液溅墙（v92）', 16)}${SPLASH_CELLS.map((c) => pad(c.name, 10)).join('')}`);
+  const cells = [];
+  for (const cell of SPLASH_CELLS) {
+    let lost = 0;
+    let hits = 0;
+    for (const seed of SEEDS) {
+      const r = await runSpitSplash(seed, cell);
+      lost += r.hpLost;
+      hits += r.hits;
+    }
+    const n = SEEDS.length;
+    cells.push(lost / n);
+    out[`spitsplash-${cell.id}`] = { damage: lost / n, hits: hits / n };
+  }
+  console.log(`${pad('你掉的血', 16)}${cells.map((v) => pad(v.toFixed(1), 10)).join('')}`);
 }
 if (ONLY.includes('spitaim')) {
   console.log('');

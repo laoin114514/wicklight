@@ -220,6 +220,14 @@ export class AudioEngine {
           this.tone(140, 0.45, 'sine', 0.1, 70);
         }
         break;
+      case 'spit_splash':
+        // 糜液砸在墙面上：一声短促的湿响，音高比 `pour_splash` 高一点——
+        // 那是你自己的油泼在地上（厚），这是敌人那一口溅在石头上（薄）。
+        if (this.throttle('spit_splash', 100)) {
+          this.noise(0.18, 0.07, 520, 0.8);
+          this.tone(170, 0.16, 'sine', 0.05, 90);
+        }
+        break;
       case 'graze':
         // 掠影：一声很轻的"叮"。它一秒钟能响好几下，所以压得比别的都低、节流也更狠
         //（一轮弹幕擦过去五六下，响成一片就变成噪音了）。
