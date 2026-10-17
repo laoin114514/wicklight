@@ -3,7 +3,7 @@ import { ENEMY_MAP } from '../../data/enemies';
 import { HUNT } from '../../data/hunt';
 import type { EnemyDef } from '../../types';
 import { drawEnemy } from './EnemyArt';
-import { slideStep } from '../../systems/CollisionSystem';
+import { slideStep, wallBetween } from '../../systems/CollisionSystem';
 import type { Rect } from '../../systems/LevelGen';
 
 /**
@@ -593,13 +593,21 @@ export class EnemySystem {
         break;
       }
       case 'ranged': {
+        // 「看不见你就不吊着了」（v90）：到 v89 为止这一条只认**距离**——你躲到墙后面、
+        // 它恰好落在"保持距离"那一档里（180~260px），它就站在那儿把一梭子一梭子全打在墙面上
+        // （子弹进墙就死），一局都不挪窝：数据里那句"**逼你离开掩体**"在墙做实之后（v84）就走不通了。
+        // 现在看不见你的时候 `keep` 归零、也不开枪：它得先压过来（路上靠 v84 那套沿墙滑绕过去），
+        // 绕到看得见你，再开始吐糜液。墙拿的是 `ctx.walls`——和"能不能走过去"是同一堵墙，
+        // 所以 `bench-wall --nocollide` 那套对照会连着这一条一起关掉（对照才还在同一件事上）。
+        const walls = ctx.walls;
+        const blind = walls && walls.length > 0 ? wallBetween(e.x, e.y, ctx.px, ctx.py, walls) : false;
         // 循灯的时候不再保持距离：这一波已经结束了，还吊在中距离就只是让人多走一趟
-        const keep = hunt ? 0 : 220;
+        const keep = hunt || blind ? 0 : 220;
         const dir = d > keep + 40 ? 1 : d < keep - 40 ? -1 : 0;
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
         e.attackCd -= dt;
-        if (e.attackCd <= 0 && playerDist < 520) {
+        if (e.attackCd <= 0 && playerDist < 520 && !blind) {
           e.attackCd = 2.1;
           ctx.shoot(e.x, e.y, Math.atan2(pdy, pdx), 250, e.damage, '#c9a3ff', true, e.defId);
         }

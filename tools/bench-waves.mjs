@@ -79,6 +79,11 @@ const FIXED = args.has('fixed');
  * 那就是白打，v89 要杀的就是它，改后这一小栏必须是 **0**。
  * 为什么"挑中墙后面"本身不用清零：全都看不见时索敌照旧要挑一只（它答的是"挑哪一只"，
  * 不是"打不打"，见 `Game.nearestEnemy` 那一段）——所以留在这儿当读数，不当判据。
+ *
+ * v90 在同一层包装里再加一栏，问的是**喷糜者有没有隔着墙开枪**：到 v89 为止它只认距离，
+ * 你躲在墙后面它就站着打墙（一局都不挪窝）。这一栏数它"看不见你的时候开的枪"——
+ * 改前在真实局里量得到（`--fixed --seeds=6` holder 8.3 次/局 / chaser 3.8，自然局 4.2 / 5.8），
+ * 改后必须是 **0**；它一共开了几枪也印出来当分母。
  */
 const NOWALLS = args.has('nowalls');
 /**
@@ -163,6 +168,25 @@ async function run({ seed, style, stages }) {
       return e;
     };
     return ctx;
+  };
+
+  // 喷糜者隔着墙开枪（v90）：见文件头。数的只是它（`owner === 'spitter'`）——
+  // 首领的环形齐射不在此列（那是"炸出去的一圈"，不是"瞄着你打的那一口"，见 `blindfire.test.mjs`）。
+  // 判"看不看得见"直接借玩家那一路 `sight`（游戏自己那份墙判据），不在台架里重写一遍几何。
+  let spitShots = 0;
+  let spitBlind = 0;
+  const realEnemyCtx = game.enemyCtx.bind(game);
+  game.enemyCtx = () => {
+    const ec = realEnemyCtx();
+    const realShoot = ec.shoot;
+    ec.shoot = (x, y, angle, speed, damage, color, enemy, owner) => {
+      if (enemy && owner === 'spitter') {
+        spitShots += 1;
+        if (!game.playerCtx().sight(x, y, game.player.x, game.player.y)) spitBlind += 1;
+      }
+      return realShoot(x, y, angle, speed, damage, color, enemy, owner);
+    };
+    return ec;
   };
 
   if (FIXED) {
@@ -339,7 +363,7 @@ async function run({ seed, style, stages }) {
     // 难度是不是被顺带改了，得有个数看得见："循灯"只许改节奏，不许偷偷加伤害
     dmgTaken: Math.round(game.damageTaken),
     hpFrac: +(game.player.hp / game.player.stats.maxHp).toFixed(2),
-    dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, aimAsked, aimBlocked, aimWasted, levelTimes, waves,
+    dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, aimAsked, aimBlocked, aimWasted, spitShots, spitBlind, levelTimes, waves,
   };
 }
 
@@ -388,7 +412,7 @@ for (const style of STYLES) {
   out.push({
     style,
     s,
-    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash, lightBlocked: r.lightBlocked, aimBlocked: r.aimBlocked, aimWasted: r.aimWasted })),
+    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash, lightBlocked: r.lightBlocked, aimBlocked: r.aimBlocked, aimWasted: r.aimWasted, spitBlind: r.spitBlind })),
   });
   console.log(`\n── 走位 ${style} · ${runs.length} 局 · ${FIXED ? '钉死火力' : GOD ? '打不死' : '自然'}`
     + ` · ${runs[0].stage} 关跑完（最远到第 ${Math.max(...runs.map((r) => r.stage))} 关）──────────`);
@@ -409,6 +433,10 @@ for (const style of STYLES) {
     + ` = ${aimA ? ((aimB / aimA) * 100).toFixed(1) : '0.0'}% · 这一栏是读数，全看不见时照旧挑一只）`);
   console.log(`  其中"明明还有看得见的"：${(aimW / runs.length).toFixed(1)} 次/局（共 ${aimW} 次 · v89 那条规矩`
     + ` · 必须是 0）${NOWALLS ? ' · 墙已被 --nowalls 拿掉，这两栏必须是 0' : ''}`);
+  const spitS = runs.reduce((a, r) => a + (r.spitShots ?? 0), 0);
+  const spitB = runs.reduce((a, r) => a + (r.spitBlind ?? 0), 0);
+  console.log(`  喷糜者隔着墙开的枪：${(spitB / runs.length).toFixed(1)} 次/局（共 ${spitB} 次 / 它一共开了 ${spitS} 枪`
+    + ` · v90 那条规矩 · 必须是 0）${NOWALLS ? ' · 墙已被 --nowalls 拿掉，它必须是 0' : ''}`);
   const blocked = runs.reduce((a, r) => a + (r.lightBlocked ?? 0), 0);
   const asked = runs.reduce((a, r) => a + (r.lightAsked ?? 0), 0);
   console.log(`  自己身上的火被墙挡掉：${(blocked / runs.length).toFixed(1)} 次/局（共 ${blocked} 次 · v88 那条规矩`

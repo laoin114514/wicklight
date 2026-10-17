@@ -45,6 +45,12 @@
  *                  期望是 **180.0 / 90.0 / 180.0**（度），挨打也跟着翻——"隔着墙"那一格是
  *                  墙后那只 **0.0**、看得见的那只 **27.0**；另外两格逐位相同（都是墙后那只 27.0）。
  *                  这一栏是"读数为什么值得改"的现场：改前（v88）三格**都是 180.0**，子弹全打在墙上。
+ *   · `spitblind`（v90）—— **隔着墙的喷糜者**：它站的位置正好落在自己那个"保持距离"的档里
+ *                  （250px，档位是 180~260px），墙在两人中间。三格与 `selflight` 同一套摆法
+ *                  （无墙 / 墙在中间 / 墙在旁边），量的是 20 秒游戏时间里：**它开了几枪 / 命中你几次 /
+ *                  它挪了多远**。期望是——无墙与"墙在旁边"两格逐位相同（9 / 9 / 站着不动），
+ *                  "墙在中间"那一格改后是 **4 / 4 / 挪 314.2px**（改前是 **9 / 0 / 一动不动**：
+ *                  那一梭子全打在墙面上）。这一栏量的不是"伤害多少"，是**它有没有在打墙**。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -67,7 +73,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -456,6 +462,61 @@ async function runAimPick(seed, kind) {
   return { angle: ((p.angle * 180) / Math.PI + 360) % 360, lostNear, lostFar };
 }
 
+/**
+ * v90：隔着墙的喷糜者。它摆在自己那个"保持距离"档里（250px），墙就在两人中间——
+ * 改前它就站在那儿把一梭子全打在墙面上（20 秒 9 枪 0 命中、一步没挪）。
+ * 量三个数：**开了几枪**（敌人弹体的生成次数）/ **命中你几次**（`damagePlayer` 被叫到几次）/
+ * **它挪了多远**（20 秒后离出发点多远——"压过来"这件事的唯一证据）。
+ * 这个场上只有它会伤害玩家，所以前两个数就是"打在墙上"与"打在你身上"的直读。
+ */
+const SPIT_CONF = {
+  none: [],
+  mid: [{ x: -110, y: -300, w: 20, h: 600 }],
+  beside: [{ x: 300, y: -300, w: 20, h: 600 }],
+};
+
+async function runSpit(seed, kind) {
+  const { game, p } = await open(seed, `spit-${kind}`);
+  p.stats.maxHp = 1e6;
+  p.hp = 1e6;
+  game.level.walls.length = 0;
+  for (const w of SPIT_CONF[kind]) game.level.walls.push(w);
+  game.enemies.clear();
+  game.projectiles.clear();
+  p.x = 0;
+  p.y = 0;
+  p.oil = p.oilMax;
+  const e = game.enemies.spawn('spitter', -250, 0, 1, 1);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  let shots = 0;
+  let hits = 0;
+  const realSpawn = game.projectiles.spawn.bind(game.projectiles);
+  const realDamage = game.damagePlayer.bind(game);
+  game.projectiles.spawn = (q) => {
+    if (!q.fromPlayer) shots += 1;
+    return realSpawn(q);
+  };
+  game.damagePlayer = (amount, hx, hy, drain, source) => {
+    hits += 1;
+    return realDamage(amount, hx, hy, drain, source);
+  };
+  for (let i = 0; i < 20 * 60; i += 1) {
+    p.hp = 1e6;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+  }
+  game.projectiles.spawn = realSpawn;
+  game.damagePlayer = realDamage;
+  return { shots, hits, moved: Math.hypot(e.x + 250, e.y) };
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -519,6 +580,31 @@ if (ONLY.includes('aimpick')) {
   row('瞄准角(°)', cell.angle);
   row('墙后面那只挨了', cell.near);
   row('看得见那只挨了', cell.far);
+}
+if (ONLY.includes('spitblind')) {
+  console.log('');
+  console.log(`${pad('隔着墙的喷糜者', 16)}${pad('无墙', 9)}${pad('隔着墙', 9)}${pad('墙在旁边', 9)}`);
+  const cell = { shots: [], hits: [], moved: [] };
+  for (const kind of ['none', 'mid', 'beside']) {
+    let shots = 0;
+    let hits = 0;
+    let moved = 0;
+    for (const seed of SEEDS) {
+      const r = await runSpit(seed, kind);
+      shots += r.shots;
+      hits += r.hits;
+      moved += r.moved;
+    }
+    const n = SEEDS.length;
+    cell.shots.push(shots / n);
+    cell.hits.push(hits / n);
+    cell.moved.push(moved / n);
+    out[`spitblind-${kind}`] = { shots: shots / n, hits: hits / n, moved: moved / n };
+  }
+  const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(1), 9)).join('')}`);
+  row('它开了几枪(20s)', cell.shots);
+  row('命中你几次', cell.hits);
+  row('它挪了多远(px)', cell.moved);
 }
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {

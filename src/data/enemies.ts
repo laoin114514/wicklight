@@ -3,7 +3,7 @@ import type { EnemyDef } from '../types';
 export const ENEMIES: EnemyDef[] = [
   { id: 'shade', name: '影蛭', hp: 14, speed: 68, radius: 13, damage: 8, xp: 3, oil: 4, behavior: 'chase', color: '#4a5b8f', minWave: 1, note: '最普通的夜行者，成群出现；单只不足为惧，成潮时会把你围住。' },
   { id: 'crawler', name: '砾行者', hp: 12, speed: 52, radius: 12, damage: 10, xp: 4, oil: 3, behavior: 'dash', color: '#8f6f4a', minWave: 1, note: '会短距离突进扑上来，出手前有一瞬间的停顿，那一瞬是闪避窗口。' },
-  { id: 'spitter', name: '喷糜者', hp: 20, speed: 40, radius: 15, damage: 9, xp: 6, oil: 5, behavior: 'ranged', color: '#6f4a8f', minWave: 2, note: '保持距离吐射糜液，逼你离开掩体；靠近它会退，但退得不快。' },
+  { id: 'spitter', name: '喷糜者', hp: 20, speed: 40, radius: 15, damage: 9, xp: 6, oil: 5, behavior: 'ranged', color: '#6f4a8f', minWave: 2, note: '保持距离吐射糜液，逼你离开掩体；看不见你就压上来（v90），不站在墙后面干耗；靠近它会退，但退得不快。' },
   { id: 'moth', name: '灯蛾', hp: 18, speed: 96, radius: 14, damage: 7, xp: 5, oil: 6, behavior: 'dive', color: '#a58f4a', minWave: 3, note: '被灯火吸引的蛾群，高速俯冲；它们扑的是光，不是你——地上你埋的伏灯也算光，所以雷能当饵。' },
   { id: 'bulwark', name: '石守', hp: 90, speed: 34, radius: 22, damage: 14, xp: 12, oil: 10, behavior: 'tank', color: '#5a5f6f', minWave: 4, note: '石壳厚实、移动迟缓，正面硬拼很亏，绕着打或用燃爆清场。' },
   { id: 'oilsapper', name: '蚀烛', hp: 30, speed: 74, radius: 16, damage: 6, xp: 8, oil: 0, behavior: 'drain', color: '#8f4a6f', minWave: 5, note: '专偷灯油：让它贴住你几秒，灯火会肉眼可见地暗下去，优先点掉。' },
