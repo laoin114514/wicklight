@@ -23,6 +23,19 @@ const WALL_BASH_STUN = 0.55;
 const WALL_STUCK_SPAN = 0.8;
 
 /**
+ * 喷糜者那一口的弹速（px/s）。抽成常量是因为 v91 的预瞄要拿它算飞行时间——
+ * 两处各写一个数，"瞄的是一秒后的你、飞的却是另一个速度"这种错谁也看不出来。
+ */
+const SPIT_SHOT_SPEED = 250;
+
+/**
+ * 预瞄最多押多远（px，v91）：它站 220px 上开火、弹速 250，飞行时间就接近一秒，
+ * 玩家 160px/s 的一秒是 160px。不封顶的话，隔着 500px 开的那一口要往你前面砸 300px——
+ * 那不叫预判，叫"在你必经之路上埋雷"。220 写的是"它只赌你这一秒还这么走"。
+ */
+const SPIT_LEAD_MAX = 220;
+
+/**
  * 离开所有墙多久之后才算"这一轮绕行结束了"（秒）。
  *
  * 绕过凸角的那一两帧本来就不碰墙（圆心刚过角点、切向还在往外走，0.03s 量级），
@@ -158,6 +171,13 @@ export interface LightCtx {
 export interface EnemyContext {
   px: number;
   py: number;
+  /**
+   * 目标（玩家）**此刻**的速度（v91）。
+   * 只有喷糜者那一口用它："你往哪儿走，它就往哪儿吐"——怪的其他行为都不看这个数，
+   * 所以它不是什么"AI 感知升级"，只是这一发弹道要算的飞行时间需要一个速度。
+   */
+  pvx: number;
+  pvy: number;
   lightRadius: number;
   time: number;
   burnDps: number;
@@ -609,7 +629,25 @@ export class EnemySystem {
         e.attackCd -= dt;
         if (e.attackCd <= 0 && playerDist < 520 && !blind) {
           e.attackCd = 2.1;
-          ctx.shoot(e.x, e.y, Math.atan2(pdy, pdx), 250, e.damage, '#c9a3ff', true, e.defId);
+          // 「你往哪儿走，它就往哪儿吐」（v91）：到 v90 为止它瞄的是**你现在站的地方**。
+          // 可它站在 220px 上、这一口飞 250px/s，飞行时间接近一秒——你随便走两步就躲开了。
+          // 台架（`tools/bench-wall.mjs --only=spitaim`）量的：站着不动 40 发 40 中，
+          // 一头直线跑（160px/s）**40 发一发都没中**（探针把地图上的陨火算进来才凑出 1 发）。
+          // 也就是说这件**唯一的远程武器**
+          // 对任何会动的玩家等于不存在——"走位是这游戏里唯一握着的东西"，
+          // 而它在走位面前一点威胁都没有。
+          // 现在它瞄的是"你现在这个速度、飞完这一程之后你会到的地方"，
+          // 但赌得很短（`SPIT_LEAD_MAX`）：赌的只是**速度**——急停、折线、冲刺，
+          // 任何改变都会让它落空（用例钉着这三条，以及"站着不动一个字不变"）。
+          const flight = Math.hypot(pdx, pdy) / SPIT_SHOT_SPEED;
+          let leadX = ctx.pvx * flight;
+          let leadY = ctx.pvy * flight;
+          const leadLen = Math.hypot(leadX, leadY);
+          if (leadLen > SPIT_LEAD_MAX) {
+            leadX *= SPIT_LEAD_MAX / leadLen;
+            leadY *= SPIT_LEAD_MAX / leadLen;
+          }
+          ctx.shoot(e.x, e.y, Math.atan2(pdy + leadY, pdx + leadX), SPIT_SHOT_SPEED, e.damage, '#c9a3ff', true, e.defId);
         }
         break;
       }

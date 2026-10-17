@@ -84,6 +84,12 @@ const FIXED = args.has('fixed');
  * 你躲在墙后面它就站着打墙（一局都不挪窝）。这一栏数它"看不见你的时候开的枪"——
  * 改前在真实局里量得到（`--fixed --seeds=6` holder 8.3 次/局 / chaser 3.8，自然局 4.2 / 5.8），
  * 改后必须是 **0**；它一共开了几枪也印出来当分母。
+ *
+ * v91 起再印一行**掠影 / 点着灯焰高涨**（`game.grazeCount` / `player.blazeCount`）。
+ * 它不是一条新规矩，是给"这一版把喷糜者改成预瞄之后，台架上的局为什么变长"查账用的：
+ * 预瞄的弹幕贴着人飞，而"贴着飞"正是掠影收账的地方（改前 17.8 次/局 → 改后 63.3）。
+ * 量下来灯焰高涨是 **0** 次——所以台架上寿命的变化不是"焰喂出来的"。
+ * 记着这两笔，下一版改喷糜者的吐速 / 弹数时，才分得清"难度变了"和"掠影顺带喂了火"。
  */
 const NOWALLS = args.has('nowalls');
 /**
@@ -362,6 +368,10 @@ async function run({ seed, style, stages }) {
     seconds: +t.toFixed(1), kills: game.kills, level: game.playerLevel,
     // 难度是不是被顺带改了，得有个数看得见："循灯"只许改节奏，不许偷偷加伤害
     dmgTaken: Math.round(game.damageTaken),
+    // v91 记这两笔：预瞄让弹幕更贴着人飞，而"贴着飞"正是掠影（`resolveGraze`）收账的地方——
+    // 一版规则的账要连它一起看，不然"波数翻倍"会被当成台架噪声
+    grazes: game.grazeCount,
+    blazes: p.blazeCount,
     hpFrac: +(game.player.hp / game.player.stats.maxHp).toFixed(2),
     dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, aimAsked, aimBlocked, aimWasted, spitShots, spitBlind, levelTimes, waves,
   };
@@ -431,6 +441,10 @@ for (const style of STYLES) {
   const aimW = runs.reduce((a, r) => a + (r.aimWasted ?? 0), 0);
   console.log(`  索敌挑中墙后面的目标：${(aimB / runs.length).toFixed(1)} 次/局（共 ${aimB} 次 / 问了 ${aimA} 次`
     + ` = ${aimA ? ((aimB / aimA) * 100).toFixed(1) : '0.0'}% · 这一栏是读数，全看不见时照旧挑一只）`);
+  const grazes = runs.reduce((a, r) => a + (r.grazes ?? 0), 0);
+  const blazes = runs.reduce((a, r) => a + (r.blazes ?? 0), 0);
+  console.log(`  掠影 / 点着灯焰高涨：${(grazes / runs.length).toFixed(1)} 次/局 · ${(blazes / runs.length).toFixed(1)} 次/局`
+    + `（v91 起记这两笔：预瞄的弹幕贴着人飞，喂的就是掠影的账）`);
   console.log(`  其中"明明还有看得见的"：${(aimW / runs.length).toFixed(1)} 次/局（共 ${aimW} 次 · v89 那条规矩`
     + ` · 必须是 0）${NOWALLS ? ' · 墙已被 --nowalls 拿掉，这两栏必须是 0' : ''}`);
   const spitS = runs.reduce((a, r) => a + (r.spitShots ?? 0), 0);

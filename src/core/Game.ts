@@ -1823,6 +1823,9 @@ export class Game {
     return {
       px: this.player.x,
       py: this.player.y,
+      // 喷糜者那一口要拿它算"一秒后你在哪儿"（v91）。怪的其他行为都不看这两个数。
+      pvx: this.player.vx,
+      pvy: this.player.vy,
       lightRadius: this.player.lightRadius,
       time: this.time,
       burnDps: 6 * this.player.stats.burnMult,

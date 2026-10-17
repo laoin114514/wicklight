@@ -51,6 +51,12 @@
  *                  它挪了多远**。期望是——无墙与"墙在旁边"两格逐位相同（9 / 9 / 站着不动），
  *                  "墙在中间"那一格改后是 **4 / 4 / 挪 314.2px**（改前是 **9 / 0 / 一动不动**：
  *                  那一梭子全打在墙面上）。这一栏量的不是"伤害多少"，是**它有没有在打墙**。
+ *   · `spitaim`（v91）—— **那一口打的是"你在的地方"还是"你要去的地方"**：五种走位、每种十个出手周期，
+ *                  量它开了几枪、打中你几次。五个图案**只在"开火之后有没有改方向"上不同**：
+ *                  `stand` 站着 / `run` 一头直线跑 / `turn` 开火后 0.35s 拐 90° / `stop` 开火后 0.35s 急停 /
+ *                  `zig` 0.6s 一条腿、侧向摆 ±96px。改前（v90）只有"站着"会挨打（40 发 40 中），
+ *                  另外四种全是 40 发 1 中（那一发还是地图上落下来的陨火）；改后 `run` 追平 40 发 40 中，
+ *                  而拐弯 / 急停 / 折线照旧一发不中——**"改方向就躲得掉"是这一版的判据**。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -73,7 +79,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,spitaim,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -517,6 +523,83 @@ async function runSpit(seed, kind) {
   return { shots, hits, moved: Math.hypot(e.x + 250, e.y) };
 }
 
+/**
+ * v91：那一口打的是"你在的地方"还是"你要去的地方"。
+ *
+ * 五个图案**只在"开火之后有没有改方向"上不同**（出发点都是 (0, -170)，斜对着那只怪）：
+ *   stand 站着不动 / run 一头直线跑 / turn 开火后 0.35s 拐 90°（正对着它那一侧拐，对玩家最不利）/
+ *   stop 开火后 0.35s 急停 / zig 0.6s 一条腿、侧向摆 ±96px（比命中半径 21px 大一个量级）。
+ * 十个出手周期（每窗 2.1 秒）：窗首正好开火，窗尾把场地摆回原样——免得把上一发的余弹算进这一窗。
+ */
+const AIM_PATTERNS = ['stand', 'run', 'turn', 'stop', 'zig'];
+const AIM_SP = 160;
+const AIM_WINDOW = 2.1;
+
+function aimPose(pattern, t) {
+  if (pattern === 'stand') return { x: 0, y: 0, vx: 0, vy: 0 };
+  if (pattern === 'run') return { x: 0, y: -170 + AIM_SP * t, vx: 0, vy: AIM_SP };
+  if (pattern === 'turn') {
+    if (t < 0.35) return { x: 0, y: -170 + AIM_SP * t, vx: 0, vy: AIM_SP };
+    return { x: -AIM_SP * (t - 0.35), y: -170 + AIM_SP * 0.35, vx: -AIM_SP, vy: 0 };
+  }
+  if (pattern === 'stop') {
+    if (t < 0.35) return { x: 0, y: -170 + AIM_SP * t, vx: 0, vy: AIM_SP };
+    return { x: 0, y: -170 + AIM_SP * 0.35, vx: 0, vy: 0 };
+  }
+  const leg = 0.6;
+  const seg = Math.floor(t / leg);
+  const local = t - seg * leg;
+  let x = 0;
+  for (let i = 0; i < seg; i += 1) x += (i % 2 === 0 ? 1 : -1) * AIM_SP * leg;
+  const dir = seg % 2 === 0 ? 1 : -1;
+  return { x: x + dir * AIM_SP * local, y: -170 + AIM_SP * 0.35, vx: dir * AIM_SP, vy: 0 };
+}
+
+async function runSpitAim(seed, pattern) {
+  const { game, p } = await open(seed, `spitaim-${pattern}`);
+  game.enemies.clear();
+  game.projectiles.clear();
+  const e = game.enemies.spawn('spitter', -250, 0, 1, 1);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  let shots = 0;
+  let hits = 0;
+  const realSpawn = game.projectiles.spawn.bind(game.projectiles);
+  const realDamage = game.damagePlayer.bind(game);
+  game.projectiles.spawn = (q) => {
+    if (!q.fromPlayer) shots += 1;
+    return realSpawn(q);
+  };
+  // 只数它那一口（`source === 'spitter'`）：地图上落下来的陨火是别的账
+  game.damagePlayer = (amount, hx, hy, drain, source) => {
+    if (source === 'spitter') hits += 1;
+    return realDamage(amount, hx, hy, drain, source);
+  };
+  for (let c = 0; c < 10; c += 1) {
+    e.x = -250;
+    e.y = 0;
+    e.vx = 0;
+    e.vy = 0;
+    e.attackCd = 0;
+    game.projectiles.clear();
+    for (let i = 0; i < Math.round(AIM_WINDOW / dt); i += 1) {
+      const at = aimPose(pattern, i * dt);
+      p.x = at.x;
+      p.y = at.y;
+      p.vx = at.vx;
+      p.vy = at.vy;
+      p.hp = 1e9;
+      p.oil = p.oilMax;
+      game.hitStop = 0;
+      game.setInput(0, 0, false, false);
+      game.update(dt);
+    }
+  }
+  game.projectiles.spawn = realSpawn;
+  game.damagePlayer = realDamage;
+  return { shots, hits };
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -605,6 +688,27 @@ if (ONLY.includes('spitblind')) {
   row('它开了几枪(20s)', cell.shots);
   row('命中你几次', cell.hits);
   row('它挪了多远(px)', cell.moved);
+}
+if (ONLY.includes('spitaim')) {
+  console.log('');
+  console.log(`${pad('预瞄（v91）', 16)}${AIM_PATTERNS.map((k) => pad({ stand: '站着', run: '直线跑', turn: '拐90°', stop: '急停', zig: '折线' }[k], 9)).join('')}`);
+  const cell = { shots: [], hits: [] };
+  for (const pattern of AIM_PATTERNS) {
+    let shots = 0;
+    let hits = 0;
+    for (const seed of SEEDS) {
+      const r = await runSpitAim(seed, pattern);
+      shots += r.shots;
+      hits += r.hits;
+    }
+    const n = SEEDS.length;
+    cell.shots.push(shots / n);
+    cell.hits.push(hits / n);
+    out[`spitaim-${pattern}`] = { shots: shots / n, hits: hits / n };
+  }
+  const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(1), 9)).join('')}`);
+  row('它开了几枪', cell.shots);
+  row('命中你几次', cell.hits);
 }
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {
