@@ -36,6 +36,36 @@ const SPIT_SHOT_SPEED = 250;
 const SPIT_LEAD_MAX = 220;
 
 /**
+ * 预判最多把枪口“顺着弯”再掰多少弧度（v93）。
+ *
+ * 只押速度的一阶预瞄在绕圈面前是一条切线：半径越大，切线与圆弧之间空得越开，
+ * 220px 外绕一圈就整圈甩掉。这里读玩家这一帧的**横向加速度**，把弹道朝弯心掰半个弧角——
+ * 一段匀速圆弧上，“现在指向未来那一点”的弦，正好是切线转过一半弧角。
+ *
+ * 0.6 弧度（≈34°）是上限：再大就不是“你在拐弯”，而是转身 / 冲刺 / 贴脸绕；
+ * 那些动作本来就该靠“改方向”躲掉，不该被一只远程怪提前画进弹道。
+ */
+const SPIT_CURVE_TURN_MAX = 0.6;
+
+/**
+ * 横向加速度超过这个值就不算“在拐弯”（px/s²，v93）。
+ *
+ * 走路本身最多 2400，连续转向的绕圈通常只有一两百；而测试 / 换关 / 冲刺那一下的
+ * “速度瞬移”会算出上万。把后者当成曲率去预判，弹道会朝一个根本没有发生的弯拐过去。
+ * 3000 刚好在上面两者之间：真实的手感拐弯进得来，硬掰方向进不来。
+ */
+const SPIT_CURVE_ACCEL_MAX = 3000;
+
+/**
+ * 认出“你在顺着弯走”之后，这一程最多押多远（px，v93）。
+ *
+ * 直线那 220px 不能直接搬过来：绕圈到 300px 时，未来那一点在现在位置的**弦**上已经要 256px，
+ * 拿 220px 去截会把落点拉回圆里、连方向一起带偏。340 覆盖了喷糜者的常规交战半径，
+ * 再远它照旧只押这一程——那一段本来就是“离得够远，跑得掉”该有的宽容。
+ */
+const SPIT_CURVE_LEAD_MAX = 340;
+
+/**
  * 离开所有墙多久之后才算"这一轮绕行结束了"（秒）。
  *
  * 绕过凸角的那一两帧本来就不碰墙（圆心刚过角点、切向还在往外走，0.03s 量级），
@@ -178,6 +208,13 @@ export interface EnemyContext {
    */
   pvx: number;
   pvy: number;
+  /**
+   * 目标这一帧的加速度（v93），只给喷糜者那一口算曲率。
+   * `pax/pay` 和 `pvx/pvy` 一样是**这一帧**的读数：它猜的是“你还会顺着这个弯走”，
+   * 不是记住你整局的走位。
+   */
+  pax: number;
+  pay: number;
   lightRadius: number;
   time: number;
   burnDps: number;
@@ -642,10 +679,40 @@ export class EnemySystem {
           const flight = Math.hypot(pdx, pdy) / SPIT_SHOT_SPEED;
           let leadX = ctx.pvx * flight;
           let leadY = ctx.pvy * flight;
+          let leadMax = SPIT_LEAD_MAX;
+          // 「绕着它转圈」到 v92 为止是这个游戏里最省事的免伤姿势：一阶预瞄只会把枪口
+          // 放在圆的切线上，半径一大，那一口就整颗从你身侧滑过去（probe：r≥220 时 10/10 全空）。
+          // 现在再读一次**横向加速度**：`cross(v, a) / |v|²` 是当前转向的角速度，
+          // 乘上飞行时间就是这一程会转过的弧角；弦的方向是切线转过**一半弧角**。
+          // 所以只把已经算好的 lead 向量原地转 `0.5 × 角速度 × 飞行时间`：
+          // 直线跑（横向加速度 0）一个字节都不变，绕圈则正好瞄准圆弧上的落点。
+          // 急拐 / 急停 / 折线的横向加速度要么没有被“延续”的意义、要么超过上限被丢掉，
+          // 所以它们照旧是躲开这一口的办法——这一版只惩罚“一直顺着同一个弯走”。
+          const speed2 = ctx.pvx * ctx.pvx + ctx.pvy * ctx.pvy;
+          if (speed2 > 1) {
+            const along = ctx.pax * ctx.pvx + ctx.pay * ctx.pvy;
+            const perpX = ctx.pax - (ctx.pvx * along) / speed2;
+            const perpY = ctx.pay - (ctx.pvy * along) / speed2;
+            if (perpX * perpX + perpY * perpY <= SPIT_CURVE_ACCEL_MAX * SPIT_CURVE_ACCEL_MAX) {
+              const turn = Math.max(
+                -SPIT_CURVE_TURN_MAX,
+                Math.min(SPIT_CURVE_TURN_MAX, ((ctx.pvx * perpY - ctx.pvy * perpX) / speed2) * flight * 0.5),
+              );
+              if (Math.abs(turn) > 1e-4) {
+                const cos = Math.cos(turn);
+                const sin = Math.sin(turn);
+                const rx = leadX * cos - leadY * sin;
+                const ry = leadX * sin + leadY * cos;
+                leadX = rx;
+                leadY = ry;
+                leadMax = SPIT_CURVE_LEAD_MAX;
+              }
+            }
+          }
           const leadLen = Math.hypot(leadX, leadY);
-          if (leadLen > SPIT_LEAD_MAX) {
-            leadX *= SPIT_LEAD_MAX / leadLen;
-            leadY *= SPIT_LEAD_MAX / leadLen;
+          if (leadLen > leadMax) {
+            leadX *= leadMax / leadLen;
+            leadY *= leadMax / leadLen;
           }
           ctx.shoot(e.x, e.y, Math.atan2(pdy + leadY, pdx + leadX), SPIT_SHOT_SPEED, e.damage, '#c9a3ff', true, e.defId);
         }

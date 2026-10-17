@@ -578,6 +578,11 @@ export class Game {
   private emberTimer = 0;
   private moteTimer = 0;
   private inputSnapshot = { moveX: 0, moveY: 0, dash: false, nova: false, lamp: false, dim: false, aim: false, aimX: 0, aimY: 0 };
+  /** 上一帧与这一帧之间玩家速度的变化率（v93）。只给喷糜者的曲率预判读。 */
+  private playerPrevVx = 0;
+  private playerPrevVy = 0;
+  private playerAccelX = 0;
+  private playerAccelY = 0;
   private startSeed = 1;
   /** 当前性能档位（掌上设备 / 桌面 × 画质），每帧开头刷新一次，全游戏只有这一处结论。 */
   profile: PerfProfile = perfProfile('high');
@@ -830,6 +835,10 @@ export class Game {
     this.bounties.reset();
     this.codex.reset();
     this.haptics.reset();
+    this.playerPrevVx = 0;
+    this.playerPrevVy = 0;
+    this.playerAccelX = 0;
+    this.playerAccelY = 0;
     this.codexTimer = 0;
     this.syncCodex();
   }
@@ -1235,6 +1244,14 @@ export class Game {
     this.grazeFromX = moveFromX;
     this.grazeFromY = moveFromY;
     this.player.update(dt, this.inputSnapshot, this.playerCtx());
+    // 这一帧的速度变化率（v93）：喷糜者用它判断“你是在顺着一个弯走，还是刚硬拐了一下”。
+    // 记在 `Game` 而不是 `Player` 上，是因为它只服务敌人那一次读；玩家自己的手感一个字节不碰。
+    if (dt > 0) {
+      this.playerAccelX = (this.player.vx - this.playerPrevVx) / dt;
+      this.playerAccelY = (this.player.vy - this.playerPrevVy) / dt;
+      this.playerPrevVx = this.player.vx;
+      this.playerPrevVy = this.player.vy;
+    }
     // 手动瞄准的那盏灯：手指按下去的时候，灯也往那个方向偏一点。
     // 两个理由，都不是装饰：① 落点标记必须看得见——射程能到 300px，而灯火最暗时视野只有 96px，
     // 不给这一点光，暗处按下手指就是"盲倒"（那正是这件武器最贵的时候）；
@@ -1838,6 +1855,8 @@ export class Game {
       // 喷糜者那一口要拿它算"一秒后你在哪儿"（v91）。怪的其他行为都不看这两个数。
       pvx: this.player.vx,
       pvy: this.player.vy,
+      pax: this.playerAccelX,
+      pay: this.playerAccelY,
       lightRadius: this.player.lightRadius,
       time: this.time,
       burnDps: 6 * this.player.stats.burnMult,

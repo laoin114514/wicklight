@@ -57,6 +57,11 @@
  *                  `zig` 0.6s 一条腿、侧向摆 ±96px。改前（v90）只有"站着"会挨打（40 发 40 中），
  *                  另外四种全是 40 发 1 中（那一发还是地图上落下来的陨火）；改后 `run` 追平 40 发 40 中，
  *                  而拐弯 / 急停 / 折线照旧一发不中——**"改方向就躲得掉"是这一版的判据**。
+ *   · `orbit`（v93，挂在 `spitaim` 下面）—— **稳定绕圈是不是仍然免伤**：v91 的一阶预瞄只会
+ *                  押切线，r≥220 的连续绕圈在 v92 是 40 发 0 中；v93 读横向加速度、把弹道
+ *                  顺着弯掰半个弧角之后，r=180 / 220 / 260 / 300 每格都该是 40 发 40 中。
+ *                  “折返300”那一格每 0.7s 把切向整个翻过来，仍应是 40 发 0 中——
+ *                  这一栏量的不是“子弹更快了”，是“只惩罚一直顺着同一个弯走”。
  *   · `spitsplash`（v92）—— **糜液砸在墙上会不会溅到墙背**：从 (96,0) 往 +x 发一颗喷糜者的弹，
  *                  墙在 x=100~120，玩家分别站在无墙（整口 9）/ 贴墙背（38px，半口 4.5）/
  *                  退 20px（58px，0）/ 退 40px（78px，0）/ 第二堵墙背后（48px，0）。
@@ -560,6 +565,83 @@ function aimPose(pattern, t) {
   return { x: x + dir * AIM_SP * local, y: -170 + AIM_SP * 0.35, vx: dir * AIM_SP, vy: 0 };
 }
 
+/**
+ * v93：绕圈 / 折返。连续跑，不逐窗归位——`Game` 的横向加速度要跨帧读，
+ * 每窗把位置摆回起点会造出一个根本不存在的“急拐”。脚本玩家的速度取本局的走速。
+ */
+const ORBIT_CELLS = [
+  { id: 'orbit180', name: '绕圈180', r: 180, juke: false },
+  { id: 'orbit220', name: '绕圈220', r: 220, juke: false },
+  { id: 'orbit260', name: '绕圈260', r: 260, juke: false },
+  { id: 'orbit300', name: '绕圈300', r: 300, juke: false },
+  { id: 'juke300', name: '折返300', r: 300, juke: true },
+];
+
+function orbitPose(cell, t, ex, ey, speed) {
+  const leg = 0.7;
+  const base = -Math.PI / 2;
+  if (!cell.juke) {
+    const a = base + (speed / cell.r) * t;
+    const ix = -Math.sin(a);
+    const iy = Math.cos(a);
+    return { x: ex + Math.cos(a) * cell.r, y: ey + Math.sin(a) * cell.r, ix, iy };
+  }
+  const full = Math.floor(t / leg);
+  const local = t - full * leg;
+  let a = base;
+  const step = (speed / cell.r) * leg;
+  for (let i = 0; i < full; i += 1) a += (i % 2 === 0 ? 1 : -1) * step;
+  const dir = full % 2 === 0 ? 1 : -1;
+  a += dir * (speed / cell.r) * local;
+  const ix = -Math.sin(a) * dir;
+  const iy = Math.cos(a) * dir;
+  return { x: ex + Math.cos(a) * cell.r, y: ey + Math.sin(a) * cell.r, ix, iy };
+}
+
+async function runSpitOrbit(seed, cell) {
+  const { game, p } = await open(seed, `spitorbit-${cell.id}`);
+  game.enemies.clear();
+  game.projectiles.clear();
+  game.hazards.length = 0;
+  game.grounds.length = 0;
+  game.level.walls.length = 0;
+  const ex = -250;
+  const ey = 0;
+  const e = game.enemies.spawn('spitter', ex, ey, 1, 1);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  e.speed = 0;
+  let shots = 0;
+  let hits = 0;
+  const realSpawn = game.projectiles.spawn.bind(game.projectiles);
+  const realDamage = game.damagePlayer.bind(game);
+  game.projectiles.spawn = (q) => {
+    if (!q.fromPlayer) shots += 1;
+    return realSpawn(q);
+  };
+  game.damagePlayer = (amount, hx, hy, drain, source) => {
+    if (source === 'spitter') hits += 1;
+    return realDamage(amount, hx, hy, drain, source);
+  };
+  const total = Math.round((10 * AIM_WINDOW + 1.0) / dt);
+  for (let i = 0; i < total; i += 1) {
+    const at = orbitPose(cell, i * dt, ex, ey, p.stats.moveSpeed);
+    p.x = at.x;
+    p.y = at.y;
+    p.vx = at.ix * p.stats.moveSpeed;
+    p.vy = at.iy * p.stats.moveSpeed;
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    game.hitStop = 0;
+    game.setInput(at.ix, at.iy, false, false);
+    game.update(dt);
+    e.hp = 1e9;
+  }
+  game.projectiles.spawn = realSpawn;
+  game.damagePlayer = realDamage;
+  return { shots, hits, speed: p.stats.moveSpeed };
+}
+
 async function runSpitAim(seed, pattern) {
   const { game, p } = await open(seed, `spitaim-${pattern}`);
   game.enemies.clear();
@@ -791,6 +873,25 @@ if (ONLY.includes('spitaim')) {
   const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(1), 9)).join('')}`);
   row('它开了几枪', cell.shots);
   row('命中你几次', cell.hits);
+
+  console.log('');
+  console.log(`${pad('绕圈预判（v93）', 16)}${ORBIT_CELLS.map((c) => pad(c.name, 9)).join('')}`);
+  const orbit = { shots: [], hits: [] };
+  for (const c of ORBIT_CELLS) {
+    let shots = 0;
+    let hits = 0;
+    for (const seed of SEEDS) {
+      const r = await runSpitOrbit(seed, c);
+      shots += r.shots;
+      hits += r.hits;
+    }
+    const n = SEEDS.length;
+    orbit.shots.push(shots / n);
+    orbit.hits.push(hits / n);
+    out[`spitaim-${c.id}`] = { shots: shots / n, hits: hits / n };
+  }
+  row('它开了几枪', orbit.shots);
+  row('命中你几次', orbit.hits);
 }
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {
