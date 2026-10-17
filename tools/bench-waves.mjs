@@ -66,6 +66,11 @@ const FIXED = args.has('fixed');
  * 见 `run()` 里那一段）。它回答"这条规则一局里会不会真的被摸到"——机器人是 0.2 次/局
  * （12 局里 2 次，它的冲刺几乎都发生在空地上），但那一次就够把整局轨迹岔开：
  * 同一批种子上只有那 2 局读数不同，其余 10 局逐位相同。
+ *
+ * v88 又加了一栏，问的是同一个问题：**自己身上那两圈火被墙挡掉几次**（燎灯 / 环形火环）。
+ * 数法是把 Game 交给玩家的那个 ctx 包一层（`playerCtx`），`sight` 每答一次"看不见"就加一。
+ * 它在 `--fixed` 那套（守夜人自带的环形火环照样在场）与自然模式里都数得到；
+ * 拿掉墙（`--nowalls`）它必须是 0——那正是"这一条只在墙前面才有话说"的证据。
  */
 const NOWALLS = args.has('nowalls');
 /**
@@ -113,6 +118,21 @@ async function run({ seed, style, stages }) {
   let dashSeen = -1;
   let dashBirth = -1;
   let wallBash = 0;
+  // 自己被墙挡掉的火（v88）：见文件头。包一层 ctx，不去碰游戏里那份实现。
+  let lightBlocked = 0;
+  let lightAsked = 0;
+  const realPlayerCtx = game.playerCtx.bind(game);
+  game.playerCtx = () => {
+    const ctx = realPlayerCtx();
+    const realSight = ctx.sight;
+    ctx.sight = (x0, y0, x1, y1) => {
+      const ok = realSight(x0, y0, x1, y1);
+      lightAsked += 1;
+      if (!ok) lightBlocked += 1;
+      return ok;
+    };
+    return ctx;
+  };
 
   if (FIXED) {
     // 一套固定火力 + 不再升级：这样"改前 / 改后"比的是同一件事（见文件头那一段）
@@ -288,7 +308,7 @@ async function run({ seed, style, stages }) {
     // 难度是不是被顺带改了，得有个数看得见："循灯"只许改节奏，不许偷偷加伤害
     dmgTaken: Math.round(game.damageTaken),
     hpFrac: +(game.player.hp / game.player.stats.maxHp).toFixed(2),
-    dashTaps, dashEaten, wallBash, levelTimes, waves,
+    dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, levelTimes, waves,
   };
 }
 
@@ -337,7 +357,7 @@ for (const style of STYLES) {
   out.push({
     style,
     s,
-    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash })),
+    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash, lightBlocked: r.lightBlocked })),
   });
   console.log(`\n── 走位 ${style} · ${runs.length} 局 · ${FIXED ? '钉死火力' : GOD ? '打不死' : '自然'}`
     + ` · ${runs[0].stage} 关跑完（最远到第 ${Math.max(...runs.map((r) => r.stage))} 关）──────────`);
@@ -351,6 +371,10 @@ for (const style of STYLES) {
   const wallBash = runs.reduce((a, r) => a + (r.wallBash ?? 0), 0);
   console.log(`  自己的冲刺撞在墙上：${(wallBash / runs.length).toFixed(1)} 次/局（共 ${wallBash} 次`
     + `${NOWALLS ? ' · 墙已被 --nowalls 拿掉，它必须是 0' : ''}）`);
+  const blocked = runs.reduce((a, r) => a + (r.lightBlocked ?? 0), 0);
+  const asked = runs.reduce((a, r) => a + (r.lightAsked ?? 0), 0);
+  console.log(`  自己身上的火被墙挡掉：${(blocked / runs.length).toFixed(1)} 次/局（共 ${blocked} 次 · v88 那条规矩`
+    + ` · 这一条总共问了 ${asked} 次）${NOWALLS ? ' · 墙已被 --nowalls 拿掉，它必须是 0' : ''}`);
   const dmg = runs.map((r) => r.dmgTaken);
   const hp = runs.map((r) => r.hpFrac);
   console.log(`  挨了多少：整关受伤 均 ${(dmg.reduce((a, b) => a + b, 0) / dmg.length).toFixed(0)}（单局 ${dmg.join(' / ')}）`

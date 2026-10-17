@@ -35,6 +35,11 @@
  *                  `clampToArena` 一样把人拦住，但这条规矩（`Game.update` 里那一段）明写只看墙、
  *                  不看边界——所以它量出来的就是"改前"那套空转（冲刺照旧跑满 0.18 秒、人压在线外不动）。
  *                  两栏放在同一份产物里跑，差的那几帧就是这条规矩挣来的。
+ *   · `selflight`（v88）—— **你自己身上那两圈火**隔着墙还烫不烫得到。燎灯与环形火环是全场
+ *                  最后两件穿墙的东西（子弹进墙判死、光矛停在墙面、怪绕着墙走），这一栏量的就是
+ *                  那一刀：同一只怪、同一个距离，只差"墙在中间 / 墙在旁边 / 没有墙"。
+ *                  期望是 **81.0 / 0.0 / 81.0**（燎灯）与 **48.6 / 0.0 / 48.6**（火环）——
+ *                  "墙在旁边"那一格必须与"没有墙"**逐位相同**：这一刀只该管那条直线。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -57,7 +62,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -323,6 +328,66 @@ const DASH_SCENES = {
   dashege: (seed) => runDash(seed, 'dashege', 'edge'),
 };
 
+/**
+ * 「自己身上那两圈火」那一栏（v88，见文件头）。量的是**这几件武器打出去多少**，不是玩家自己身上那几帧，
+ * 所以也不走 `run()`：一只靶（石守，厚血、站着不动）钉在固定距离上，武器换一件、墙换一种摆法。
+ *
+ * 每一格都从**零**开始：武器自己的钟表（燎灯那一拍的心跳、火环转到哪儿、每只怪的命中冷却）
+ * 必须清掉，不然读数里混着上一格剩的冷却——实测（同一件武器连跑两次）燎灯会读出 12 拍 / 11 拍，
+ * 而这一栏要的正是"只差一样东西、读数该逐位相同"。
+ */
+const LIGHT_CONF = {
+  none: [],
+  mid: [{ x: -60, y: -300, w: 20, h: 600 }],
+  beside: [{ x: 300, y: -300, w: 20, h: 600 }],
+};
+
+async function runLight(seed, id, kind) {
+  const { game, p } = await open(seed, `light-${id}-${kind}`);
+  p.stats.maxHp = 1e6;
+  p.hp = 1e6;
+  const ex = id === 'aura' ? -280 : -105;
+  game.level.walls.length = 0;
+  for (const w of LIGHT_CONF[kind]) game.level.walls.push(w);
+  game.enemies.clear();
+  const e = game.enemies.spawn('bulwark', ex, 0, 1, 1);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  e.damage = 0;
+  e.spawnTimer = 0;
+  e.speed = 0;
+  p.weapons.clear();
+  p.relics.clear();
+  p.weapons.set(id, 1);
+  p.recomputeStats();
+  p.stats.critChance = 0; // 暴击是掷骰子的，这一栏要的是"墙挡了多少"这一个数
+  p.stats.critMult = 1;
+  p.auraCd = 0;
+  p.orbit.angle = 0;
+  p.orbit.hitCooldown.clear();
+  p.cooldowns.clear();
+  let lost = 0;
+  for (let i = 0; i < 300; i += 1) {
+    e.hp = 1e9;
+    e.x = ex;
+    e.y = 0;
+    e.speed = 0;
+    e.vx = 0;
+    e.vy = 0;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.hp = 1e6;
+    p.oil = p.oilMax;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+    lost += 1e9 - e.hp;
+  }
+  return lost;
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -347,6 +412,20 @@ for (const name of ONLY.filter((n) => SCENES[n])) {
     `${pad(name, 9)}${pad(acc.deepest.toFixed(1), 9)}${pad(String(acc.sunkFrames), 9)}${pad(String(acc.bashes), 6)}`
     + `${pad(acc.stuckS.toFixed(1), 7)}${pad(`${acc.landed}/${acc.total}`, 7)}${pad(f1(avg(acc.first)), 7)}${pad(f1(avg(acc.last)), 9)}`,
   );
+}
+if (ONLY.includes('selflight')) {
+  console.log('');
+  console.log(`${pad('自己身上的火', 12)}${pad('无墙', 9)}${pad('隔着墙', 9)}${pad('墙在旁边', 9)}`);
+  for (const [id, name] of [['aura', '燎灯'], ['ring', '环形火环']]) {
+    const cells = [];
+    for (const kind of ['none', 'mid', 'beside']) {
+      let acc = 0;
+      for (const seed of SEEDS) acc += await runLight(seed, id, kind);
+      cells.push(acc / SEEDS.length);
+    }
+    out[`selflight-${id}`] = { none: cells[0], mid: cells[1], beside: cells[2] };
+    console.log(`${pad(name, 12)}${pad(cells[0].toFixed(1), 9)}${pad(cells[1].toFixed(1), 9)}${pad(cells[2].toFixed(1), 9)}`);
+  }
 }
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {

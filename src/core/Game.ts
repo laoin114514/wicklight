@@ -22,7 +22,7 @@ import { generateLevel, refinishLevel, type Level } from '../systems/LevelGen';
 import { drawDecor } from './Decor';
 import type { Pyre, Shrine } from '../systems/LevelGen';
 import { CURSES, type CurseDef } from '../data/curses';
-import { collideWalls, clampToArena, pointInWalls, rayWalls } from '../systems/CollisionSystem';
+import { collideWalls, clampToArena, pointInWalls, rayWalls, wallBetween } from '../systems/CollisionSystem';
 import { UpgradeSystem } from '../systems/UpgradeSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { MetaSystem } from '../systems/MetaSystem';
@@ -1779,6 +1779,9 @@ export class Game {
       shake: (a) => this.camera.addTrauma(a, this.settings.data.shake * this.settings.motionScale),
       hurt: (a) => this.damagePlayer(a),
       hit: (e, damage, crit, kx, ky, kb, opts) => this.applyHit(e, damage, crit, kx, ky, kb, opts),
+      // 「光只沿看得见的直线走」（v88）：燎灯与环形火环拿这一句问"从这个点到那个点中间有没有墙"。
+      // 墙在 `level` 上，Player 不认识地图，所以这一句留在 Game 这边（和 `findTarget` / `beam` 同一个道理）。
+      sight: (x0, y0, x1, y1) => !wallBetween(x0, y0, x1, y1, this.level.walls),
       findTarget: (x, y, maxDist, requireLight) => this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist)),
       chainZap: (x, y, damage, jumps, range, color, opts) => this.chainZap(x, y, damage, jumps, range, color, opts),
       beam: (x, y, angle, length, width, damage, color, opts) => this.fireBeam(x, y, angle, length, width, damage, color, opts),

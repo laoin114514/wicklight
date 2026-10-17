@@ -155,6 +155,30 @@ export function rayWalls(
   return best;
 }
 
+/**
+ * (x0,y0) 到 (x1,y1) 这条**直线段**中间隔着一堵墙吗——「光只沿看得见的直线走」的最短一句。
+ *
+ * v88 起燎灯与环形火环走它。这两件的伤害本来就写在"照到"上，而到 v87 为止，它们是全场
+ * **唯一**两件还穿墙的东西：子弹进墙判死、光矛停在墙面上（v85）、怪绕着墙走（v84）——
+ * 只有玩家自己身上那两圈火，照旧穿过墙面烫到墙背后的怪。
+ *
+ * 方向那两个参数走的是 `rayWalls` 的第 3 / 4 个位置，但**不是单位向量**：直接给它这条线段的增量、
+ * `maxT` 给 1，于是 slab 判法里那个 `t` 就是"沿着这条线段走到哪儿"（0 = 起点、1 = 终点），
+ * 结果不必先开方求长度。同一个点上（两个人叠在一起、增量为 0）也不会撞上"除以 0"：
+ * `rayWalls` 里那两条 `Math.abs(dx) < 1e-9` 的分支各自只问"起点在不在这一面墙的区间里"，
+ * 人不在墙里（`collideWalls` 每帧都看着），于是原样返回 `maxT` = 1，答案是"没被挡住"——
+ * 正是该有的那个答案（贴在你身上的那只照旧挨打，`tests/selfwall.test.mjs` 钉着它）。
+ */
+export function wallBetween(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  walls: readonly Rect[],
+): boolean {
+  return rayWalls(x0, y0, x1 - x0, y1 - y0, 1, walls) < 1;
+}
+
 export function clampToArena(x: number, y: number, r: number, halfW: number, halfH: number): { x: number; y: number } {
   return {
     x: Math.max(-halfW + r, Math.min(halfW - r, x)),

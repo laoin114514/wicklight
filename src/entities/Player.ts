@@ -41,6 +41,11 @@ export interface PlayerContext {
   hurt: (amount: number) => void;
   hit: (e: Enemy, damage: number, crit: boolean, kx: number, ky: number, knockback: number, opts?: { burn?: number; slow?: number; source?: string }) => boolean;
   findTarget: (x: number, y: number, maxDist: number, requireLight?: boolean) => Enemy | null;
+  /**
+   * 「光只沿看得见的直线走」（v88）：(x0,y0) 到 (x1,y1) 这条直线**通不通**（中间没墙）。
+   * 燎灯与环形火环用这一句；墙在地图上，Player 不认识地图，所以这一句由 Game 提供。
+   */
+  sight: (x0: number, y0: number, x1: number, y1: number) => boolean;
   /** 「倾灯」倒了一瓢：把"这一瓢花了多少油"记回这一局的账上（结算面板要看） */
   pour: (cost: number) => void;
   chainZap: (x: number, y: number, damage: number, jumps: number, range: number, color: string, opts: { burn?: number; slow?: number; source?: string }) => void;
@@ -1102,12 +1107,15 @@ export class Player {
           ctx.addLight(ox, oy, 40, 0.5);
           ctx.enemies.forEach((e) => {
             const rr = st.radius * (1 + 0.3 * area) + e.radius;
-            if ((e.x - ox) ** 2 + (e.y - oy) ** 2 <= rr * rr) {
-              const cd = this.orbit.hitCooldown.get(e.id) ?? 0;
-              if (cd <= 0) {
-                this.orbit.hitCooldown.set(e.id, 0.35);
-                this.hitEnemy(e, dmg, ctx, st, e.x - ox, e.y - oy, id);
-              }
+            if ((e.x - ox) ** 2 + (e.y - oy) ** 2 > rr * rr) return;
+            // v88：这一口火焰还得"照得到"。火环绕着你转，可它烧的是光——
+            // 一堵墙后面的那只，从你这里看不见，火环就够不到它（判据是**你到怪**那条线，
+            // 不是"火焰到怪"：同一件武器只有一个说法，免得玩家去算火焰转到哪儿了）。
+            if (!ctx.sight(this.x, this.y, e.x, e.y)) return;
+            const cd = this.orbit.hitCooldown.get(e.id) ?? 0;
+            if (cd <= 0) {
+              this.orbit.hitCooldown.set(e.id, 0.35);
+              this.hitEnemy(e, dmg, ctx, st, e.x - ox, e.y - oy, id);
             }
           });
         }
@@ -1133,7 +1141,9 @@ export class Player {
         let hits = 0;
         ctx.enemies.forEach((e) => {
           const rr = reach + e.radius; // 大块头从边缘就开始被烤（和伏灯的触发判定同一个道理）
-          if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 <= rr * rr) hits += 1;
+          if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 > rr * rr) return;
+          if (!ctx.sight(this.x, this.y, e.x, e.y)) return; // v88：墙后面那几只不在这一拍里
+          hits += 1;
         });
         if (hits > 0) {
           const crowd = Math.min(AURA.crowdBonusMax, (hits - 1) * this.flags.auraCrowd);
@@ -1142,6 +1152,7 @@ export class Player {
           ctx.enemies.forEach((e) => {
             const rr = reach + e.radius;
             if ((e.x - this.x) ** 2 + (e.y - this.y) ** 2 > rr * rr) return;
+            if (!ctx.sight(this.x, this.y, e.x, e.y)) return;
             this.hitEnemy(e, pulse, ctx, st, e.x - this.x, e.y - this.y, id);
             // 「烟熏」（遗物）：光里的地方他们走不开。强度记在 `slowFactor` 上——
             // 霜棱 / 霜印那 0.5 倍是另一条线的事，合并规矩只有一份（`applySlow`：谁更狠听谁的）。
