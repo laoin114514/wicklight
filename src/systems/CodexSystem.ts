@@ -384,7 +384,7 @@ export function codexCatalog(): CodexEntry[] {
     color: '#8fb8ff',
     icon: '🌀',
     rows: [
-      ['落在哪', `自动落在最近那只怪身上（附近没人时落在你朝着的方向 ${Math.round(vortexDef.levels[0].range * 0.7)}px 处）`],
+      ['落在哪', `自动落在最近那只怪身上——**看得见的优先**（v89：中间隔着一堵墙的那几只让给看得见的，全看不见时还是最近的那只）；附近没人时落在你朝着的方向 ${Math.round(vortexDef.levels[0].range * 0.7)}px 处`],
       ['吸多久', `${VORTEX.life} 秒，然后缩成一下炸`],
       ['拽得多狠', `中心 ${VORTEX.pull}px/s、到边缘归零（外侧垫起来过，所以圈里九成的地方都收得住）；疾影挣得出去，石守被拖着走`],
       ['收网', `收尾那一下：这一下每多打到一只，伤害 +${VORTEX.reward}（首领不算）；一网同时打到 ${VORTEX.haul} 只解「收网」`],

@@ -1782,7 +1782,9 @@ export class Game {
       // 「光只沿看得见的直线走」（v88）：燎灯与环形火环拿这一句问"从这个点到那个点中间有没有墙"。
       // 墙在 `level` 上，Player 不认识地图，所以这一句留在 Game 这边（和 `findTarget` / `beam` 同一个道理）。
       sight: (x0, y0, x1, y1) => !wallBetween(x0, y0, x1, y1, this.level.walls),
-      findTarget: (x, y, maxDist, requireLight) => this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist)),
+      // 索敌（v89）：最后那个 `true` 是 `preferVisible`——看得见的排前面（见 `nearestEnemy`）。
+      findTarget: (x, y, maxDist, requireLight) =>
+        this.nearestEnemy(x, y, Math.min(maxDist, requireLight ? this.player.lightRadius + 40 : maxDist), undefined, true),
       chainZap: (x, y, damage, jumps, range, color, opts) => this.chainZap(x, y, damage, jumps, range, color, opts),
       beam: (x, y, angle, length, width, damage, color, opts) => this.fireBeam(x, y, angle, length, width, damage, color, opts),
       onNova: () => {
@@ -2008,8 +2010,9 @@ export class Game {
    * 现在起点到墙面这一段才是这一发真正打得到的距离（`rayWalls`），**伤害与画线用同一个数**：
    * 画到墙上、伤害也只到墙上——两头不一致的话，"墙后面那只为什么没挨打"在画面上看不出来。
    *
-   * 刻意没动的两处：自动瞄准照旧瞄最近的那一只（哪怕隔着墙，和子弹一样，那一下是白打的——
-   * 要不要打、往哪儿站是玩家的事）；雷弧（`chainZap`）照旧不看墙，它跳的是"怪与怪之间的空气"。
+   * 刻意没动的一处：雷弧（`chainZap`）照旧不看墙，它跳的是"怪与怪之间的空气"。
+   * （这儿原来还写着"自动瞄准照旧瞄最近的那一只"——v89 把它换成了**看得见的排前面**，
+   * 见 `nearestEnemy`；这一发自己照旧停在墙面上，v89 改的是"瞄哪儿"，不是"打在哪儿"。）
    */
   private fireBeam(
     x: number,
@@ -2141,9 +2144,44 @@ export class Game {
     ctx.restore();
   }
 
-  private nearestEnemy(x: number, y: number, maxDist: number, exclude?: Set<number>): Enemy | null {
+  /**
+   * 最近的那一只。`preferVisible` 为真时**看得见的排前面**（v89）。
+   *
+   * 为什么要这一档：索敌锁的是"最近"，可墙从 v84 起就是实心的——锁在一只**隔着墙**的怪身上，
+   * 打出去的那一发（子弹 / 光矛 / 鞭）会停在墙面上，冷却白转。台架实测（同一份产物、只多一个计数器）：
+   * 钉死火力那一套里 **10%** 的索敌挑中的是墙后面那只（59833 次里 5948 次，991 次/局），
+   * 自然局 7.7% / 9.5%。这不是"伤害少了"的问题，是**手上明明有能打的东西，却在打墙**。
+   *
+   * 三条边界写在这儿：
+   *   · **全都被挡住时照旧返回最近的那一只**（v85 那句"要不要打、往哪儿站仍是你的事"留着）——
+   *     所以这一档改的是"挑哪一只"，不是"打不打"；读台上它仍然挑中墙后面的目标（`--fixed` 那套
+   *     13.4%），那是**读数**不是毛病——剩下的那些本来就没有看得见的可挑；
+   *   · 墙**不扩大射程**：候选先过 `maxDist` 与灯火那两关，看得见只是排在前面的理由
+   *     （`findTarget` 那边传进来的 `maxDist` 才是射程，这一句不碰它）；
+   *   · 距离**完全相等**时两条路挑的是同一只（都写 `d <`，所以都是"池子里先摆的那只"）——
+   *     没有墙的战场上 `seen` 恒等于 `best`，一个字节都不会变（用例拿 `deepEqual` 钉着）。
+   *
+   * 墙只在"这一只比**已经找到的**那只看得见的更近"的时候才问一句（`d < seenD`），所以墙上场时
+   * 多出来的账是"距离每刷新一次问一句"，不是"每只问一句"。`seenD` **不跟着没找到的那几只收紧**——
+   * 它是"眼下已经找到的最近的那个看得见的"，拿它当门槛才不会漏掉"更远但看得见"的那一只
+   * （第一只被挡、第二只看得见的情形，用例钉着它）。
+   *
+   * 没有"地图上没有墙"这条捷径：关卡每张图都是 10~15 堵墙（`generateLevel`），
+   * 为它写一个 `walls.length > 0` 的短路只会在测试里当一条永远走不到的死支——
+   * 空墙时 `wallBetween` 自己就是"没挡着"，照着走一遍不会更慢。
+   */
+  private nearestEnemy(
+    x: number,
+    y: number,
+    maxDist: number,
+    exclude?: Set<number>,
+    preferVisible = false,
+  ): Enemy | null {
     let best: Enemy | null = null;
     let bestD = maxDist * maxDist;
+    let seen: Enemy | null = null;
+    let seenD = bestD;
+    const walls = this.level.walls;
     const lc = this.lightCtx();
     this.enemies.forEach((e) => {
       if (exclude && exclude.has(e.id)) return;
@@ -2157,8 +2195,12 @@ export class Game {
         bestD = d;
         best = e;
       }
+      if (preferVisible && d < seenD && !wallBetween(x, y, e.x, e.y, walls)) {
+        seenD = d;
+        seen = e;
+      }
     });
-    return best;
+    return seen ?? best;
   }
 
   applyHit(

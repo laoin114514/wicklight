@@ -870,7 +870,8 @@ export class Player {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Aim toward nearest visible target
+    // 瞄准：最近的那只，看得见的优先（v89）——`requireLight` 是"灯罩着"，
+    // `preferVisible` 是"中间没隔着墙"，两个都由 `Game.nearestEnemy` 一起算。
     const target = ctx.findTarget(this.x, this.y, 520, true);
     if (target) {
       this.angle = Math.atan2(target.y - this.y, target.x - this.x);
@@ -1339,7 +1340,7 @@ export class Player {
         const far = this.aimFar;
         const dir = this.aimManual ?? aim;
         for (let i = 0; i < count; i += 1) {
-          // 一瓢是准的（自动瞄准锁着最近那只怪），三瓢（进化）才散开成一个扇面
+          // 一瓢是准的（自动瞄准锁着最近那只怪；v89 起看得见的优先），三瓢（进化）才散开成一个扇面
           const a = dir + (count > 1 ? (i - (count - 1) / 2) * st.spread : (Math.random() - 0.5) * 0.14);
           ctx.projectiles.spawn({
             x: this.x,
@@ -1364,7 +1365,8 @@ export class Player {
         break;
       }
       case 'vortex': {
-        // 落点：优先砸在最近的那只怪身上（自动瞄准本来就锁着它），附近没人才落在你朝着的方向前面。
+        // 落点：优先砸在最近的那只怪身上（自动瞄准本来就锁着它；v89 起看得见的优先，
+        // 全看不见时还是最近的那只），附近没人才落在你朝着的方向前面。
         // 它是"往人群里扔的一盏灯"，不是"放在自己脚边的灯"——所以和伏灯相反，它落在前面。
         const target = ctx.findTarget(this.x, this.y, st.range);
         const base = target ? Math.atan2(target.y - this.y, target.x - this.x) : this.angle;

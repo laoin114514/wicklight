@@ -40,6 +40,11 @@
  *                  那一刀：同一只怪、同一个距离，只差"墙在中间 / 墙在旁边 / 没有墙"。
  *                  期望是 **81.0 / 0.0 / 81.0**（燎灯）与 **48.6 / 0.0 / 48.6**（火环）——
  *                  "墙在旁边"那一格必须与"没有墙"**逐位相同**：这一刀只该管那条直线。
+ *   · `aimpick`（v89）—— **索敌挑谁**：墙后面那只更近（(-150,0)）、看得见的那只更远（(0,150)），
+ *                  自动瞄准该把子弹递给谁。三格与 `selflight` 同一套摆法（无墙 / 墙在中间 / 墙在旁边）：
+ *                  期望是 **180.0 / 90.0 / 180.0**（度），挨打也跟着翻——"隔着墙"那一格是
+ *                  墙后那只 **0.0**、看得见的那只 **27.0**；另外两格逐位相同（都是墙后那只 27.0）。
+ *                  这一栏是"读数为什么值得改"的现场：改前（v88）三格**都是 180.0**，子弹全打在墙上。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -62,7 +67,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -388,6 +393,69 @@ async function runLight(seed, id, kind) {
   return lost;
 }
 
+/**
+ * v89：索敌挑谁。摆两只怪——墙后面那只**更近**（(-150,0)），看得见的那只更远（(0,150)），
+ * 站桩打 300 帧，读回瞄准角与"这两只各挨了多少"。
+ * 三格的墙和 `selflight` 同一套：`none` 无墙、`mid` 挡在中间、`beside` 摆在旁边。
+ * 读数该是 180.0 / 90.0 / 180.0：只有"墙真的在中间"那一格才该换目标，
+ * 另外两格必须与"无墙"**逐位相同**（这一刀只该管那条被挡住的直线）。
+ */
+const AIM_CONF = {
+  none: [],
+  mid: [{ x: -60, y: -300, w: 20, h: 600 }],
+  beside: [{ x: 300, y: -300, w: 20, h: 600 }],
+};
+
+async function runAimPick(seed, kind) {
+  const { game, p } = await open(seed, `aim-${kind}`);
+  p.stats.maxHp = 1e6;
+  p.hp = 1e6;
+  game.level.walls.length = 0;
+  for (const w of AIM_CONF[kind]) game.level.walls.push(w);
+  game.enemies.clear();
+  const near = game.enemies.spawn('bulwark', -150, 0, 1, 1);
+  const far = game.enemies.spawn('bulwark', 0, 150, 1, 1);
+  for (const e of [near, far]) {
+    e.hp = 1e9;
+    e.maxHp = 1e9;
+    e.damage = 0;
+    e.spawnTimer = 0;
+    e.speed = 0;
+  }
+  p.weapons.clear();
+  p.relics.clear();
+  p.weapons.set('shard', 1);
+  p.recomputeStats();
+  p.stats.critChance = 0; // 同 selflight：暴击是掷骰子的，这一栏要的是"朝谁打"
+  p.stats.critMult = 1;
+  p.cooldowns.clear();
+  p.aimManual = null;
+  let lostNear = 0;
+  let lostFar = 0;
+  for (let i = 0; i < 300; i += 1) {
+    for (const [e, x, y] of [[near, -150, 0], [far, 0, 150]]) {
+      e.hp = 1e9;
+      e.x = x;
+      e.y = y;
+      e.speed = 0;
+      e.vx = 0;
+      e.vy = 0;
+    }
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.hp = 1e6;
+    p.oil = p.oilMax;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+    lostNear += 1e9 - near.hp;
+    lostFar += 1e9 - far.hp;
+  }
+  return { angle: ((p.angle * 180) / Math.PI + 360) % 360, lostNear, lostFar };
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -426,6 +494,31 @@ if (ONLY.includes('selflight')) {
     out[`selflight-${id}`] = { none: cells[0], mid: cells[1], beside: cells[2] };
     console.log(`${pad(name, 12)}${pad(cells[0].toFixed(1), 9)}${pad(cells[1].toFixed(1), 9)}${pad(cells[2].toFixed(1), 9)}`);
   }
+}
+if (ONLY.includes('aimpick')) {
+  console.log('');
+  console.log(`${pad('索敌挑谁（v89）', 16)}${pad('无墙', 9)}${pad('隔着墙', 9)}${pad('墙在旁边', 9)}`);
+  const cell = { angle: [], near: [], far: [] };
+  for (const kind of ['none', 'mid', 'beside']) {
+    let angle = 0;
+    let near = 0;
+    let far = 0;
+    for (const seed of SEEDS) {
+      const r = await runAimPick(seed, kind);
+      angle += r.angle;
+      near += r.lostNear;
+      far += r.lostFar;
+    }
+    const n = SEEDS.length;
+    cell.angle.push(angle / n);
+    cell.near.push(near / n);
+    cell.far.push(far / n);
+    out[`aimpick-${kind}`] = { angle: angle / n, lostNear: near / n, lostFar: far / n };
+  }
+  const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(1), 9)).join('')}`);
+  row('瞄准角(°)', cell.angle);
+  row('墙后面那只挨了', cell.near);
+  row('看得见那只挨了', cell.far);
 }
 const DASH_ONLY = ONLY.filter((n) => DASH_SCENES[n]);
 if (DASH_ONLY.length) {

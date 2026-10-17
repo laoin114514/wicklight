@@ -71,6 +71,14 @@ const FIXED = args.has('fixed');
  * 数法是把 Game 交给玩家的那个 ctx 包一层（`playerCtx`），`sight` 每答一次"看不见"就加一。
  * 它在 `--fixed` 那套（守夜人自带的环形火环照样在场）与自然模式里都数得到；
  * 拿掉墙（`--nowalls`）它必须是 0——那正是"这一条只在墙前面才有话说"的证据。
+ *
+ * v89 在同一层包装里再加一栏，问的是**索敌挑中的目标是不是被墙挡着**：
+ * 包住 `findTarget`，返回的那一只自己再问 `sight` 一次。它答"这一版的账是怎么算的"——
+ * 改前（v88）`--fixed` 那一套是 991.3 次/局（59833 次里 5948 次 = 9.9%），自然局 7.7% / 9.5%；
+ * 其中还有一档是"**明明射程里还有看得见的**"（改前 195.0 次/局 holder）——
+ * 那就是白打，v89 要杀的就是它，改后这一小栏必须是 **0**。
+ * 为什么"挑中墙后面"本身不用清零：全都看不见时索敌照旧要挑一只（它答的是"挑哪一只"，
+ * 不是"打不打"，见 `Game.nearestEnemy` 那一段）——所以留在这儿当读数，不当判据。
  */
 const NOWALLS = args.has('nowalls');
 /**
@@ -118,9 +126,13 @@ async function run({ seed, style, stages }) {
   let dashSeen = -1;
   let dashBirth = -1;
   let wallBash = 0;
-  // 自己被墙挡掉的火（v88）：见文件头。包一层 ctx，不去碰游戏里那份实现。
+  // 自己被墙挡掉的火（v88）与索敌挑中的目标（v89）：见文件头。
+  // 两条都包在这一层 ctx 里（同一层包装叠第二次没有意义，也是白多一层调用）。
   let lightBlocked = 0;
   let lightAsked = 0;
+  let aimAsked = 0;
+  let aimBlocked = 0;
+  let aimWasted = 0;
   const realPlayerCtx = game.playerCtx.bind(game);
   game.playerCtx = () => {
     const ctx = realPlayerCtx();
@@ -130,6 +142,25 @@ async function run({ seed, style, stages }) {
       lightAsked += 1;
       if (!ok) lightBlocked += 1;
       return ok;
+    };
+    // 索敌（v89）：挑中的那只**自己**被墙挡着吗？挡着的话，射程里还有看得见的吗？
+    // 后面那一问才是这一版的判据——"手上还有能打的东西，却在往墙上打"（`aimWasted`）。
+    // 探针里问的是**真的** `realSight`（没插桩的那一个），免得把这一层的计数混进去。
+    const realFind = ctx.findTarget;
+    ctx.findTarget = (x, y, maxDist, requireLight) => {
+      const e = realFind(x, y, maxDist, requireLight);
+      aimAsked += 1;
+      if (e && !realSight(x, y, e.x, e.y)) {
+        aimBlocked += 1;
+        const md = Math.min(maxDist, requireLight ? game.player.lightRadius + 40 : maxDist);
+        let alt = false;
+        game.enemies.forEach((o) => {
+          if (o === e || alt) return;
+          if ((o.x - x) ** 2 + (o.y - y) ** 2 < md * md && realSight(x, y, o.x, o.y)) alt = true;
+        });
+        if (alt) aimWasted += 1;
+      }
+      return e;
     };
     return ctx;
   };
@@ -308,7 +339,7 @@ async function run({ seed, style, stages }) {
     // 难度是不是被顺带改了，得有个数看得见："循灯"只许改节奏，不许偷偷加伤害
     dmgTaken: Math.round(game.damageTaken),
     hpFrac: +(game.player.hp / game.player.stats.maxHp).toFixed(2),
-    dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, levelTimes, waves,
+    dashTaps, dashEaten, wallBash, lightBlocked, lightAsked, aimAsked, aimBlocked, aimWasted, levelTimes, waves,
   };
 }
 
@@ -357,7 +388,7 @@ for (const style of STYLES) {
   out.push({
     style,
     s,
-    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash, lightBlocked: r.lightBlocked })),
+    runs: runs.map((r) => ({ seed: r.seed, seconds: r.seconds, kills: r.kills, level: r.level, wallBash: r.wallBash, lightBlocked: r.lightBlocked, aimBlocked: r.aimBlocked, aimWasted: r.aimWasted })),
   });
   console.log(`\n── 走位 ${style} · ${runs.length} 局 · ${FIXED ? '钉死火力' : GOD ? '打不死' : '自然'}`
     + ` · ${runs[0].stage} 关跑完（最远到第 ${Math.max(...runs.map((r) => r.stage))} 关）──────────`);
@@ -371,6 +402,13 @@ for (const style of STYLES) {
   const wallBash = runs.reduce((a, r) => a + (r.wallBash ?? 0), 0);
   console.log(`  自己的冲刺撞在墙上：${(wallBash / runs.length).toFixed(1)} 次/局（共 ${wallBash} 次`
     + `${NOWALLS ? ' · 墙已被 --nowalls 拿掉，它必须是 0' : ''}）`);
+  const aimB = runs.reduce((a, r) => a + (r.aimBlocked ?? 0), 0);
+  const aimA = runs.reduce((a, r) => a + (r.aimAsked ?? 0), 0);
+  const aimW = runs.reduce((a, r) => a + (r.aimWasted ?? 0), 0);
+  console.log(`  索敌挑中墙后面的目标：${(aimB / runs.length).toFixed(1)} 次/局（共 ${aimB} 次 / 问了 ${aimA} 次`
+    + ` = ${aimA ? ((aimB / aimA) * 100).toFixed(1) : '0.0'}% · 这一栏是读数，全看不见时照旧挑一只）`);
+  console.log(`  其中"明明还有看得见的"：${(aimW / runs.length).toFixed(1)} 次/局（共 ${aimW} 次 · v89 那条规矩`
+    + ` · 必须是 0）${NOWALLS ? ' · 墙已被 --nowalls 拿掉，这两栏必须是 0' : ''}`);
   const blocked = runs.reduce((a, r) => a + (r.lightBlocked ?? 0), 0);
   const asked = runs.reduce((a, r) => a + (r.lightAsked ?? 0), 0);
   console.log(`  自己身上的火被墙挡掉：${(blocked / runs.length).toFixed(1)} 次/局（共 ${blocked} 次 · v88 那条规矩`

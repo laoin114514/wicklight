@@ -73,6 +73,17 @@ function equip(game, id, level = 5) {
   game.player.recomputeStats();
 }
 
+/**
+ * 把暴击按住。`hitEnemy` 每一下都要掷一次骰子（基础 6% / ×1.35），而这一份文件里有好几处
+ * 判的是**两个伤害的比值**——几下的样本里掷中一次就够把比值顶过头，那量到的是运气不是曲线。
+ * （v89 收尾那 25 轮连跑撞出过一次：半缸油那边掷中 3 下、满油那边 0 下，
+ * 比值从 0.609 顶到 0.855，①就红了。当时 ③ 已经按住了骰子，①漏了。）
+ * `recomputeStats` 会把基础 6% 装回来，所以每一局都要在 `equip` 之后单独按一次。
+ */
+const noCrit = (game) => {
+  game.player.stats.critChance = 0;
+};
+
 /** 跑 n 帧：不动、不开火以外的事。 */
 const run = (game, frames) => {
   for (let i = 0; i < frames; i += 1) {
@@ -178,6 +189,7 @@ test('燎灯：灯一暗它就小——半缸油和拨芯两条都要量到', as
   const p = game.player;
 
   // ① 满油 vs 半缸油：同一只靶、同一个位置，伤害按 `damageScale` 落下来
+  noCrit(game);
   oilAt(game, 1);
   const bright = dummy(game, 120, 0);
   run(game, 120);
@@ -186,6 +198,7 @@ test('燎灯：灯一暗它就小——半缸油和拨芯两条都要量到', as
 
   const game2 = await open(t, 'dim2');
   equip(game2, 'aura');
+  noCrit(game2); // 两边的骰子都得按住（这个比值跨两局）
   oilAt(game2, 0.25);
   const dim = dummy(game2, 120, 0);
   run(game2, 120);
@@ -201,6 +214,7 @@ test('燎灯：灯一暗它就小——半缸油和拨芯两条都要量到', as
   // ② 拨着芯：半径砍一半（240px 的靶整个掉出光圈）+ damageScale ×0.65
   const game3 = await open(t, 'dim3');
   equip(game3, 'aura');
+  noCrit(game3);
   oilAt(game3, 1);
   const p3 = game3.player;
   p3.wickOn = true;
@@ -216,19 +230,18 @@ test('燎灯：灯一暗它就小——半缸油和拨芯两条都要量到', as
   assert.ok(dmgOf(game3, 'aura') > before, '账还在记，只是记进光里的那几只');
 
   // ③ 直接对账：拨芯那一刀的账面是 ×0.65（和别的武器同一条 `damageScale`）。
-  //    ⚠ 暴击要关掉：`hitEnemy` 每一下都掷一次暴击（×1.35），几下的样本里
-  //    掷中一次就够把比值顶到 0.88——那量到的是运气，不是拨芯那一刀。
+  //    ⚠ 暴击要关掉（见 `noCrit`）：几下的样本里掷中一次就够把比值顶到 0.88。
   const game4 = await open(t, 'dim4');
   equip(game4, 'aura');
+  noCrit(game4);
   oilAt(game4, 1);
-  game4.player.stats.critChance = 0;
   const t4 = dummy(game4, 80, 0);
   run(game4, 180);
   const full = t4.maxHp - t4.hp;
   const game5 = await open(t, 'dim5');
   equip(game5, 'aura');
+  noCrit(game5);
   oilAt(game5, 1);
-  game5.player.stats.critChance = 0;
   game5.player.wickOn = true;
   run(game5, 120);
   const t5 = dummy(game5, 80, 0);
