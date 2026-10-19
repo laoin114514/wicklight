@@ -284,12 +284,21 @@ export class UIManager implements UIHost {
     const lanternCards = LANTERNS.map((l) => {
       const ok = unlocked.includes(l.id);
       const sel = l.id === this.selectedLantern;
+      const weapon = WEAPON_MAP[l.weapon]?.name ?? l.weapon;
+      const passive = PASSIVE_MAP[l.passive]?.name ?? l.passive;
+      const badge = sel
+        ? '<span class="lantern__state is-on">已选</span>'
+        : ok ? '' : '<span class="lantern__state is-locked">未解锁</span>';
       return `
-        <button class="lantern ${sel ? 'is-selected' : ''} ${ok ? '' : 'is-locked'}" data-lantern="${l.id}" style="--accent:${l.color}">
-          <div class="lantern__flame" style="background:radial-gradient(circle at 50% 40%, #fff, ${l.color} 45%, transparent 75%)"></div>
-          <div class="lantern__name">${l.name}</div>
-          <div class="lantern__title">${l.title}</div>
-          <div class="lantern__blurb">${ok ? l.blurb : '尚未解锁 · 前往余烬解锁'}</div>
+        <button class="lantern ${sel ? 'is-selected' : ''} ${ok ? '' : 'is-locked'}" data-lantern="${l.id}" aria-pressed="${sel}" style="--accent:${l.color}">
+          ${badge}
+          <span class="lantern__flame" style="background:radial-gradient(circle at 50% 40%, #fff, ${l.color} 45%, transparent 75%)"></span>
+          <span class="lantern__copy">
+            <span class="lantern__name">${l.name}</span>
+            <span class="lantern__title">${l.title}</span>
+          </span>
+          <span class="lantern__blurb">${ok ? l.blurb : '尚未解锁 · 前往余烬解锁'}</span>
+          ${ok ? `<span class="lantern__kit"><i><span>武器</span><b>${weapon}</b></i><i><span>被动</span><b>${passive}</b></i></span>` : ''}
         </button>`;
     }).join('');
 
@@ -333,14 +342,18 @@ export class UIManager implements UIHost {
 
     this.show(`
       <div class="panel panel--select">
-        <div class="panel__title">${this.endless ? '无尽之夜' : '冒险 · 选择灯火与难度'}</div>
+        <header class="select-head">
+          <span class="select-head__kicker">守夜整备</span>
+          <div class="panel__title select-head__title">${this.endless ? '无尽之夜' : '冒险 · 选择灯火与难度'}</div>
+          <p class="select-head__sub">${LANTERNS.length} 盏灯，${LANTERNS.length} 种开局。选中的灯火会一路陪你到天亮。</p>
+        </header>
         <div class="lantern-grid">${lanternCards}</div>
         <div class="diff-row">${diffCards}</div>
         <div class="pact-block">
           <div class="pact-head"><b>深宵之约</b><span>每背一条，敌人与这一夜都更狠一点，结算的余烬也多一份</span></div>
           ${pactRow}
         </div>
-        <div class="row-actions">
+        <div class="row-actions select-actions">
           <button class="btn" data-act="back">返回</button>
           <button class="btn btn--primary" data-act="start">点燃灯芯<span class="key">回车</span></button>
         </div>
