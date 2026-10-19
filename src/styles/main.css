@@ -9168,3 +9168,24 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--meta .fire { padding: 7px 9px 6px; }
   .meta-actions { margin-top: 7px; padding-top: 7px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v172 · 短竖屏：约期收成一排，解锁树多借一列
+   360×640 与 375×667 这类老式竖屏上，七条深宵之约会堆成三行；余烬树也
+   仍按两列铺成八行，最后一行被底部按钮盖住。这里把约期改成四列、解锁树
+   改成三列，只移动排版，条目、价格与点击区原样保留。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 400px) and (max-height: 700px) {
+  .panel--select .pact-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .panel--select .pact { padding: 5px 4px; }
+  .panel--select .pact b { font-size: 9.5px; }
+  .panel--select .pact-note { margin-top: 3px; }
+
+  .panel--meta .node-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .panel--meta .node { padding: 5px 6px 4px; }
+  .panel--meta .node__name { gap: 3px; font-size: 10.5px; }
+  .panel--meta .node__blurb { font-size: 8.3px; line-height: 1.32; }
+  .panel--meta .node__cost { padding: 1px 4px 1px; font-size: 8.2px; }
+}
