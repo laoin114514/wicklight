@@ -6893,11 +6893,8 @@ export class Game {
         ctx.stroke();
       }
       // 三条旋臂（螺线：越靠中心越密，这就是"在吸"的形状）
-      ctx.lineWidth = 2.6;
       ctx.lineCap = 'round';
-      for (let a = 0; a < 3; a += 1) {
-        const base = v.phase + (a / 3) * Math.PI * 2;
-        ctx.strokeStyle = `rgba(214,240,255,${0.62 * fade})`;
+      const spiral = (base: number): void => {
         ctx.beginPath();
         for (let s = 0; s <= 12; s += 1) {
           const k = s / 12; // 0 = 外圈 → 1 = 中心
@@ -6908,6 +6905,38 @@ export class Game {
           if (s === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
+      };
+      for (let a = 0; a < 3; a += 1) {
+        const base = v.phase + (a / 3) * Math.PI * 2;
+        // 同一根螺线描三层：外圈是压进地面的冷光，中段是气流，
+        // 最里面那道细芯才是被吸力点亮的尘。单根实线太像画上去的箭头。
+        ctx.strokeStyle = `rgba(102,144,255,${0.13 * fade})`;
+        ctx.lineWidth = 8.5;
+        spiral(base);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(174,213,255,${0.3 * fade})`;
+        ctx.lineWidth = 3.8;
+        spiral(base);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(231,246,255,${0.72 * fade})`;
+        ctx.lineWidth = 1.2;
+        spiral(base);
+        ctx.stroke();
+      }
+      // 贴着边界被扯下来的尘丝：从圈外擦向内圈，露在旋臂之间，
+      // 让"吸力边界落在哪儿"不只靠那圈虚线说明。
+      for (let i = 0; i < 8; i += 1) {
+        const k = (this.time * 0.58 + i / 8) % 1;
+        const rr = r * (1.018 - k * 0.16);
+        const ang = v.phase * 0.7 + i * 0.83 - k * 1.9;
+        const px = v.x + Math.cos(ang) * rr;
+        const py = v.y + Math.sin(ang) * rr;
+        const tail = 5 + k * 8;
+        ctx.strokeStyle = `rgba(186,221,255,${(0.08 + (1 - k) * 0.2) * fade})`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(ang + 0.46) * tail, py + Math.sin(ang + 0.46) * tail);
         ctx.stroke();
       }
       // 沿旋臂往里跑的碎屑：一眼就看得见"有东西在被卷进去"
