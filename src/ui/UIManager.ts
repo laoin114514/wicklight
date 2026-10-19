@@ -312,10 +312,22 @@ export class UIManager implements UIHost {
         }</div>`
       : `<div class="pact-locked">🔒 通关一次之后开启：那之后你可以自己决定这一夜有多难（今日灯芯不吃这一套）</div>`;
 
+    const diffTones: Record<Difficulty, { tone: string; sigil: string; rank: number }> = {
+      relaxed: { tone: '#9bd6c7', sigil: '◔', rank: 1 },
+      normal: { tone: '#ffd28a', sigil: '◐', rank: 2 },
+      nightmare: { tone: '#ff7a6f', sigil: '●', rank: 3 },
+    };
     const diffCards = DIFFICULTY_ORDER.map((d) => {
       const mods = DIFFICULTIES[d];
-      return `<button class="diff ${d === this.selectedDifficulty ? 'is-selected' : ''}" data-diff="${d}">
-        <b>${mods.label}</b><span>${mods.blurb}</span>
+      const tone = diffTones[d];
+      const pips = [0, 1, 2].map((i) => `<i class="${i < tone.rank ? 'is-lit' : ''}"></i>`).join('');
+      return `<button class="diff ${d === this.selectedDifficulty ? 'is-selected' : ''}" data-diff="${d}" style="--c:${tone.tone}">
+        <span class="diff__top"><span class="diff__sigil" aria-hidden="true">${tone.sigil}</span><b>${mods.label}</b></span>
+        <span class="diff__blurb">${mods.blurb}</span>
+        <span class="diff__foot">
+          <span class="diff__meter" aria-hidden="true">${pips}</span>
+          <span class="diff__stats"><i>敌血 <b>×${mods.hpMult.toFixed(2)}</b></i><i>余烬 <b>×${mods.emberMult.toFixed(2)}</b></i></span>
+        </span>
       </button>`;
     }).join('');
 
