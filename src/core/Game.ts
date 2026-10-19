@@ -1,4 +1,5 @@
 import { Camera } from './Camera';
+import { Atmosphere } from './Atmosphere';
 import { distanceToRect, visibilityPolygon, type VisibilityPoint } from './Visibility';
 import { isLitAt } from './LightRules';
 import { PostFX } from './PostFX';
@@ -324,6 +325,7 @@ export class Game {
   readonly storage: StorageType = new Storage();
   readonly audio: AudioEngine;
   readonly light = new LightSystem();
+  readonly atmosphere = new Atmosphere();
   readonly postfx: PostFX;
   readonly events = new EventBus<GameEvents>();
   readonly rng = new Random();
@@ -4729,6 +4731,7 @@ export class Game {
     r.sampleFrame();
     r.begin();
     const theme = this.currentStage().theme;
+    this.atmosphere.ensure(theme);
     r.clear(theme.fog);
     const ctx = r.ctx;
     const w = r.width;
@@ -4754,6 +4757,17 @@ export class Game {
     this.drawPyreGlow(ctx, w, h);
     this.drawEmberGlow(ctx, w, h);
     this.drawFrostHaze(ctx, w, h);
+    this.atmosphere.draw(
+      ctx,
+      w,
+      h,
+      this.time,
+      this.camera,
+      this.player.x,
+      this.player.y,
+      this.player.lightRadius,
+      this.profile.handheld,
+    );
 
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
