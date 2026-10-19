@@ -2073,13 +2073,105 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'darkless': {
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const backX = -facingX;
+      const backY = -facingY;
+      const sideX = -facingY;
+      const sideY = facingX;
+      const pulse = 0.5 + Math.sin(time * 1.8 + w) * 0.5;
+
+      // 壳内没有反光，只有被压扁的冷灰褶层和几点没被完全吞掉的灰烬。
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const voidCore = ctx.createRadialGradient(
+        e.x + facingX * r * 0.16,
+        e.y + facingY * r * 0.16,
+        r * 0.05,
+        e.x,
+        e.y,
+        r * 1.03,
+      );
+      voidCore.addColorStop(0, 'rgba(0,0,0,0.46)');
+      voidCore.addColorStop(0.62, 'rgba(0,1,5,0.2)');
+      voidCore.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = voidCore;
+      ctx.fillRect(e.x - r * 1.4, e.y - r * 1.4, r * 2.8, r * 2.8);
+
+      ctx.lineCap = 'round';
+      for (let fold = 0; fold < 3; fold += 1) {
+        const back = r * (0.05 + fold * 0.21);
+        const half = r * (0.66 - fold * 0.11);
+        const cx = e.x + backX * back;
+        const cy = e.y + backY * back;
+        ctx.beginPath();
+        ctx.moveTo(cx + sideX * half, cy + sideY * half);
+        ctx.quadraticCurveTo(
+          cx + backX * r * 0.12,
+          cy + backY * r * 0.12,
+          cx - sideX * half,
+          cy - sideY * half,
+        );
+        ctx.strokeStyle = 'rgba(2,4,10,0.34)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.strokeStyle = fold === 1 ? 'rgba(137,158,201,0.16)' : 'rgba(111,132,177,0.1)';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+
+      for (let mote = 0; mote < 5; mote += 1) {
+        const a = w * 0.18 + mote * 2.13;
+        const rr = r * (0.2 + ((mote * 29) % 19) / 34);
+        ctx.fillStyle = `rgba(190,208,241,${0.1 + (mote % 2) * 0.045})`;
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr * 0.78, Math.max(0.55, r * 0.023), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 外圈不是完整光环，而是被它吃掉一半的弧；内圈再补一道更冷的断线。
+      ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(160,190,255,0.5)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(160,190,255,0.42)';
+      ctx.lineWidth = 1.7;
       ctx.beginPath();
       ctx.arc(e.x, e.y, r * 1.12, w, w + Math.PI * 1.25);
       ctx.stroke();
-      ctx.globalCompositeOperation = 'source-over';
+
+      ctx.strokeStyle = 'rgba(197,216,255,0.18)';
+      ctx.lineWidth = 0.9;
+      ctx.setLineDash([5, 10]);
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.3, -w * 0.7 + 0.5, -w * 0.7 + Math.PI * 1.7);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      for (let mote = 0; mote < 3; mote += 1) {
+        const cycle = (time * 0.19 + mote * 0.31 + w * 0.04) % 1;
+        const fade = Math.sin(cycle * Math.PI);
+        const a = -time * 0.24 + mote * (TAU / 3) + 0.4;
+        const near = r * (1.58 - cycle * 0.52);
+        const far = near + r * 0.18;
+        ctx.strokeStyle = `rgba(174,201,255,${fade * 0.16})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * far, e.y + Math.sin(a) * far);
+        ctx.lineTo(e.x + Math.cos(a) * near, e.y + Math.sin(a) * near);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(211,226,255,${fade * (0.26 + pulse * 0.1)})`;
+        ctx.beginPath();
+        ctx.arc(
+          e.x + Math.cos(a) * near,
+          e.y + Math.sin(a) * near,
+          Math.max(0.65, r * (0.022 + (1 - cycle) * 0.024)),
+          0,
+          TAU,
+        );
+        ctx.fill();
+      }
+      ctx.restore();
       break;
     }
     case 'shade': {
@@ -2443,11 +2535,67 @@ export function drawEnemy(
   if (id === 'thornlord') {
     // 已经在 details 里画了双眼
   } else if (id === 'darkless') {
-    // 无光者只剩一道惨白的裂口
+    // 无光者只剩一道惨白的裂口；裂口不是一个整齐的椭圆，而是被折开的冷光。
+    const dirX = Math.cos(e.angle);
+    const dirY = Math.sin(e.angle);
+    const sideX = -dirY;
+    const sideY = dirX;
+    const cx = e.x + dirX * r * 0.27;
+    const cy = e.y + dirY * r * 0.27;
+    const length = r * 0.38;
+    const width = r * 0.115;
+    const knot = Math.sin(e.wobble * 1.9) * width * 0.12;
+    const riftPoint = (along: number, across: number): [number, number] => [
+      cx + dirX * length * along + sideX * width * across,
+      cy + dirY * length * along + sideY * width * across,
+    ];
+    const rift = [
+      riftPoint(0.62, 0.05),
+      riftPoint(0.35, 0.96),
+      riftPoint(0.18, 0.36 + knot),
+      riftPoint(-0.12, 0.9),
+      riftPoint(-0.34, 0.3 - knot),
+      riftPoint(-0.82, -0.12),
+      riftPoint(-0.42, -0.94),
+      riftPoint(-0.1, -0.36 + knot),
+      riftPoint(0.22, -0.88),
+      riftPoint(0.42, -0.3 - knot),
+    ];
+    const frontX = rift[0][0];
+    const frontY = rift[0][1];
+    const backX = rift[5][0];
+    const backY = rift[5][1];
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const riftGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 0.52);
+    riftGlow.addColorStop(0, 'rgba(171,201,255,0.16)');
+    riftGlow.addColorStop(0.52, 'rgba(102,133,215,0.05)');
+    riftGlow.addColorStop(1, 'rgba(78,103,182,0)');
+    ctx.fillStyle = riftGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.52, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
     ctx.fillStyle = '#e8f0ff';
     ctx.beginPath();
-    ctx.ellipse(e.x + Math.cos(e.angle) * r * 0.3, e.y + Math.sin(e.angle) * r * 0.3, r * 0.34, r * 0.1, e.angle, 0, TAU);
+    ctx.moveTo(rift[0][0], rift[0][1]);
+    for (let point = 1; point < rift.length; point += 1) {
+      ctx.lineTo(rift[point][0], rift[point][1]);
+    }
+    ctx.closePath();
     ctx.fill();
+
+    ctx.strokeStyle = 'rgba(95,136,218,0.8)';
+    ctx.lineWidth = Math.max(0.75, r * 0.026);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(backX + dirX * length * 0.08, backY + dirY * length * 0.08);
+    ctx.lineTo(cx - sideX * width * 0.18, cy - sideY * width * 0.18);
+    ctx.lineTo(cx + sideX * width * 0.24 + dirX * length * 0.08, cy + sideY * width * 0.24 + dirY * length * 0.08);
+    ctx.lineTo(frontX, frontY);
+    ctx.stroke();
   } else {
     spitterCharge(ctx, e, time);
     eye(ctx, e.x, e.y, r, e.angle, e.hitFlash > 0 ? '#000' : '#fff', e.hitFlash > 0 ? '#fff' : 'rgba(10,10,20,0.85)');
