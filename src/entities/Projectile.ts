@@ -266,8 +266,8 @@ function drawProjectileOrb(ctx: CanvasRenderingContext2D, p: Projectile): void {
   ctx.globalAlpha = 1;
   const glowR = r * (p.fromPlayer ? 2.8 : 2.5) * pulse;
   const g = ctx.createRadialGradient(p.x, p.y, r * 0.05, p.x, p.y, glowR);
-  g.addColorStop(0, '#fffef5');
-  g.addColorStop(0.1, '#ffffff');
+  g.addColorStop(0, p.fromPlayer ? '#fffef5' : p.color);
+  g.addColorStop(0.1, p.fromPlayer ? '#ffffff' : p.color);
   g.addColorStop(0.29, p.color);
   g.addColorStop(0.62, p.color);
   g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -276,11 +276,34 @@ function drawProjectileOrb(ctx: CanvasRenderingContext2D, p: Projectile): void {
   ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.globalAlpha = 0.76;
-  ctx.fillStyle = '#fffdf0';
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, Math.max(1, r * 0.3), 0, Math.PI * 2);
-  ctx.fill();
+  if (p.fromPlayer) {
+    ctx.globalAlpha = 0.76;
+    ctx.fillStyle = '#fffdf0';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(1, r * 0.3), 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // 敌方弹是"暗核亮边"：一团包着冷光的黑铅。
+    // 它和玩家的白热弹、地上的经验晶体都能一眼分开，玩家不会把危险误认成掉落。
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.94;
+    ctx.fillStyle = '#070913';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(1.1, r * 0.52), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.82;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = Math.max(0.8, r * 0.13);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(1.2, r * 0.55), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.58;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(p.x - r * 0.16, p.y - r * 0.18, Math.max(0.5, r * 0.075), 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.globalAlpha = 0.34;
   ctx.strokeStyle = p.color;
