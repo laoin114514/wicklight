@@ -247,22 +247,140 @@ function mushrooms(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
 }
 
 function rock(ctx: CanvasRenderingContext2D, d: Decor): void {
-  ctx.fillStyle = '#1d2a22';
+  const mirror = Math.sin(d.x * 0.013 + d.y * 0.017) < 0 ? -1 : 1;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+  const shape = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(px(x), py(y));
+      else ctx.lineTo(px(x), py(y));
+    });
+    ctx.closePath();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath();
-  for (let i = 0; i <= 6; i += 1) {
-    const a = (i / 6) * TAU;
-    const rr = d.r * (0.34 + (i % 2) * 0.14);
-    const px = d.x + Math.cos(a) * rr;
-    const py = d.y + Math.sin(a) * rr * 0.8;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+  ctx.ellipse(d.x + d.r * 0.02 * mirror, d.y + d.r * 0.32, d.r * 0.5, d.r * 0.12, 0, 0, TAU);
+  ctx.fill();
+
+  shape([
+    [-0.48, 0.04],
+    [-0.4, -0.19],
+    [-0.26, -0.35],
+    [-0.06, -0.45],
+    [0.17, -0.42],
+    [0.36, -0.29],
+    [0.48, -0.08],
+    [0.43, 0.16],
+    [0.25, 0.3],
+    [0.02, 0.35],
+    [-0.24, 0.31],
+    [-0.42, 0.2],
+  ]);
+  ctx.fillStyle = '#223128';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(7,14,9,0.62)';
+  ctx.lineWidth = Math.max(1, d.r * 0.022);
+  ctx.stroke();
+
+  shape([
+    [-0.4, -0.17],
+    [-0.25, -0.33],
+    [-0.07, -0.42],
+    [0.14, -0.39],
+    [0.06, -0.24],
+    [-0.13, -0.1],
+    [-0.35, -0.01],
+  ]);
+  ctx.fillStyle = '#2c3e32';
+  ctx.fill();
+
+  shape([
+    [-0.02, 0.03],
+    [0.27, -0.06],
+    [0.43, 0.03],
+    [0.38, 0.18],
+    [0.22, 0.29],
+    [0.01, 0.32],
+    [-0.08, 0.15],
+  ]);
+  ctx.fillStyle = 'rgba(8,17,11,0.34)';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(167,195,160,0.13)';
+  ctx.lineWidth = Math.max(0.7, d.r * 0.013);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.26), py(-0.32));
+  ctx.lineTo(px(-0.08), py(-0.41));
+  ctx.lineTo(px(0.13), py(-0.38));
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(4,10,6,0.48)';
+  ctx.lineWidth = Math.max(0.7, d.r * 0.016);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(px(-0.05), py(-0.43));
+  ctx.lineTo(px(-0.01), py(-0.23));
+  ctx.lineTo(px(0.08), py(-0.08));
+  ctx.lineTo(px(0.04), py(0.12));
+  ctx.moveTo(px(0.35), py(-0.27));
+  ctx.lineTo(px(0.2), py(-0.13));
+  ctx.lineTo(px(0.21), py(0.02));
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(150,171,144,0.1)';
+  ctx.lineWidth = Math.max(0.5, d.r * 0.006);
+  ctx.beginPath();
+  ctx.moveTo(px(0.005), py(-0.24));
+  ctx.lineTo(px(0.095), py(-0.09));
+  ctx.lineTo(px(0.055), py(0.1));
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(75,118,80,0.56)';
+  for (const [x, y, rx, ry, rot] of [
+    [-0.31, -0.24, 0.11, 0.035, -0.56],
+    [-0.16, -0.37, 0.1, 0.03, -0.3],
+    [0.01, -0.43, 0.08, 0.026, -0.12],
+    [0.18, -0.36, 0.07, 0.024, 0.24],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
+    ctx.fill();
   }
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  if (d.r > 42) {
+    ctx.strokeStyle = 'rgba(105,162,112,0.34)';
+    ctx.lineWidth = Math.max(0.7, d.r * 0.009);
+    for (const [x, y, bend] of [
+      [-0.24, -0.34, -0.14],
+      [-0.12, -0.4, -0.03],
+      [0.08, -0.41, 0.08],
+    ] as const) {
+      ctx.beginPath();
+      ctx.moveTo(px(x), py(y));
+      ctx.quadraticCurveTo(px(x + bend * 0.35), py(y - 0.09), px(x + bend), py(y - 0.16));
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = 'rgba(73,109,76,0.34)';
   ctx.beginPath();
-  ctx.ellipse(d.x - d.r * 0.1, d.y - d.r * 0.12, d.r * 0.2, d.r * 0.1, 0, 0, TAU);
+  ctx.ellipse(px(-0.31), py(0.28), d.r * 0.12, d.r * 0.035, -0.18 * mirror, 0, TAU);
   ctx.fill();
+  ctx.fillStyle = 'rgba(179,202,169,0.1)';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.22), py(-0.29), d.r * 0.1, d.r * 0.025, -0.55 * mirror, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = '#1b2820';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.53), py(0.3), d.r * 0.09, d.r * 0.055, 0.2 * mirror, 0, TAU);
+  ctx.ellipse(px(0.49), py(0.24), d.r * 0.065, d.r * 0.04, -0.15 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(170,194,160,0.085)';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.55), py(0.28), d.r * 0.045, d.r * 0.016, 0.2 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.lineCap = 'butt';
 }
 
 function pillar(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void {
