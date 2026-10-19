@@ -4373,3 +4373,83 @@ body.is-touch .key { display: none; }
   letter-spacing: 1.5px;
   color: rgba(255, 207, 115, 0.68);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v145 · 图鉴：未发现不是消失，是一只还没拉开抽屉的标签
+
+   旧版把所有未发现条目压成同样的 40% 透明空卡，远看是一大片空洞；
+   分组标题也只有一个分数。这一版让未发现卡保留“抽屉把手”：
+   斜纹纸背、暗铜圆牌、问号刻度；分组标题则先画一条收集尺。
+   已发现的条目仍保持原来的彩色藏品卡，两种状态一眼分开。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.cx-sec h4 {
+  align-items: center;
+}
+.cx-sec h4 b {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.cx-sec h4 > span {
+  flex: 0 0 auto;
+  margin-left: 2px;
+}
+.cx-sec__rule {
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(192, 138, 62, 0.18);
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 228, 176, 0.1) 0 1px, rgba(0, 0, 0, 0) 1px 10%),
+    rgba(0, 0, 0, 0.36);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.cx-sec__rule span {
+  display: block;
+  width: var(--codex-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(144, 77, 16, 0.92), #ffc568);
+  box-shadow: 0 0 7px rgba(255, 168, 62, 0.42);
+}
+.panel--vellum .cx.is-locked {
+  opacity: 1;
+  border-left-color: rgba(192, 138, 62, 0.15);
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 230, 184, 0.026) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.13), rgba(255, 255, 255, 0.008));
+  box-shadow: inset 0 1px 0 rgba(255, 232, 186, 0.025);
+}
+.cx.is-locked .cx__dot {
+  border: 1px solid rgba(192, 138, 62, 0.22);
+  background: radial-gradient(circle at 38% 30%, rgba(255, 226, 170, 0.1), rgba(0, 0, 0, 0.32) 65%);
+  color: rgba(221, 190, 137, 0.38);
+  font-size: 9px;
+}
+.cx.is-locked .cx__dot::after { content: '?'; }
+.cx.is-locked .cx__name {
+  color: rgba(230, 215, 190, 0.43);
+  letter-spacing: 2px;
+}
+.cx.is-locked .cx__blurb { color: rgba(210, 194, 168, 0.31); }
+.cx.is-open .cx__name { color: #f1e3c7; }
+.cx.is-open .cx__blurb { color: rgba(219, 208, 188, 0.58); }
+.cx.is-open .cx__dot {
+  border: 1px solid color-mix(in srgb, var(--c, #d9a85f) 62%, rgba(255, 244, 212, 0.28));
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--c, #ffffff) 48%, transparent),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.45);
+}
+.cx.is-open .cx__more {
+  opacity: 0.42;
+  letter-spacing: 0.5px;
+}
+.cx.is-open:hover .cx__more { opacity: 0.9; }
+
+@media (max-width: 640px) {
+  .cx-sec h4 { flex-wrap: wrap; }
+  .cx-sec__rule { order: 2; }
+  .cx-sec h4 > span { order: 3; flex-basis: 100%; padding-left: 13px; }
+}

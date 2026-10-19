@@ -1383,8 +1383,10 @@ export class UIManager implements UIHost {
           </button>`;
         })
         .join('');
+      const got = cx.sectionSeen(sec.kind);
+      const progress = (got / entries.length) * 100;
       return `<section class="cx-sec">
-        <h4>${sec.title} <b>${cx.sectionSeen(sec.kind)}/${entries.length}</b><span>${sec.hint}</span></h4>
+        <h4>${sec.title} <b>${got}/${entries.length}</b><i class="cx-sec__rule" style="--codex-progress:${progress.toFixed(1)}%" aria-hidden="true"><span></span></i><span>${sec.hint}</span></h4>
         <div class="cx-grid">${cards}</div>
       </section>`;
     }).join('');
