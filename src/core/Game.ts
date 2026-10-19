@@ -2322,6 +2322,47 @@ export class Game {
           ctx.arc(s.x + Math.cos(a) * (10 + i * 2), s.y - 17 + Math.sin(a) * 4, 0.7, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        // 空槽里留一层冷灰：献祭后不是“物件消失”，而是这里真的烧过一场。
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.62;
+        ctx.fillStyle = '#3b3d48';
+        ctx.beginPath();
+        ctx.ellipse(s.x - 0.8, s.y - 18.3, 4.6, 1.45, -0.12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.76;
+        ctx.fillStyle = '#191b23';
+        ctx.beginPath();
+        ctx.ellipse(s.x + 1.2, s.y - 18.1, 2.4, 0.9, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < 3; i += 1) {
+          const a = -Math.PI * 0.72 + i * 0.62;
+          ctx.globalAlpha = 0.2 + i * 0.035;
+          ctx.fillStyle = '#7f899c';
+          ctx.beginPath();
+          ctx.arc(s.x + Math.cos(a) * (5.5 + i * 1.4), s.y - 18.4 + Math.sin(a) * 1.3, 0.38, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 一线将散的冷烟。它不发光，也不会重新把祭坛读成“还能用”。
+        ctx.strokeStyle = '#9eabbd';
+        ctx.lineWidth = 0.65;
+        for (let i = 0; i < 2; i += 1) {
+          const cycle = (this.time * (0.16 + i * 0.05) + i * 0.43 + s.x * 0.0007) % 1;
+          const sway = Math.sin(this.time * 0.9 + i * 2.1 + s.x * 0.01) * (1.2 + cycle * 2.2);
+          ctx.globalAlpha = (1 - cycle) * 0.115;
+          ctx.beginPath();
+          ctx.moveTo(s.x + (i === 0 ? -0.8 : 1.1), s.y - 19);
+          ctx.bezierCurveTo(
+            s.x + sway,
+            s.y - 25 - cycle * 6,
+            s.x - sway * 0.7,
+            s.y - 31 - cycle * 10,
+            s.x + sway * 1.3,
+            s.y - 39 - cycle * 15,
+          );
+          ctx.stroke();
+        }
         ctx.globalAlpha = 1;
       }
       ctx.globalCompositeOperation = 'lighter';
@@ -2332,25 +2373,38 @@ export class Game {
         const dist = Math.hypot(this.player.x - s.x, this.player.y - s.y);
         const near = clamp(1 - (dist - 46) / 130, 0, 1);
         if (near > 0.01) {
-          const t = (this.time * 0.9) % 1;
+          const t = (this.time * 0.55) % 1;
           ctx.save();
-          ctx.globalAlpha = near * (1 - t) * 0.7;
-          ctx.strokeStyle = 'rgba(190,225,255,0.9)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y - 4, 20 + t * 46, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
-          ctx.save();
-          ctx.globalAlpha = near;
           ctx.globalCompositeOperation = 'lighter';
-          const ring = ctx.createRadialGradient(s.x, s.y - 4, 8, s.x, s.y - 4, 56);
+          const ring = ctx.createRadialGradient(s.x, s.y - 4, 10, s.x, s.y - 4, 52);
           ring.addColorStop(0, 'rgba(120,180,255,0)');
-          ring.addColorStop(1, `rgba(120,180,255,${0.22 * near})`);
+          ring.addColorStop(1, `rgba(120,180,255,${0.11 * near})`);
           ctx.fillStyle = ring;
           ctx.beginPath();
-          ctx.arc(s.x, s.y - 4, 56, 0, Math.PI * 2);
+          ctx.arc(s.x, s.y - 4, 52, 0, Math.PI * 2);
           ctx.fill();
+
+          // 内环是石座上的八段刻线，慢慢转；它不是一圈实线，所以不会读成加载圈。
+          ctx.strokeStyle = 'rgba(190,225,255,0.8)';
+          ctx.lineWidth = 1.15;
+          ctx.globalAlpha = near * (0.26 + breathe * 0.14);
+          for (let i = 0; i < 8; i += 1) {
+            const a = this.time * 0.22 + (i / 8) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y - 4, 25 + breathe * 1.6, a, a + 0.52);
+            ctx.stroke();
+          }
+
+          // 外圈只留三道向外散开的短弧，给“可以靠近”一个方向，而不是一整颗气泡。
+          ctx.strokeStyle = 'rgba(164,207,255,0.65)';
+          ctx.lineWidth = 1.4;
+          ctx.globalAlpha = near * (1 - t) * 0.42;
+          for (let i = 0; i < 3; i += 1) {
+            const a = this.time * 0.14 + (i / 3) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y - 4, 34 + t * 15, a, a + 0.38);
+            ctx.stroke();
+          }
           ctx.restore();
         }
       }
