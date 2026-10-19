@@ -7537,3 +7537,118 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--select .lantern-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .panel--select .lantern__blurb { -webkit-line-clamp: 2; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v158 · 余烬解锁：窄屏上的双列火印
+   十六个节点在竖屏排成两列，薪火三条并成一排；返回与清档吸在面板底边。
+   桌面仍是四列仪表盘，只把牌距与账行收整齐。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--meta {
+  width: min(94vw, 920px);
+  padding: 20px 22px 12px;
+}
+.panel--meta .panel__title { margin-bottom: 10px; }
+.panel--meta .node-grid { gap: 8px; }
+.panel--meta .node { padding: 10px 11px 9px; }
+.panel--meta .node__name { margin-bottom: 3px; }
+.panel--meta .node__blurb { line-height: 1.4; }
+.panel--meta .node__cost { margin-top: 6px; }
+.panel--meta .fire-block { margin-top: 11px; padding-top: 9px; }
+.panel--meta .fire-grid { gap: 8px; }
+.panel--meta .fire { padding: 9px 10px 8px; }
+
+.meta-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  margin: 10px 0 0;
+  padding: 9px 0 2px;
+  border-top: 1px solid rgba(198, 158, 98, 0.15);
+  background: linear-gradient(180deg, rgba(12, 11, 10, 0), rgba(12, 11, 10, 0.97) 38%, #0c0b0a 100%);
+}
+
+@media (max-width: 720px) {
+  .panel--meta { padding: 16px 13px 9px; }
+  .panel--meta .panel__title { margin-bottom: 7px; font-size: 18px; letter-spacing: 2px; }
+  .panel--meta .node-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .panel--meta .node { padding: 8px 9px 7px; }
+  .panel--meta .node::before { top: 8px; right: 8px; width: 6px; height: 6px; }
+  .panel--meta .node__name { gap: 5px; padding-right: 9px; font-size: 12px; }
+  .panel--meta .node__name::before { font-size: 6px; }
+  .panel--meta .node__blurb {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 9.5px;
+    line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .panel--meta .node__cost { margin-top: 5px; padding: 2px 6px 3px; font-size: 9.5px; }
+  .panel--meta .node__cost::before { font-size: 7px; }
+  .panel--meta .fire-block { margin-top: 8px; padding-top: 7px; }
+  .panel--meta .fire-head { gap: 3px 7px; margin-bottom: 6px; font-size: 11.5px; letter-spacing: 0.5px; }
+  .panel--meta .fire-note { font-size: 9.5px; }
+  .panel--meta .fire-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .panel--meta .fire { padding: 8px 8px 7px; }
+  .panel--meta .fire__top { gap: 4px; }
+  .panel--meta .fire__top b { font-size: 11px; letter-spacing: 0.3px; }
+  .panel--meta .fire__lv { padding: 0 4px 1px; font-size: 8.5px; }
+  .panel--meta .fire__per {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 3px;
+    font-size: 8.5px;
+    line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .panel--meta .fire .card__pips { gap: 2px; margin: 5px 0 4px; }
+  .panel--meta .fire .card__pips i { height: 3px; }
+  .panel--meta .fire__cost { gap: 3px; margin-top: 3px; padding: 2px 5px 3px; font-size: 9px; }
+  .panel--meta .fire__cost::before { font-size: 7px; }
+  .meta-actions { margin-top: 7px; padding-top: 7px; }
+}
+
+@media (max-width: 400px) {
+  .panel--meta { padding: 13px 9px 8px; }
+  .panel--meta .panel__title { font-size: 16px; letter-spacing: 1.4px; }
+  .panel--meta .panel__title::before,
+  .panel--meta .panel__title::after { display: none; }
+  .panel--meta .node-grid { gap: 5px; }
+  .panel--meta .node { padding: 7px 8px 6px; }
+  .panel--meta .node__name { font-size: 11.5px; }
+  .panel--meta .node__blurb { font-size: 9px; }
+  .panel--meta .fire-grid { gap: 4px; }
+  .panel--meta .fire { padding: 7px 6px 6px; }
+  .panel--meta .fire-note { display: none; }
+  .meta-actions { margin-top: 5px; padding-top: 5px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--meta { padding: 9px 14px 6px; }
+  .panel--meta .panel__title { margin-bottom: 5px; font-size: 16px; letter-spacing: 2px; }
+  .panel--meta .node-grid { gap: 6px; }
+  .panel--meta .node { padding: 7px 9px 6px; }
+  .panel--meta .node__name { margin-bottom: 2px; font-size: 12px; }
+  .panel--meta .node__blurb {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 9px;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .panel--meta .node__cost { margin-top: 4px; padding: 1px 5px 2px; font-size: 9px; }
+  .panel--meta .fire-block { margin-top: 6px; padding-top: 5px; }
+  .panel--meta .fire-head { margin-bottom: 4px; font-size: 10px; }
+  .panel--meta .fire-note { display: none; }
+  .panel--meta .fire-grid { gap: 6px; }
+  .panel--meta .fire { padding: 6px 8px 6px; }
+  .panel--meta .fire__top b { font-size: 10.5px; }
+  .panel--meta .fire__per { margin-top: 2px; font-size: 8px; -webkit-line-clamp: 1; }
+  .panel--meta .fire .card__pips { margin: 4px 0 3px; }
+  .panel--meta .fire__cost { margin-top: 2px; padding: 1px 5px 2px; font-size: 8.5px; }
+  .meta-actions { margin-top: 5px; padding-top: 5px; }
+}

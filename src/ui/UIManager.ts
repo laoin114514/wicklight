@@ -1384,7 +1384,7 @@ export class UIManager implements UIHost {
         <div class="panel__title">余烬解锁 · <b>${this.game.save.embers}</b> 余烬</div>
         <div class="node-grid">${nodes}</div>
         ${this.fireBlock()}
-        <div class="row-actions">
+        <div class="row-actions meta-actions">
           <button class="btn" data-act="reset">清空存档</button>
           <button class="btn btn--primary" data-act="back">返回</button>
         </div>
