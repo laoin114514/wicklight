@@ -57,6 +57,8 @@ export class UIManager implements UIHost {
   private codexTab: CodexKind = 'enemy';
   /** 成就册当前展开的分组；`全部`仍保留整册视图。 */
   private achTab: string = ACHIEVEMENT_GROUPS[0] ?? '全部';
+  /** 余烬解锁在小屏上翻到哪一页；桌面上两页仍同时摊开。 */
+  private metaTab: 'tree' | 'fire' = 'tree';
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -1410,17 +1412,53 @@ export class UIManager implements UIHost {
 
   private meta(): void {
     const nodes = META_TREE.map((n) => this.nodeCard(n)).join('');
+    const bought = this.game.save.meta.length;
+    const fireTotal = this.game.meta.fireLevelsTotal();
     this.show(`
       <div class="panel panel--meta panel--board">
         <div class="panel__title">余烬解锁 · <b>${this.game.save.embers}</b> 余烬</div>
-        <div class="node-grid">${nodes}</div>
-        ${this.fireBlock()}
+        <div class="meta-tabs" role="tablist" aria-label="余烬用途">
+          <button class="meta-tab${this.metaTab === 'tree' ? ' is-on' : ''}" data-meta-tab="tree" role="tab" aria-selected="${this.metaTab === 'tree'}">
+            <span>解锁树</span><b>${bought}/${META_TREE.length}</b>
+          </button>
+          <button class="meta-tab${this.metaTab === 'fire' ? ' is-on' : ''}" data-meta-tab="fire" role="tab" aria-selected="${this.metaTab === 'fire'}">
+            <span>薪火</span><b>${fireTotal}/${FIRE_LEVELS_TOTAL}</b>
+          </button>
+        </div>
+        <div class="meta-page" data-meta-page="tree" role="tabpanel">
+          <div class="node-grid">${nodes}</div>
+        </div>
+        <div class="meta-page" data-meta-page="fire" role="tabpanel"${this.metaTab === 'fire' ? '' : ' hidden'}>
+          ${this.fireBlock()}
+        </div>
         <div class="row-actions meta-actions">
           <button class="btn" data-act="reset">清空存档</button>
           <button class="btn btn--primary" data-act="back">返回</button>
         </div>
       </div>
     `);
+    const panel = this.screen.querySelector('.panel--meta') as HTMLElement | null;
+    const tabs = [...this.screen.querySelectorAll<HTMLElement>('[data-meta-tab]')];
+    const pages = [...this.screen.querySelectorAll<HTMLElement>('[data-meta-page]')];
+    const compact = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 720px), (orientation: landscape) and (max-height: 520px)').matches;
+    const showPage = (page: 'tree' | 'fire'): void => {
+      this.metaTab = page;
+      tabs.forEach((tab) => {
+        const on = tab.dataset.metaTab === page;
+        tab.classList.toggle('is-on', on);
+        tab.setAttribute('aria-selected', String(on));
+      });
+      pages.forEach((section) => {
+        section.hidden = compact && section.dataset.metaPage !== page;
+      });
+      this.focus.attach(this.screen, true, true);
+    };
+    showPage(this.metaTab);
+    this.onAll('[data-meta-tab]', (el) => {
+      showPage(el.dataset.metaTab as 'tree' | 'fire');
+      panel?.scrollTo({ top: 0, behavior: 'auto' });
+    });
     this.onAll('[data-node]', (el) => {
       this.game.buyMeta(el.dataset.node as string);
       this.showScreen('meta');
