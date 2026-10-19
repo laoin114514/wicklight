@@ -1755,32 +1755,60 @@ export class UIManager implements UIHost {
     const s = this.game.settings.data;
     // 只有"掌上设备 + 浏览器支持震动"才显示触感开关，桌面上多一行没意义
     const showHaptics = hapticsAvailable() && isHandheld();
-    this.show(`
-      <div class="panel panel--small panel--board">
-        <div class="panel__title">设置</div>
-        <div class="setting"><label>总音量</label><input type="range" min="0" max="1" step="0.05" value="${s.master}" data-key="master"><b>${Math.round(s.master * 100)}%</b></div>
-        <div class="setting"><label>音乐</label><input type="range" min="0" max="1" step="0.05" value="${s.music}" data-key="music"><b>${Math.round(s.music * 100)}%</b></div>
-        <div class="setting"><label>音效</label><input type="range" min="0" max="1" step="0.05" value="${s.sfx}" data-key="sfx"><b>${Math.round(s.sfx * 100)}%</b></div>
-        <div class="setting"><label>屏幕震动</label><input type="range" min="0" max="1.5" step="0.1" value="${s.shake}" data-key="shake"><b>${Math.round(s.shake * 100)}%</b></div>
-        <div class="setting setting--row">
-          <label>减少动态效果</label>
-          <button class="toggle ${s.reduceMotion ? 'is-on' : ''}" data-toggle="reduceMotion">${s.reduceMotion ? '开' : '关'}</button>
-        </div>
-        <div class="setting setting--row">
-          <label>动态分辨率</label>
-          <button class="toggle ${s.adaptive ? 'is-on' : ''}" data-toggle="adaptive">${s.adaptive ? '开' : '关'}</button>
-        </div>
-        ${showHaptics ? `<div class="setting setting--row">
-          <label>触感反馈</label>
+    const hapticRow = showHaptics
+      ? `<div class="setting setting--row setting--switch">
+          <span class="setting__mark" aria-hidden="true">触</span>
+          <label>触感反馈<small>命中与受创时轻震</small></label>
           <button class="toggle ${s.vibrate !== false ? 'is-on' : ''}" data-toggle="vibrate">${s.vibrate !== false ? '开' : '关'}</button>
-        </div>` : ''}
-        <div class="setting setting--row">
-          <label>画质</label>
-          <div class="seg">
-            ${(['low', 'medium', 'high'] as const).map((q) => `<button class="seg__b ${s.quality === q ? 'is-on' : ''}" data-quality="${q}">${q === 'low' ? '低' : q === 'medium' ? '中' : '高'}</button>`).join('')}
+        </div>`
+      : '';
+    this.show(`
+      <div class="panel panel--settings panel--board">
+        <header class="set-head">
+          <div class="set-head__copy">
+            <span class="set-head__kicker">灯房调校</span>
+            <div class="panel__title set-head__title">设置</div>
+            <p class="set-head__sub">把灯火、声音与手感调到适合这一夜。</p>
           </div>
+          <div class="set-head__status"><i aria-hidden="true"></i><span>自动保存</span></div>
+        </header>
+
+        <div class="set-grid">
+          <section class="set-panel">
+            <div class="set-panel__head"><span class="set-panel__sigil">声</span><div><b>声与触感</b><i>调音台</i></div></div>
+            <div class="setting setting--dial"><span class="setting__mark" aria-hidden="true">总</span><label>总音量</label><input type="range" min="0" max="1" step="0.05" value="${s.master}" data-key="master"><b>${Math.round(s.master * 100)}%</b></div>
+            <div class="setting setting--dial"><span class="setting__mark" aria-hidden="true">乐</span><label>音乐</label><input type="range" min="0" max="1" step="0.05" value="${s.music}" data-key="music"><b>${Math.round(s.music * 100)}%</b></div>
+            <div class="setting setting--dial"><span class="setting__mark" aria-hidden="true">效</span><label>音效</label><input type="range" min="0" max="1" step="0.05" value="${s.sfx}" data-key="sfx"><b>${Math.round(s.sfx * 100)}%</b></div>
+            <div class="setting setting--dial"><span class="setting__mark" aria-hidden="true">震</span><label>屏幕震动</label><input type="range" min="0" max="1.5" step="0.1" value="${s.shake}" data-key="shake"><b>${Math.round(s.shake * 100)}%</b></div>
+          </section>
+
+          <section class="set-panel">
+            <div class="set-panel__head"><span class="set-panel__sigil">画</span><div><b>画面与动作</b><i>观感台</i></div></div>
+            <div class="setting setting--row setting--switch">
+              <span class="setting__mark" aria-hidden="true">静</span>
+              <label>减少动态效果<small>收起闪光与漂移</small></label>
+              <button class="toggle ${s.reduceMotion ? 'is-on' : ''}" data-toggle="reduceMotion">${s.reduceMotion ? '开' : '关'}</button>
+            </div>
+            <div class="setting setting--row setting--switch">
+              <span class="setting__mark" aria-hidden="true">析</span>
+              <label>动态分辨率<small>掉帧时自动让出像素</small></label>
+              <button class="toggle ${s.adaptive ? 'is-on' : ''}" data-toggle="adaptive">${s.adaptive ? '开' : '关'}</button>
+            </div>
+            ${hapticRow}
+            <div class="setting setting--row setting--quality">
+              <span class="setting__mark" aria-hidden="true">质</span>
+              <label>画质<small>像素与光雾的精细度</small></label>
+              <div class="seg">
+                ${(['low', 'medium', 'high'] as const).map((q) => `<button class="seg__b ${s.quality === q ? 'is-on' : ''}" data-quality="${q}">${q === 'low' ? '低' : q === 'medium' ? '中' : '高'}</button>`).join('')}
+              </div>
+            </div>
+          </section>
         </div>
-        <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
+
+        <footer class="set-foot">
+          <span class="set-foot__hint"><i aria-hidden="true"></i>改动即时生效 · 自动写入存档</span>
+          <button class="btn btn--primary" data-act="back">返回</button>
+        </footer>
       </div>
     `);
     this.screen.querySelectorAll('input[type="range"]').forEach((el) => {

@@ -6130,3 +6130,307 @@ body.is-touch .key { display: none; }
   .daily-actions { margin-top: 6px; }
   .daily-actions .btn { padding: 7px 16px; font-size: 12px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v153 · 设置：灯房里的两块调校台
+   左栏是四条音量 / 震动手柄，右栏是动态与画质的物理铜键。
+   所有 data-key / data-toggle / data-quality 原样保留，只重排信息层级。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--settings {
+  width: min(94vw, 760px);
+  padding: 20px 22px 16px;
+}
+
+.set-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(192, 138, 62, 0.22);
+  text-align: left;
+}
+.set-head__copy { min-width: 0; }
+.set-head__kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(232, 207, 166, 0.42);
+  font-size: 8.5px;
+  letter-spacing: 2.8px;
+}
+.set-head__kicker::before {
+  content: '';
+  width: 17px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0.12), var(--brass-hi));
+}
+.set-head__title {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 2px 0 3px;
+  font-size: 21px;
+  letter-spacing: 4px;
+}
+.set-head__title::before { display: none; }
+.set-head__title::after { flex: 0 0 64px; }
+.set-head__sub {
+  color: rgba(228, 210, 178, 0.5);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.7px;
+}
+.set-head__status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 5px;
+  border: 1px solid rgba(138, 255, 193, 0.18);
+  border-radius: 3px;
+  background: rgba(12, 31, 22, 0.3);
+  color: rgba(185, 247, 212, 0.58);
+  font-size: 8.5px;
+  letter-spacing: 1.4px;
+  white-space: nowrap;
+}
+.set-head__status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #8affc1;
+  box-shadow: 0 0 8px rgba(138, 255, 193, 0.5);
+}
+
+.set-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 11px;
+}
+.set-panel {
+  position: relative;
+  min-width: 0;
+  padding: 9px 11px 10px;
+  border: 1px solid rgba(192, 138, 62, 0.2);
+  border-radius: 4px;
+  background:
+    radial-gradient(110% 70% at 50% -20%, rgba(255, 190, 96, 0.055), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(43, 44, 50, 0.42), rgba(10, 11, 15, 0.46));
+  box-shadow: inset 0 1px 0 rgba(255, 226, 168, 0.04);
+}
+.set-panel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0), rgba(255, 211, 128, 0.34), rgba(192, 138, 62, 0));
+  pointer-events: none;
+}
+.set-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(192, 138, 62, 0.2);
+}
+.set-panel__sigil {
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 210, 138, 0.28);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 32%, rgba(255, 206, 128, 0.14), rgba(0, 0, 0, 0.3) 72%);
+  color: #e8bf7f;
+  font-family: var(--font-display);
+  font-size: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 202, 0.08);
+}
+.set-panel__head b {
+  display: block;
+  color: #eed9b5;
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 1.6px;
+}
+.set-panel__head i {
+  display: block;
+  margin-top: 1px;
+  color: rgba(228, 210, 178, 0.36);
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 1.5px;
+}
+
+.panel--settings .setting {
+  gap: 8px;
+  margin: 5px 0;
+  padding: 4px 7px 5px 8px;
+  border-radius: 4px;
+  border-color: rgba(0, 0, 0, 0.44);
+  border-left-color: rgba(192, 138, 62, 0.46);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.018));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.46), inset 0 -1px 0 rgba(255, 220, 160, 0.035);
+}
+.panel--settings .setting--dial { border-left-color: rgba(205, 152, 74, 0.54); }
+.panel--settings .setting label {
+  flex: 0 0 78px;
+  color: rgba(235, 214, 178, 0.68);
+  font-size: 10.5px;
+  letter-spacing: 1.2px;
+}
+.panel--settings .setting input[type='range'] { min-width: 0; }
+.panel--settings .setting b {
+  flex: 0 0 38px;
+  color: #ffd88e;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+.setting__mark {
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(192, 138, 62, 0.28);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(255, 220, 150, 0.08), rgba(0, 0, 0, 0.22));
+  color: rgba(255, 211, 136, 0.58);
+  font-family: var(--font-display);
+  font-size: 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 194, 0.06);
+}
+
+.panel--settings .setting--switch { padding-top: 5px; padding-bottom: 6px; }
+.panel--settings .setting--switch label { flex: 1; min-width: 0; line-height: 1.25; }
+.panel--settings .setting--switch label small,
+.panel--settings .setting--quality label small {
+  display: block;
+  margin-top: 1px;
+  color: rgba(228, 210, 178, 0.34);
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0.15px;
+}
+.panel--settings .toggle {
+  position: relative;
+  flex: 0 0 54px;
+  width: 54px;
+  padding: 5px 8px 5px 19px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  line-height: 1.25;
+  letter-spacing: 1px;
+}
+.panel--settings .toggle::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border: 1px solid rgba(255, 224, 168, 0.18);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+.panel--settings .toggle.is-on::before {
+  border-color: rgba(77, 39, 5, 0.28);
+  background: #fff0bd;
+  box-shadow: 0 0 7px rgba(255, 240, 189, 0.62);
+}
+
+.panel--settings .setting--quality { align-items: center; }
+.panel--settings .setting--quality label { flex: 1; min-width: 0; }
+.panel--settings .seg { flex: 0 0 auto; gap: 4px; }
+.panel--settings .seg__b {
+  flex: 0 0 31px;
+  padding: 5px 0 6px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.8px;
+}
+
+.set-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px dashed rgba(192, 138, 62, 0.2);
+}
+.set-foot__hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(228, 210, 178, 0.36);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+}
+.set-foot__hint i {
+  width: 5px;
+  height: 5px;
+  border: 1px solid rgba(255, 211, 136, 0.4);
+  background: rgba(255, 177, 78, 0.14);
+  transform: rotate(45deg);
+}
+.panel--settings .set-foot .btn { padding: 8px 24px; }
+
+@media (max-width: 640px) {
+  .panel--settings { padding: 17px 15px 15px; }
+  .set-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .set-head { margin-bottom: 9px; }
+}
+
+@media (max-width: 400px) {
+  .set-head__sub { display: none; }
+  .set-head__status { padding: 3px 6px 4px; font-size: 8px; }
+  .set-head__title { font-size: 19px; }
+  .panel--settings .setting label { flex-basis: 72px; }
+  .panel--settings .setting--switch label,
+  .panel--settings .setting--quality label { flex-basis: auto; }
+}
+
+@media (max-width: 360px) {
+  .panel--settings { padding: 15px 13px 13px; }
+  .set-grid { gap: 6px; }
+  .panel--settings .setting { margin: 4px 0; }
+  .set-foot { margin-top: 8px; padding-top: 7px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--settings { padding: 9px 14px 8px; }
+  .set-head { margin-bottom: 6px; padding-bottom: 5px; }
+  .set-head__kicker, .set-head__sub { display: none; }
+  .set-head__title { margin: 0; font-size: 17px; letter-spacing: 3px; }
+  .set-head__status { padding: 2px 6px 3px; font-size: 7.5px; }
+  .set-grid { gap: 7px; }
+  .set-panel { padding: 6px 8px 7px; }
+  .set-panel__head { gap: 6px; margin-bottom: 4px; padding-bottom: 4px; }
+  .set-panel__sigil { flex-basis: 22px; width: 22px; height: 22px; font-size: 10px; }
+  .set-panel__head b { font-size: 10.5px; }
+  .set-panel__head i { display: none; }
+  .panel--settings .setting { margin: 3px 0; padding: 2px 5px 3px 6px; gap: 6px; }
+  .panel--settings .setting label { flex-basis: 66px; font-size: 9.5px; }
+  .panel--settings .setting b { flex-basis: 34px; font-size: 10px; }
+  .setting__mark { flex-basis: 17px; width: 17px; height: 17px; font-size: 8px; }
+  .panel--settings .setting--switch label small,
+  .panel--settings .setting--quality label small { display: none; }
+  .panel--settings .toggle { flex-basis: 48px; width: 48px; padding: 4px 6px 4px 17px; }
+  .panel--settings .seg__b { flex-basis: 27px; padding: 4px 0 5px; }
+  .set-foot { margin-top: 6px; padding-top: 5px; }
+  .set-foot__hint { font-size: 8px; }
+  .panel--settings .set-foot .btn { padding: 6px 18px; font-size: 12px; }
+}
