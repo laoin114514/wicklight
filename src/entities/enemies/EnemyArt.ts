@@ -2425,36 +2425,171 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'thornlord': {
-      // 放射荆棘
-      ctx.fillStyle = shade(body, -0.45);
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const backX = -facingX;
+      const backY = -facingY;
+      const sideX = -facingY;
+      const sideY = facingX;
+      const breath = 0.5 + Math.sin(time * 2.2 + w) * 0.5;
+
+      // 放射荆棘：长短交替，迎光的一侧补一条细木纹高光。
       for (let i = 0; i < 9; i += 1) {
-        const ang = (i / 9) * TAU + w * 0.25;
-        const base = r * 0.86;
-        const len = r * (0.34 + 0.18 * Math.sin(time * 2 + i));
+        const ang = (i / 9) * TAU + w * 0.2;
+        const base = r * 0.84;
+        const len = r * (0.3 + Math.abs(Math.sin(time * 1.7 + i * 0.9)) * 0.24);
+        const tipAng = ang + 0.07 + Math.sin(w + i) * 0.03;
+        const baseAX = e.x + Math.cos(ang - 0.09) * base;
+        const baseAY = e.y + Math.sin(ang - 0.09) * base;
+        const baseBX = e.x + Math.cos(ang + 0.09) * base;
+        const baseBY = e.y + Math.sin(ang + 0.09) * base;
+        const tipX = e.x + Math.cos(tipAng) * (base + len);
+        const tipY = e.y + Math.sin(tipAng) * (base + len);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(31,46,16,0.86)' : 'rgba(43,61,22,0.82)';
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(ang) * base, e.y + Math.sin(ang) * base);
-        ctx.lineTo(e.x + Math.cos(ang + 0.16) * base, e.y + Math.sin(ang + 0.16) * base);
-        ctx.lineTo(e.x + Math.cos(ang + 0.08) * (base + len), e.y + Math.sin(ang + 0.08) * (base + len));
+        ctx.moveTo(baseAX, baseAY);
+        ctx.lineTo(baseBX, baseBY);
+        ctx.lineTo(tipX, tipY);
         ctx.closePath();
         ctx.fill();
-      }
-      // 树皮裂纹里的琥珀光
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,196,90,0.5)';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 4; i += 1) {
-        const ang = (i / 4) * TAU + w * 0.5;
+        ctx.strokeStyle = 'rgba(208,236,148,0.18)';
+        ctx.lineWidth = 0.8;
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(ang) * r * 0.2, e.y + Math.sin(ang) * r * 0.2);
-        ctx.lineTo(e.x + Math.cos(ang + 0.4) * r * 0.68, e.y + Math.sin(ang + 0.4) * r * 0.68);
+        ctx.moveTo(baseAX, baseAY);
+        ctx.lineTo(tipX, tipY);
         ctx.stroke();
       }
-      ctx.globalCompositeOperation = 'source-over';
-      // 一双琥珀眼
-      ctx.fillStyle = '#ffd24e';
-      for (const side of [-1, 1]) {
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const bark = ctx.createLinearGradient(
+        e.x + facingX * r * 0.9,
+        e.y + facingY * r * 0.9,
+        e.x + backX * r * 0.9,
+        e.y + backY * r * 0.9,
+      );
+      bark.addColorStop(0, 'rgba(33,48,16,0)');
+      bark.addColorStop(0.52, 'rgba(25,37,12,0.16)');
+      bark.addColorStop(1, 'rgba(8,13,6,0.42)');
+      ctx.fillStyle = bark;
+      ctx.fillRect(e.x - r * 1.3, e.y - r * 1.3, r * 2.6, r * 2.6);
+
+      // 年轮与根脊：让绿色星形内部像一块被劈开的树心。
+      ctx.lineCap = 'round';
+      for (let ring = 0; ring < 3; ring += 1) {
+        const rr = r * (0.36 + ring * 0.17);
+        const start = e.angle + 0.58 + ring * 0.22 + w * 0.06;
+        const cx = e.x + backX * r * 0.05;
+        const cy = e.y + backY * r * 0.05;
+        ctx.strokeStyle = 'rgba(22,35,11,0.32)';
+        ctx.lineWidth = 1.55;
         ctx.beginPath();
-        ctx.arc(e.x + Math.cos(e.angle + side * 0.42) * r * 0.36, e.y + Math.sin(e.angle + side * 0.42) * r * 0.36, r * 0.11, 0, TAU);
+        ctx.arc(cx, cy, rr, start, start + Math.PI * 1.42);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(192,224,125,0.11)';
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.arc(cx + sideX * r * 0.012, cy + sideY * r * 0.012, rr + r * 0.014, start, start + Math.PI * 1.38);
+        ctx.stroke();
+      }
+      for (let ridge = 0; ridge < 5; ridge += 1) {
+        const a = w * 0.18 + ridge * (TAU / 5);
+        ctx.strokeStyle = 'rgba(17,28,9,0.34)';
+        ctx.lineWidth = 2.3;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * r * 0.14, e.y + Math.sin(a) * r * 0.14);
+        ctx.quadraticCurveTo(
+          e.x + Math.cos(a + 0.16) * r * 0.5,
+          e.y + Math.sin(a + 0.16) * r * 0.5,
+          e.x + Math.cos(a - 0.05) * r * 0.78,
+          e.y + Math.sin(a - 0.05) * r * 0.78,
+        );
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(198,229,129,0.12)';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+
+      // 苔斑与木纹里的琥珀树脂：暗绿压住整体亮度，暖点负责近景呼吸。
+      for (let moss = 0; moss < 7; moss += 1) {
+        const a = w * 0.42 + moss * 2.17;
+        const rr = r * (0.24 + ((moss * 23) % 29) / 68);
+        ctx.fillStyle = `rgba(49,77,28,${0.13 + (moss % 3) * 0.035})`;
+        ctx.beginPath();
+        ctx.ellipse(
+          e.x + Math.cos(a) * rr,
+          e.y + Math.sin(a) * rr * 0.84,
+          Math.max(1, r * 0.035),
+          Math.max(0.7, r * 0.02),
+          a,
+          0,
+          TAU,
+        );
+        ctx.fill();
+      }
+
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 4; i += 1) {
+        const ang = (i / 4) * TAU + w * 0.5 + 0.3;
+        const points = [
+          [e.x + Math.cos(ang) * r * 0.16, e.y + Math.sin(ang) * r * 0.16],
+          [e.x + Math.cos(ang + 0.14) * r * 0.38, e.y + Math.sin(ang + 0.14) * r * 0.38],
+          [e.x + Math.cos(ang - 0.06) * r * 0.58, e.y + Math.sin(ang - 0.06) * r * 0.58],
+          [e.x + Math.cos(ang + 0.1) * r * 0.78, e.y + Math.sin(ang + 0.1) * r * 0.78],
+        ];
+        ctx.strokeStyle = `rgba(255,164,54,${0.24 + breath * 0.1})`;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let point = 1; point < points.length; point += 1) {
+          ctx.lineTo(points[point][0], points[point][1]);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,221,137,0.62)';
+        ctx.lineWidth = 0.9;
+        ctx.stroke();
+        ctx.fillStyle = `rgba(255,206,101,${0.48 + breath * 0.16})`;
+        ctx.beginPath();
+        ctx.arc(points[2][0], points[2][1], Math.max(0.6, r * 0.025), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 眼窝与琥珀眼：暗色瞳缝把两只空白光点变成有方向的注视。
+      for (const side of [-1, 1]) {
+        const eyeX = e.x + Math.cos(e.angle + side * 0.42) * r * 0.36;
+        const eyeY = e.y + Math.sin(e.angle + side * 0.42) * r * 0.36;
+        ctx.strokeStyle = 'rgba(12,20,6,0.66)';
+        ctx.lineWidth = 2.1;
+        ctx.beginPath();
+        ctx.arc(eyeX, eyeY, r * 0.17, e.angle + Math.PI * 0.54, e.angle + Math.PI * 1.46);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(207,237,145,0.2)';
+        ctx.lineWidth = 0.75;
+        ctx.beginPath();
+        ctx.arc(eyeX, eyeY, r * 0.19, e.angle + Math.PI * 0.58, e.angle + Math.PI * 1.42);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffd24e';
+        ctx.beginPath();
+        ctx.arc(eyeX, eyeY, r * 0.11, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(44,24,6,0.92)';
+        ctx.beginPath();
+        ctx.ellipse(
+          eyeX + facingX * r * 0.018,
+          eyeY + facingY * r * 0.018,
+          r * 0.028,
+          r * 0.072,
+          e.angle,
+          0,
+          TAU,
+        );
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,250,191,0.82)';
+        ctx.beginPath();
+        ctx.arc(eyeX - sideX * r * 0.028, eyeY - sideY * r * 0.028, Math.max(0.55, r * 0.018), 0, TAU);
         ctx.fill();
       }
       break;
