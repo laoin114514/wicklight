@@ -1684,23 +1684,123 @@ function candleStub(ctx: CanvasRenderingContext2D, d: Decor, time: number, theme
 }
 
 function heatCrack(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const pulse = 0.5 + Math.sin(time * 2.1 + d.x * 0.03 + d.y * 0.02) * 0.3;
-  ctx.strokeStyle = 'rgba(16,5,3,0.58)';
-  ctx.lineWidth = 2.4;
+  const phase = d.x * 0.027 + d.y * 0.019;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const pulse = 0.5 + Math.sin(time * 1.7 + phase) * 0.2;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+  const main: readonly (readonly [number, number])[] = [
+    [-1.02, -0.12],
+    [-0.82, 0.01],
+    [-0.66, -0.08],
+    [-0.47, 0.09],
+    [-0.27, 0.02],
+    [-0.07, 0.11],
+    [0.14, -0.05],
+    [0.34, 0.05],
+    [0.55, -0.03],
+    [0.78, 0.13],
+    [1.02, 0.08],
+  ];
+  const branches: readonly (readonly (readonly [number, number])[])[] = [
+    [
+      [-0.42, 0.07],
+      [-0.53, 0.27],
+      [-0.47, 0.45],
+    ],
+    [
+      [0.27, 0.04],
+      [0.41, -0.18],
+      [0.38, -0.36],
+    ],
+    [
+      [0.66, 0.05],
+      [0.79, 0.27],
+      [0.73, 0.39],
+    ],
+  ];
+  const trace = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(px(x), py(y));
+      else ctx.lineTo(px(x), py(y));
+    });
+  };
+
+  ctx.fillStyle = 'rgba(5,2,2,0.28)';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r, d.y - d.r * 0.26);
-  ctx.lineTo(d.x - d.r * 0.32, d.y + d.r * 0.12);
-  ctx.lineTo(d.x + d.r * 0.18, d.y - d.r * 0.14);
-  ctx.lineTo(d.x + d.r, d.y + d.r * 0.2);
+  ctx.ellipse(d.x, d.y + d.r * 0.08, d.r * 0.98, d.r * 0.36, 0.04 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(12,5,3,0.42)';
+  for (const [x, y, rx, ry, rot] of [
+    [-0.51, 0.05, 0.31, 0.12, -0.08],
+    [-0.06, 0.06, 0.34, 0.13, 0.03],
+    [0.44, 0.02, 0.27, 0.1, -0.05],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
+    ctx.fill();
+  }
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  trace(main);
+  ctx.strokeStyle = 'rgba(119,58,35,0.16)';
+  ctx.lineWidth = Math.max(1.5, d.r * 0.24);
   ctx.stroke();
+  trace(main);
+  ctx.strokeStyle = 'rgba(12,4,3,0.66)';
+  ctx.lineWidth = Math.max(0.85, d.r * 0.12);
+  ctx.stroke();
+  for (const branch of branches) {
+    trace(branch);
+    ctx.strokeStyle = 'rgba(92,46,31,0.13)';
+    ctx.lineWidth = Math.max(1.1, d.r * 0.16);
+    ctx.stroke();
+    trace(branch);
+    ctx.strokeStyle = 'rgba(12,4,3,0.55)';
+    ctx.lineWidth = Math.max(0.65, d.r * 0.085);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(169,112,73,0.13)';
+  ctx.lineWidth = Math.max(0.45, d.r * 0.045);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.7), py(-0.05));
+  ctx.lineTo(px(-0.52), py(0.02));
+  ctx.lineTo(px(-0.34), py(-0.02));
+  ctx.stroke();
+
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(255,132,44,${0.28 + pulse * 0.24})`;
-  ctx.lineWidth = 1.15;
+  trace([main[3], main[4], main[5], main[6], main[7]]);
+  ctx.strokeStyle = `rgba(255,112,35,${0.13 + pulse * 0.12})`;
+  ctx.lineWidth = Math.max(0.6, d.r * 0.055);
   ctx.stroke();
-  ctx.strokeStyle = `rgba(255,224,156,${0.3 + pulse * 0.22})`;
-  ctx.lineWidth = 0.45;
+  trace([main[4], main[5], main[6]]);
+  ctx.strokeStyle = `rgba(255,202,109,${0.2 + pulse * 0.16})`;
+  ctx.lineWidth = Math.max(0.45, d.r * 0.028);
   ctx.stroke();
+  trace(branches[1]);
+  ctx.strokeStyle = `rgba(255,126,42,${0.09 + pulse * 0.07})`;
+  ctx.lineWidth = Math.max(0.5, d.r * 0.04);
+  ctx.stroke();
+
+  const ember = 0.18 + pulse * 0.22;
+  ctx.fillStyle = `rgba(255,164,72,${ember})`;
+  ctx.beginPath();
+  ctx.arc(px(-0.07), py(0.1), Math.max(0.4, d.r * 0.035), 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,215,142,${ember * 0.72})`;
+  ctx.beginPath();
+  ctx.arc(px(0.54), py(-0.04), Math.max(0.35, d.r * 0.022), 0, TAU);
+  ctx.fill();
+
+  const rise = (time * 0.32 + phase * 0.13) % 1;
+  ctx.fillStyle = `rgba(255,154,63,${(1 - rise) * 0.22})`;
+  ctx.beginPath();
+  ctx.arc(px(0.18 + Math.sin(time * 0.7 + phase) * 0.035), py(-0.06 - rise * 0.4), Math.max(0.35, d.r * 0.018), 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 
