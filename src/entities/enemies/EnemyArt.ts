@@ -1541,11 +1541,115 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'spitter': {
-      ctx.fillStyle = shade(body, -0.25);
-      for (let i = 0; i < 3; i += 1) {
-        const a = w * 0.5 + (i / 3) * TAU;
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const breath = 0.5 + Math.sin(time * 2.6 + w) * 0.5;
+
+      // 体内的糜斑：让紫色软体不是一整块平色。
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      for (let blotch = 0; blotch < 3; blotch += 1) {
+        const a = w * 0.34 + blotch * 2.15;
+        const rr = r * (0.24 + blotch * 0.17);
+        ctx.fillStyle = blotch === 1 ? 'rgba(39,18,58,0.22)' : 'rgba(224,190,255,0.12)';
         ctx.beginPath();
-        ctx.arc(e.x + Math.cos(a) * r * 1.05, e.y + Math.sin(a) * r * 1.05, r * 0.3, 0, TAU);
+        ctx.ellipse(
+          e.x + Math.cos(a) * rr,
+          e.y + Math.sin(a) * rr * 0.82,
+          r * (0.18 + blotch * 0.025),
+          r * (0.11 + blotch * 0.018),
+          a,
+          0,
+          TAU,
+        );
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 口器：平时也留一点湿亮的暗缝，蓄力时再叠上 spitterCharge 的亮口。
+      const mouthX = e.x + facingX * r * 0.86;
+      const mouthY = e.y + facingY * r * 0.86;
+      ctx.fillStyle = 'rgba(35,15,48,0.62)';
+      ctx.beginPath();
+      ctx.ellipse(mouthX, mouthY, r * 0.17, r * 0.09, e.angle, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(230,205,255,${0.22 + breath * 0.08})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.ellipse(mouthX - facingX * r * 0.025, mouthY - facingY * r * 0.025, r * 0.12, r * 0.052, e.angle, 0, TAU);
+      ctx.stroke();
+
+      // 三枚半透明孢子囊：短导管把囊挂在身体上，里面再压几粒孢子。
+      for (let i = 0; i < 3; i += 1) {
+        const a = w * 0.45 + (i / 3) * TAU + 0.24;
+        const sacRadius = r * (0.27 + Math.sin(time * 1.9 + i * 1.4 + w) * 0.018);
+        const sacX = e.x + Math.cos(a) * r * 1.03;
+        const sacY = e.y + Math.sin(a) * r * 1.03;
+        const rootX = e.x + Math.cos(a) * r * 0.68;
+        const rootY = e.y + Math.sin(a) * r * 0.68;
+
+        ctx.strokeStyle = 'rgba(38,17,52,0.6)';
+        ctx.lineWidth = Math.max(1.15, r * 0.09);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(rootX, rootY);
+        ctx.lineTo(sacX, sacY);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(229,204,255,0.18)';
+        ctx.lineWidth = 0.65;
+        ctx.stroke();
+
+        const membrane = ctx.createRadialGradient(
+          sacX - facingX * sacRadius * 0.32,
+          sacY - facingY * sacRadius * 0.32,
+          0,
+          sacX,
+          sacY,
+          sacRadius * 1.08,
+        );
+        membrane.addColorStop(0, 'rgba(244,226,255,0.62)');
+        membrane.addColorStop(0.48, 'rgba(193,136,232,0.5)');
+        membrane.addColorStop(1, 'rgba(69,32,96,0.54)');
+        ctx.fillStyle = membrane;
+        ctx.beginPath();
+        ctx.arc(sacX, sacY, sacRadius, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(43,20,61,0.72)';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(237,215,255,0.24)';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.arc(sacX, sacY, sacRadius * 0.88, Math.PI * 0.72, Math.PI * 1.52);
+        ctx.stroke();
+
+        for (let spore = 0; spore < 3; spore += 1) {
+          const sa = w * 0.6 + spore * 2.1 + i * 1.3;
+          const sr = sacRadius * (0.25 + spore * 0.12);
+          ctx.fillStyle = spore === 1 ? 'rgba(255,244,255,0.58)' : 'rgba(226,198,255,0.4)';
+          ctx.beginPath();
+          ctx.arc(sacX + Math.cos(sa) * sr, sacY + Math.sin(sa) * sr, Math.max(0.4, sacRadius * 0.14), 0, TAU);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(255,250,255,0.42)';
+        ctx.beginPath();
+        ctx.arc(sacX - sideX * sacRadius * 0.28, sacY - sideY * sacRadius * 0.28, Math.max(0.4, sacRadius * 0.11), 0, TAU);
+        ctx.fill();
+
+        const drift = (time * 0.3 + i * 0.27 + w * 0.05) % 1;
+        ctx.fillStyle = `rgba(223,194,255,${(1 - drift) * 0.24})`;
+        ctx.beginPath();
+        ctx.arc(
+          e.x + Math.cos(a + 0.3) * r * (1.18 + drift * 0.34),
+          e.y + Math.sin(a + 0.3) * r * (1.18 + drift * 0.34),
+          Math.max(0.35, r * 0.024),
+          0,
+          TAU,
+        );
         ctx.fill();
       }
       break;
