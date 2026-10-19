@@ -1547,13 +1547,77 @@ function emberDot(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
   ctx.globalCompositeOperation = 'source-over';
 }
 
-function mushroomDot(ctx: CanvasRenderingContext2D, d: Decor): void {
-  ctx.fillStyle = 'rgba(70,112,86,0.7)';
-  ctx.fillRect(d.x - 0.8, d.y, 1.6, d.r * 0.5);
-  ctx.fillStyle = 'rgba(120,200,160,0.55)';
+function mushroomDot(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
+  const phase = time * 0.7 + d.x * 0.023 + d.y * 0.031;
+  const mirror = Math.sin(d.x * 0.017 + d.y * 0.013) < 0 ? -1 : 1;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(2,7,5,0.24)';
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y, d.r * 0.42, d.r * 0.28, 0, 0, TAU);
+  ctx.ellipse(px(0.04), py(0.4), d.r * 0.62, d.r * 0.2, 0.04 * mirror, 0, TAU);
   ctx.fill();
+
+  const stem = (x: number, baseY: number, capY: number, lean: number, width: number): void => {
+    ctx.fillStyle = 'rgba(82,108,87,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(px(x - width * 0.5), py(baseY));
+    ctx.quadraticCurveTo(px(x - width * 0.35 + lean), py((baseY + capY) * 0.5), px(x - width * 0.24 + lean), py(capY));
+    ctx.lineTo(px(x + width * 0.26 + lean), py(capY));
+    ctx.quadraticCurveTo(px(x + width * 0.38), py((baseY + capY) * 0.5), px(x + width * 0.5), py(baseY));
+    ctx.closePath();
+    ctx.fill();
+  };
+  const cap = (x: number, y: number, rx: number, ry: number, tint: string): void => {
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.moveTo(px(x - rx), py(y));
+    ctx.quadraticCurveTo(px(x - rx * 0.9), py(y - ry * 1.55), px(x + rx * 0.05), py(y - ry * 1.62));
+    ctx.quadraticCurveTo(px(x + rx * 0.95), py(y - ry * 1.4), px(x + rx), py(y));
+    ctx.quadraticCurveTo(px(x + rx * 0.48), py(y + ry * 0.42), px(x - rx * 0.46), py(y + ry * 0.36));
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  stem(-0.48, 0.34, 0.13, 0.03, 0.1);
+  cap(-0.44, 0.12, 0.17, 0.1, 'rgba(75,116,95,0.43)');
+  stem(0, 0.42, -0.18, 0.045, 0.14);
+  cap(0.03, -0.16, 0.42, 0.25, 'rgba(96,146,116,0.48)');
+  stem(0.43, 0.36, 0.07, -0.025, 0.09);
+  cap(0.42, 0.08, 0.23, 0.14, 'rgba(81,126,101,0.45)');
+
+  ctx.strokeStyle = 'rgba(169,210,173,0.21)';
+  ctx.lineWidth = Math.max(0.45, d.r * 0.028);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.35), py(-0.17));
+  ctx.quadraticCurveTo(px(-0.28), py(-0.37), px(0.02), py(-0.42));
+  ctx.quadraticCurveTo(px(0.28), py(-0.38), px(0.36), py(-0.22));
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(34,66,50,0.48)';
+  ctx.lineWidth = Math.max(0.35, d.r * 0.018);
+  for (const [x, y, dx] of [
+    [-0.19, 0.01, -0.08],
+    [0, 0.04, 0.01],
+    [0.18, 0.01, 0.1],
+  ] as const) {
+    ctx.beginPath();
+    ctx.moveTo(px(x), py(y));
+    ctx.lineTo(px(x + dx), py(y + 0.09));
+    ctx.stroke();
+  }
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 3; i += 1) {
+    const rise = (time * 0.12 + phase * 0.05 + i * 0.37) % 1;
+    const sx = px(0.08 + Math.sin(phase + i * 2.1) * 0.3);
+    const sy = py(-0.26 - rise * 0.36);
+    ctx.fillStyle = `rgba(146,211,158,${(1 - rise) * (0.08 + i * 0.01)})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(0.35, d.r * 0.015), 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 function leafLitter(ctx: CanvasRenderingContext2D, d: Decor): void {
@@ -1999,7 +2063,7 @@ function drawDetails(
       case 'gloamwood':
         if (d.kind === 0) grassTuft(ctx, d, time);
         else if (d.kind === 1) pebble(ctx, d, 'rgba(46,62,50,0.75)');
-        else if (d.kind === 2) mushroomDot(ctx, d);
+        else if (d.kind === 2) mushroomDot(ctx, d, time);
         else leafLitter(ctx, d);
         break;
       case 'ashenkeep':
