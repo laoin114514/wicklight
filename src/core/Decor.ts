@@ -1916,7 +1916,7 @@ function mossPatch(ctx: CanvasRenderingContext2D, d: Decor): void {
   const px = (v: number): number => d.x + v * d.r * mirror;
   const py = (v: number): number => d.y + v * d.r;
 
-  ctx.fillStyle = 'rgba(41,74,55,0.3)';
+  ctx.fillStyle = 'rgba(41,74,55,0.23)';
   for (const [x, y, rx, ry, rot] of [
     [-0.25, 0.04, 0.46, 0.22, -0.12],
     [0.2, 0.02, 0.34, 0.18, 0.16],
@@ -1926,12 +1926,24 @@ function mossPatch(ctx: CanvasRenderingContext2D, d: Decor): void {
     ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror + tilt, 0, TAU);
     ctx.fill();
   }
-  ctx.fillStyle = 'rgba(82,121,76,0.22)';
+  ctx.fillStyle = 'rgba(41,74,55,0.18)';
+  for (const [x, y, rx, ry, rot] of [
+    [-0.54, -0.08, 0.16, 0.08, -0.32],
+    [-0.32, 0.21, 0.14, 0.07, 0.18],
+    [0.12, -0.15, 0.15, 0.07, 0.26],
+    [0.38, 0.14, 0.13, 0.06, -0.2],
+    [0.46, -0.08, 0.1, 0.045, 0.3],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror + tilt, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(82,121,76,0.16)';
   ctx.beginPath();
   ctx.ellipse(px(-0.1), py(-0.03), d.r * 0.31, d.r * 0.13, tilt, 0, TAU);
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(118,154,91,0.2)';
+  ctx.fillStyle = 'rgba(118,154,91,0.15)';
   for (const [x, y, radius] of [
     [-0.38, -0.02, 0.026],
     [-0.13, 0.08, 0.02],
@@ -2003,28 +2015,28 @@ function glassShard(ctx: CanvasRenderingContext2D, d: Decor): void {
   ctx.ellipse(px(0.03), py(0.16), d.r * 0.58, d.r * 0.17, tilt * 0.3, 0, TAU);
   ctx.fill();
   const shards: readonly (readonly [number, number, number, number, number])[] = [
-    [-0.36, 0.12, -0.1, -0.4, 0.24],
-    [0.08, 0.13, 0.36, -0.28, 0.2],
-    [0.34, 0.16, 0.58, 0.02, 0.15],
+    [-0.43, 0.14, -0.19, -0.31, 0.18],
+    [0.01, 0.15, 0.31, -0.06, 0.22],
+    [0.31, 0.15, 0.57, 0.2, 0.14],
   ];
   shards.forEach(([x, y, tipX, tipY, width], index) => {
-    ctx.fillStyle = index === 1 ? 'rgba(112,83,156,0.44)' : 'rgba(82,67,118,0.4)';
+    ctx.fillStyle = index === 1 ? 'rgba(102,76,145,0.36)' : 'rgba(76,62,108,0.34)';
     ctx.beginPath();
     ctx.moveTo(px(x - width * 0.5), py(y));
     ctx.lineTo(px(tipX), py(tipY));
     ctx.lineTo(px(x + width * 0.55), py(y + 0.04));
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = index === 1 ? 'rgba(201,173,255,0.25)' : 'rgba(155,129,206,0.16)';
+    ctx.strokeStyle = index === 1 ? 'rgba(194,166,247,0.19)' : 'rgba(145,120,194,0.13)';
     ctx.lineWidth = Math.max(0.35, d.r * 0.02);
     ctx.beginPath();
     ctx.moveTo(px(x - width * 0.2), py(y));
     ctx.lineTo(px(tipX), py(tipY));
     ctx.stroke();
   });
-  ctx.fillStyle = 'rgba(225,208,255,0.32)';
+  ctx.fillStyle = 'rgba(225,208,255,0.2)';
   ctx.beginPath();
-  ctx.arc(px(0.34), py(-0.25), Math.max(0.35, d.r * 0.027), 0, TAU);
+  ctx.arc(px(0.28), py(-0.02), Math.max(0.35, d.r * 0.024), 0, TAU);
   ctx.fill();
 }
 
