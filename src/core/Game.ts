@@ -7502,8 +7502,37 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.fillStyle = base;
     ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+    // 冰面不是倒出来的一个圆：边缘由一圈缓慢变化的霜缘咬开，
+    // 但外圈读数线仍留在真正的 0.97r 上（下一段），哪里能踩、哪里不能踩没变。
+    for (let i = 0; i <= 32; i += 1) {
+      const a = (i / 32) * Math.PI * 2;
+      const rr = g.r * (0.9 + 0.055 * Math.sin(ph * 1.7 + i * 2.31) + 0.026 * Math.sin(i * 0.73));
+      const px = g.x + Math.cos(a) * rr;
+      const py = g.y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fill();
+
+    // 外沿几块更厚的霜疤：让薄冰的轮廓在暗处也有厚薄，而不是一圈均匀的蓝。
+    for (let i = 0; i < 7; i += 1) {
+      const a = ph + i * 1.71 + 0.35;
+      const d = g.r * (0.72 + 0.08 * ((i * 3) % 3));
+      ctx.globalAlpha = (0.07 + 0.035 * (i % 3)) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#4b839c' : '#5d93a9';
+      ctx.beginPath();
+      ctx.ellipse(
+        g.x + Math.cos(a) * d,
+        g.y + Math.sin(a) * d,
+        g.r * (0.17 + 0.035 * (i % 2)),
+        g.r * (0.1 + 0.03 * ((i * 5) % 3)),
+        a + 0.8,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
 
     ctx.globalCompositeOperation = 'lighter';
     const sheen = ctx.createRadialGradient(g.x - g.r * 0.12, g.y - g.r * 0.16, 0, g.x, g.y, g.r * 0.82);
@@ -7539,20 +7568,21 @@ export class Game {
       ctx.stroke();
     }
 
-    // 外缘霜晶：只露半截，告诉玩家这圈冰不是画出来的圆。
-    for (let i = 0; i < 5; i += 1) {
-      const a = ph + 0.52 + i * 1.2566 + Math.sin(t * 0.22 + i) * 0.025;
-      const d = g.r * 0.82;
+    // 外缘霜晶：长短不一、朝向略偏，像从冰面里长出来，而不是摆了一圈装饰。
+    for (let i = 0; i < 9; i += 1) {
+      const a = ph + 0.38 + i * 0.698 + Math.sin(t * 0.22 + i) * 0.025;
+      const d = g.r * (0.76 + 0.055 * (i % 3));
       const sx = g.x + Math.cos(a) * d;
       const sy = g.y + Math.sin(a) * d;
-      const s = 2.1 + (i % 2) * 0.8;
-      ctx.globalAlpha = (0.14 + 0.05 * (i % 3)) * fade;
+      const s = 1.7 + (i % 3) * 0.65;
+      const tilt = Math.sin(a * 1.7 + ph) * 0.32;
+      ctx.globalAlpha = (0.11 + 0.05 * (i % 3)) * fade;
       ctx.fillStyle = '#e8f8ff';
       ctx.beginPath();
-      ctx.moveTo(sx, sy - s);
-      ctx.lineTo(sx + s * 0.62, sy);
-      ctx.lineTo(sx, sy + s);
-      ctx.lineTo(sx - s * 0.62, sy);
+      ctx.moveTo(sx + Math.sin(tilt) * s, sy - Math.cos(tilt) * s);
+      ctx.lineTo(sx + Math.cos(tilt) * s * 0.56, sy + Math.sin(tilt) * s * 0.56);
+      ctx.lineTo(sx - Math.sin(tilt) * s, sy + Math.cos(tilt) * s);
+      ctx.lineTo(sx - Math.cos(tilt) * s * 0.56, sy - Math.sin(tilt) * s * 0.56);
       ctx.closePath();
       ctx.fill();
     }
@@ -7569,14 +7599,18 @@ export class Game {
     }
 
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = fade * (0.4 + 0.1 * Math.sin(t * 2.8 + ph));
+    // 读数线仍停在 0.97r，只是被切成参差的刻段：边界仍是边界，不再像一层塑料罩。
     ctx.strokeStyle = '#cfeaff';
-    ctx.lineWidth = 2.3;
-    ctx.setLineDash([4, 7]);
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 22; i += 1) {
+      const a = ph * 0.16 + (i / 22) * Math.PI * 2;
+      const seg = 0.055 + 0.055 * Math.abs(Math.sin(ph + i * 2.17));
+      ctx.globalAlpha = fade * (0.25 + 0.12 * Math.sin(t * 2.8 + ph + i * 0.6));
+      ctx.lineWidth = 1.5 + (i % 3) * 0.28;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r * 0.97, a, a + seg);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
     ctx.restore();
   }
