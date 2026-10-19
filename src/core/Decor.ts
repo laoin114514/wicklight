@@ -1502,13 +1502,83 @@ function grassTuft(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
 }
 
 function pebble(ctx: CanvasRenderingContext2D, d: Decor, tint: string): void {
-  ctx.fillStyle = tint;
+  const phase = d.x * 0.017 + d.y * 0.023;
+  const rot = Math.sin(phase) * 0.62;
+  const mirror = Math.cos(phase * 1.3) < 0 ? -1 : 1;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  const point = (x: number, y: number): readonly [number, number] => [
+    d.x + (x * cos - y * sin) * d.r * mirror,
+    d.y + (x * sin + y * cos) * d.r * 0.78,
+  ];
+  const trace = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      const [wx, wy] = point(x, y);
+      if (index === 0) ctx.moveTo(wx, wy);
+      else ctx.lineTo(wx, wy);
+    });
+    ctx.closePath();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y, d.r * 0.85, d.r * 0.55, d.kind * 0.6, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.08 * mirror, d.y + d.r * 0.24, d.r * 0.74, d.r * 0.26, rot * 0.35, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.09)';
+
+  const body: readonly (readonly [number, number])[] = [
+    [-0.82, 0.08],
+    [-0.58, -0.3],
+    [-0.22, -0.5],
+    [0.2, -0.48],
+    [0.62, -0.22],
+    [0.78, 0.12],
+    [0.42, 0.4],
+    [-0.08, 0.47],
+    [-0.6, 0.32],
+  ];
+  trace(body);
+  ctx.fillStyle = tint;
+  ctx.fill();
+
+  trace([
+    [-0.7, 0.02],
+    [-0.5, -0.28],
+    [-0.18, -0.42],
+    [0.08, -0.39],
+    [0.02, -0.13],
+    [-0.26, -0.02],
+    [-0.39, 0.19],
+  ]);
+  ctx.fillStyle = 'rgba(225,236,255,0.1)';
+  ctx.fill();
+  trace([
+    [0.18, -0.4],
+    [0.58, -0.2],
+    [0.71, 0.09],
+    [0.39, 0.34],
+    [0.06, 0.38],
+    [0.2, 0.12],
+    [0.34, -0.1],
+  ]);
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = Math.max(0.4, d.r * 0.025);
   ctx.beginPath();
-  ctx.ellipse(d.x - d.r * 0.16, d.y - d.r * 0.18, d.r * 0.34, d.r * 0.2, 0, 0, TAU);
+  const [crackX, crackY] = point(0.08, -0.36);
+  const [crackX2, crackY2] = point(-0.02, -0.08);
+  const [crackX3, crackY3] = point(0.18, 0.11);
+  ctx.moveTo(crackX, crackY);
+  ctx.lineTo(crackX2, crackY2);
+  ctx.lineTo(crackX3, crackY3);
+  ctx.stroke();
+
+  const [chipX, chipY] = point(-0.46, 0.37);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(chipX, chipY, d.r * 0.2, d.r * 0.12, rot * 0.5, 0, TAU);
   ctx.fill();
 }
 
