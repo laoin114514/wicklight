@@ -1375,22 +1375,96 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'bomber': {
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
-      for (let i = 0; i < 4; i += 1) {
-        const a = (i / 4) * TAU + w * 0.3;
+      const armed = e.stateTimer > 0;
+      const pressure = armed ? 1 - e.stateTimer / 1.1 : 0;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 18 + w);
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(91,31,16,0.18)';
+      ctx.lineWidth = 0.9;
+      for (let ridge = 0; ridge < 6; ridge += 1) {
+        const angle = Math.PI + 0.28 + (ridge / 5) * (Math.PI - 0.56);
         ctx.beginPath();
-        ctx.arc(e.x + Math.cos(a) * r * 0.5, e.y + Math.sin(a) * r * 0.55, r * 0.16, 0, TAU);
-        ctx.fill();
-      }
-      ctx.strokeStyle = 'rgba(84,30,18,0.55)';
-      ctx.lineWidth = 1.1;
-      for (let i = 0; i < 5; i += 1) {
-        const x = e.x - r * 0.58 + (i / 4) * r * 1.16;
-        ctx.beginPath();
-        ctx.moveTo(x, e.y + r * 0.2);
-        ctx.quadraticCurveTo(x + r * 0.04, e.y + r * 0.48, x - r * 0.02, e.y + r * 0.72);
+        ctx.moveTo(e.x + Math.cos(angle) * r * 0.16, e.y - r * 0.28 + Math.sin(angle) * r * 0.16);
+        ctx.lineTo(e.x + Math.cos(angle) * r * 1.02, e.y - r * 0.28 + Math.sin(angle) * r * 1.02);
         ctx.stroke();
       }
+
+      ctx.fillStyle = 'rgba(255,231,191,0.3)';
+      ctx.strokeStyle = 'rgba(99,34,16,0.34)';
+      ctx.lineWidth = 0.8;
+      for (const [sx, sy, sr, stretch] of [[-0.45, -0.24, 0.15, 0.82], [-0.08, -0.52, 0.18, 0.72], [0.32, -0.38, 0.14, 0.94], [0.48, -0.02, 0.105, 0.8]] as const) {
+        ctx.beginPath();
+        ctx.ellipse(e.x + r * sx, e.y + r * sy, r * sr, r * sr * stretch, -0.35 + sx * 0.6, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(74,23,12,0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.88, e.y + r * 0.46);
+      ctx.quadraticCurveTo(e.x, e.y + r * 0.36, e.x + r * 0.88, e.y + r * 0.46);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,199,126,0.16)';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.84, e.y + r * 0.41);
+      ctx.quadraticCurveTo(e.x, e.y + r * 0.31, e.x + r * 0.84, e.y + r * 0.41);
+      ctx.stroke();
+
+      for (let gill = 0; gill < 7; gill += 1) {
+        const x = e.x - r * 0.7 + (gill / 6) * r * 1.4;
+        ctx.strokeStyle = gill % 2 === 0 ? 'rgba(72,21,10,0.52)' : 'rgba(111,37,14,0.34)';
+        ctx.lineWidth = gill === 3 ? 1.2 : 0.85;
+        ctx.beginPath();
+        ctx.moveTo(x, e.y + r * 0.48);
+        ctx.quadraticCurveTo(x + Math.sin(gill * 1.4 + w) * r * 0.05, e.y + r * 0.62, x - r * 0.03, e.y + r * 0.8);
+        ctx.stroke();
+        if (gill % 2 === 1) {
+          ctx.strokeStyle = 'rgba(255,190,112,0.12)';
+          ctx.lineWidth = 0.55;
+          ctx.beginPath();
+          ctx.moveTo(x + r * 0.035, e.y + r * 0.51);
+          ctx.lineTo(x + r * 0.01, e.y + r * 0.77);
+          ctx.stroke();
+        }
+      }
+
+      if (armed) {
+        ctx.globalCompositeOperation = 'lighter';
+        const core = ctx.createRadialGradient(e.x, e.y - r * 0.16, 0, e.x, e.y - r * 0.16, r * (0.58 + pressure * 0.32));
+        core.addColorStop(0, `rgba(255,247,214,${0.14 + pressure * 0.34 * (0.72 + pulse * 0.28)})`);
+        core.addColorStop(0.38, `rgba(255,128,55,${0.1 + pressure * 0.28})`);
+        core.addColorStop(1, 'rgba(187,48,10,0)');
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y - r * 0.16, r * (0.58 + pressure * 0.32), 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255,157,76,${0.18 + pressure * 0.44})`;
+        ctx.lineWidth = 1.1;
+        for (let crack = 0; crack < 4; crack += 1) {
+          const angle = Math.PI + 0.5 + (crack / 3) * (Math.PI - 1);
+          ctx.beginPath();
+          ctx.moveTo(e.x + Math.cos(angle) * r * 0.12, e.y - r * 0.2 + Math.sin(angle) * r * 0.12);
+          ctx.lineTo(e.x + Math.cos(angle + 0.08) * r * 0.42, e.y - r * 0.2 + Math.sin(angle + 0.08) * r * 0.42);
+          ctx.lineTo(e.x + Math.cos(angle - 0.04) * r * 0.66, e.y - r * 0.2 + Math.sin(angle - 0.04) * r * 0.66);
+          ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(255,218,161,${0.18 + pressure * 0.3})`;
+        for (let mote = 0; mote < 3; mote += 1) {
+          const rise = (time * 0.62 + mote * 0.27 + w * 0.05) % 1;
+          const drift = Math.sin(time * 3.4 + mote * 2.1 + w) * r * 0.34;
+          const mx = e.x - r * 0.52 + mote * r * 0.48 + drift;
+          const my = e.y - r * (0.42 + rise * 0.82);
+          ctx.beginPath();
+          ctx.arc(mx, my, Math.max(0.55, r * (0.035 + (1 - rise) * 0.035)), 0, TAU);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
       break;
     }
     case 'wickmother': {
