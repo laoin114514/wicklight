@@ -1506,8 +1506,8 @@ export class UIManager implements UIHost {
     const stageName = STAGE_MAP[r.stageId]?.theme.name ?? '未知之地';
     const diff = DIFFICULTIES[r.difficulty]?.label ?? r.difficulty;
     const where = r.endless ? `无尽 · 第 ${r.wave} 波` : `${stageName} · 第 ${r.stage} 关`;
-    return `<div class="rec-run ${r.cleared ? 'is-clear' : ''}">
-      <div class="rec-run__mark">${r.cleared ? '🏆' : '🕯️'}</div>
+    return `<div class="rec-run ${r.cleared ? 'is-clear' : 'is-fall'}">
+      <div class="rec-run__mark" role="img" aria-label="${r.cleared ? '通关' : '熄灭'}">${r.cleared ? '通' : '灭'}</div>
       <div class="rec-run__body">
         <div class="rec-run__top">
           <b style="color:${lantern?.color ?? 'var(--amber)'}">${lantern?.name ?? r.lantern}</b>
@@ -1516,7 +1516,12 @@ export class UIManager implements UIHost {
           ${r.daily ? '<span class="rec-run__daily">今日灯芯</span>' : ''}
         </div>
         <div class="rec-run__sub">
-          击杀 ${r.kills} · Lv ${r.level} · ${UIManager.clock(r.time)} · 连杀 ${r.bestCombo}${r.bossKills ? ` · 首领 ${r.bossKills}` : ''}
+          <span>击杀 <b>${r.kills}</b></span>
+          <span>Lv <b>${r.level}</b></span>
+          <span>用时 <b>${UIManager.clock(r.time)}</b></span>
+          <span>连杀 <b>${r.bestCombo}</b></span>
+          ${r.bossKills ? `<span>首领 <b>${r.bossKills}</b></span>` : ''}
+          ${r.pacts ? `<span>深宵 <b>${r.pacts}</b></span>` : ''}
         </div>
       </div>
       <div class="rec-run__side"><b>+${r.embers}</b><span>${UIManager.ago(r.at)}</span></div>
@@ -1563,16 +1568,16 @@ export class UIManager implements UIHost {
     const runs = save.history;
 
     const hero = [
-      ['总局数', `${save.runs}`],
-      ['累计击杀', `${save.killsTotal}`],
-      ['累计守夜', UIManager.hours(rec.totalTime)],
-      ['通关次数', `${rec.clearedRuns}`],
-      ['完成悬赏', `${rec.bounties}`],
-      ['今日灯芯', this.game.dailySave().bestScore > 0 ? `${this.game.dailySave().bestScore} 分` : '未出手'],
-      ['无尽最佳', `${save.bestEndlessWave} 波`],
-      ['当前余烬', `${save.embers}`],
+      ['总局数', `${save.runs}`, '☾'],
+      ['累计击杀', `${save.killsTotal}`, '✦'],
+      ['累计守夜', UIManager.hours(rec.totalTime), '◷'],
+      ['通关次数', `${rec.clearedRuns}`, '✧'],
+      ['完成悬赏', `${rec.bounties}`, '⌖'],
+      ['今日灯芯', this.game.dailySave().bestScore > 0 ? `${this.game.dailySave().bestScore} 分` : '未出手', '❖'],
+      ['无尽最佳', `${save.bestEndlessWave} 波`, '∞'],
+      ['当前余烬', `${save.embers}`, '◈'],
     ]
-      .map(([k, v]) => `<div class="rec-stat"><b>${v}</b><span>${k}</span></div>`)
+      .map(([k, v, sigil], i) => `<div class="rec-stat ${i < 4 ? 'is-core' : ''}"><i class="rec-stat__sigil" aria-hidden="true">${sigil}</i><b>${v}</b><span>${k}</span></div>`)
       .join('');
 
     const bestTime = rec.bestTime > 0 ? UIManager.clock(rec.bestTime) : '—';
@@ -1594,11 +1599,18 @@ export class UIManager implements UIHost {
         const r = row.rec;
         const progress = r.bestWave > 0 ? `无尽 ${r.bestWave} 波` : r.bestStage > 0 ? `第 ${r.bestStage} 关` : '尚未出航';
         const time = r.bestTime > 0 ? ` · 最快 ${UIManager.clock(r.bestTime)}` : '';
-        return `<div class="rec-lantern ${locked ? 'is-locked' : ''}" style="--accent:${row.color}">
-          <div class="rec-lantern__name">${row.name}${locked ? '<i>未解锁</i>' : ''}</div>
-          <div class="rec-lantern__line"><b>${r.runs}</b> 局 · ${progress}${time}</div>
+        const reached = locked ? 0 : Math.min(STAGES.length, r.bestWave > 0 ? STAGES.length : r.bestStage);
+        const steps = STAGES.map((_, i) => `<i class="${i < reached ? 'is-lit' : ''}"></i>`).join('');
+        return `<article class="rec-lantern ${locked ? 'is-locked' : ''}" style="--accent:${row.color}">
+          <div class="rec-lantern__glyph" aria-hidden="true">${row.name.slice(0, 1)}</div>
+          <div class="rec-lantern__head">
+            <div class="rec-lantern__name">${row.name}${locked ? '<i>未解锁</i>' : ''}</div>
+            <span class="rec-lantern__runs"><b>${r.runs}</b> 局</span>
+          </div>
+          <div class="rec-lantern__line">${progress}${time}</div>
           <div class="rec-lantern__line rec-lantern__line--dim">单局最高击杀 ${r.bestKills} · 通关 ${r.cleared} 次</div>
-        </div>`;
+          <div class="rec-lantern__steps" aria-hidden="true">${steps}</div>
+        </article>`;
       })
       .join('');
 
