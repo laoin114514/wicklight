@@ -1437,28 +1437,100 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
     }
     case 'oilsapper': {
       const f = 0.75 + Math.sin(time * 9 + w) * 0.25;
+      const sway = Math.sin(time * 3.2 + w) * r * 0.035;
+      const flameX = e.x + sway;
+      const flameY = e.y - r * 1.15;
+
+      ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const g = ctx.createRadialGradient(e.x, e.y - r * 1.15, 0, e.x, e.y - r * 1.15, r * 0.8);
+      const g = ctx.createRadialGradient(flameX, flameY, 0, flameX, flameY, r * 0.94);
       g.addColorStop(0, 'rgba(255,240,200,0.95)');
       g.addColorStop(0.45, rgba(body, 0.7));
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(e.x, e.y - r * 1.15, r * 0.8 * f, 0, TAU);
+      ctx.arc(flameX, flameY, r * 0.94 * f, 0, TAU);
       ctx.fill();
+
+      const flameBaseY = e.y - r * 0.92;
+      const flameTipY = flameY - r * (0.5 + f * 0.08);
+      ctx.fillStyle = 'rgba(255,146,56,0.72)';
+      ctx.beginPath();
+      ctx.moveTo(flameX, flameBaseY);
+      ctx.bezierCurveTo(flameX - r * 0.24, flameY + r * 0.06, flameX - r * 0.16, flameY - r * 0.2, flameX, flameTipY);
+      ctx.bezierCurveTo(flameX + r * 0.16, flameY - r * 0.2, flameX + r * 0.24, flameY + r * 0.06, flameX, flameBaseY);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,248,205,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(flameX, flameBaseY - r * 0.1);
+      ctx.quadraticCurveTo(flameX - r * 0.09, flameY - r * 0.02, flameX, flameY - r * 0.24);
+      ctx.quadraticCurveTo(flameX + r * 0.09, flameY - r * 0.02, flameX, flameBaseY - r * 0.1);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,220,143,0.55)';
+      for (let spark = 0; spark < 2; spark += 1) {
+        const rise = (time * 0.85 + spark * 0.43 + w * 0.06) % 1;
+        ctx.beginPath();
+        ctx.arc(flameX + Math.sin(time * 3.7 + spark * 2.4 + w) * r * 0.22, flameY - r * (0.18 + rise * 0.54), Math.max(0.5, r * (0.03 + (1 - rise) * 0.028)), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.save();
       ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(57,28,16,0.72)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(e.x + sway * 0.4, e.y - r * 0.93);
+      ctx.lineTo(flameX, flameBaseY);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const stolen = ctx.createRadialGradient(e.x, e.y - r * 0.18, 0, e.x, e.y - r * 0.18, r * 0.78);
+      stolen.addColorStop(0, `rgba(255,226,157,${0.12 + f * 0.14})`);
+      stolen.addColorStop(0.46, 'rgba(224,148,118,0.12)');
+      stolen.addColorStop(1, 'rgba(78,20,39,0)');
+      ctx.fillStyle = stolen;
+      ctx.fillRect(e.x - r, e.y - r * 1.2, r * 2, r * 2.4);
+      ctx.strokeStyle = 'rgba(78,22,42,0.32)';
+      ctx.lineWidth = 0.85;
+      for (let vein = 0; vein < 3; vein += 1) {
+        const side = (vein - 1) * r * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(e.x + side * 0.45, e.y - r * 0.82);
+        ctx.quadraticCurveTo(e.x + side * 1.18, e.y - r * 0.2, e.x + side * 0.72 + Math.sin(time * 1.7 + vein + w) * r * 0.05, e.y + r * 0.8);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,209,152,0.12)';
+        ctx.lineWidth = 0.55;
+        ctx.beginPath();
+        ctx.moveTo(e.x + side * 0.47 - r * 0.035, e.y - r * 0.78);
+        ctx.quadraticCurveTo(e.x + side * 1.12 - r * 0.035, e.y - r * 0.2, e.x + side * 0.68, e.y + r * 0.76);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(78,22,42,0.32)';
+        ctx.lineWidth = 0.85;
+      }
+      ctx.restore();
+
       ctx.fillStyle = 'rgba(255,214,124,0.22)';
       for (let i = 0; i < 3; i += 1) {
         const a = w * 0.3 + (i / 3) * TAU;
         ctx.beginPath();
         ctx.ellipse(e.x + Math.cos(a) * r * 0.52, e.y + Math.sin(a) * r * 0.78, r * 0.07, r * 0.18, a, 0, TAU);
         ctx.fill();
+        ctx.fillStyle = 'rgba(255,235,190,0.22)';
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(a) * r * 0.52 - r * 0.015, e.y + Math.sin(a) * r * 0.78 - r * 0.04, Math.max(0.45, r * 0.025), 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,214,124,0.22)';
       }
-      ctx.strokeStyle = 'rgba(255,234,185,0.24)';
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = 'rgba(255,234,185,0.3)';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(e.x - r * 0.5, e.y - r * 0.58);
-      ctx.quadraticCurveTo(e.x, e.y - r * 0.88, e.x + r * 0.5, e.y - r * 0.58);
+      ctx.moveTo(e.x - r * 0.46, e.y - r * 0.7);
+      ctx.quadraticCurveTo(e.x, e.y - r * 0.96, e.x + r * 0.46, e.y - r * 0.7);
       ctx.stroke();
       break;
     }
