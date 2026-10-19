@@ -1848,12 +1848,70 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'snuffer': {
-      const faceX = e.x + Math.cos(e.angle) * r * 0.34;
-      const faceY = e.y + Math.sin(e.angle) * r * 0.34;
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const faceX = e.x + facingX * r * 0.34;
+      const faceY = e.y + facingY * r * 0.34;
+      const breath = 0.55 + Math.sin(time * 2.4 + w) * 0.45;
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      for (let fold = -1; fold <= 1; fold += 1) {
+        const offset = fold * r * 0.4;
+        const sway = Math.sin(time * 1.5 + fold * 1.8 + w) * r * 0.05;
+        ctx.strokeStyle = 'rgba(20,13,39,0.46)';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(e.x - facingX * r * 0.74 + sideX * offset * 0.45, e.y - facingY * r * 0.74 + sideY * offset * 0.45);
+        ctx.quadraticCurveTo(
+          e.x - facingX * r * 0.06 + sideX * (offset * 1.18 + sway),
+          e.y - facingY * r * 0.06 + sideY * (offset * 1.18 + sway),
+          e.x + facingX * r * 0.42 + sideX * offset * 0.62,
+          e.y + facingY * r * 0.42 + sideY * offset * 0.62,
+        );
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(180,160,238,0.16)';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(e.x - facingX * r * 0.7 + sideX * (offset * 0.45 - r * 0.045), e.y - facingY * r * 0.7 + sideY * (offset * 0.45 - r * 0.045));
+        ctx.quadraticCurveTo(
+          e.x - facingX * r * 0.05 + sideX * (offset * 1.16 + sway),
+          e.y - facingY * r * 0.05 + sideY * (offset * 1.16 + sway),
+          e.x + facingX * r * 0.39 + sideX * (offset * 0.62 - r * 0.035),
+          e.y + facingY * r * 0.39 + sideY * (offset * 0.62 - r * 0.035),
+        );
+        ctx.stroke();
+      }
+      const hoodShade = ctx.createRadialGradient(faceX, faceY, 0, faceX, faceY, r * 0.66);
+      hoodShade.addColorStop(0, 'rgba(19,12,37,0.28)');
+      hoodShade.addColorStop(1, 'rgba(19,12,37,0)');
+      ctx.fillStyle = hoodShade;
+      ctx.beginPath();
+      ctx.arc(faceX, faceY, r * 0.66, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.strokeStyle = 'rgba(22,16,40,0.78)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(faceX, faceY, r * 0.5, e.angle + Math.PI * 0.56, e.angle + Math.PI * 1.44);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(176,154,238,0.38)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
       ctx.fillStyle = 'rgba(8,6,18,0.9)';
       ctx.beginPath();
       ctx.ellipse(faceX, faceY, r * 0.34, r * 0.3, e.angle, 0, TAU);
       ctx.fill();
+      ctx.fillStyle = 'rgba(78,58,130,0.28)';
+      ctx.beginPath();
+      ctx.ellipse(faceX - facingX * r * 0.04, faceY - facingY * r * 0.04, r * 0.26, r * 0.23, e.angle, 0, TAU);
+      ctx.fill();
+
       ctx.strokeStyle = 'rgba(156,136,220,0.35)';
       ctx.lineWidth = 1.4;
       for (let i = 0; i < 3; i += 1) {
@@ -1868,6 +1926,66 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
         );
         ctx.stroke();
       }
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      const plumeReach = r * (1.28 + breath * 0.36);
+      const plumeSway = Math.sin(time * 2.8 + w) * r * 0.12;
+      const plumeGradient = ctx.createLinearGradient(faceX, faceY, faceX + facingX * plumeReach, faceY + facingY * plumeReach);
+      plumeGradient.addColorStop(0, `rgba(214,199,255,${0.16 + breath * 0.08})`);
+      plumeGradient.addColorStop(0.48, `rgba(170,150,236,${0.075 + breath * 0.06})`);
+      plumeGradient.addColorStop(1, 'rgba(126,105,206,0)');
+      ctx.fillStyle = plumeGradient;
+      ctx.beginPath();
+      ctx.moveTo(faceX + facingX * r * 0.18 - sideX * r * 0.12, faceY + facingY * r * 0.18 - sideY * r * 0.12);
+      ctx.bezierCurveTo(
+        faceX + facingX * r * 0.68 - sideX * (r * 0.22 + plumeSway * 0.4),
+        faceY + facingY * r * 0.68 - sideY * (r * 0.22 + plumeSway * 0.4),
+        faceX + facingX * plumeReach - sideX * (r * 0.35 + plumeSway),
+        faceY + facingY * plumeReach - sideY * (r * 0.35 + plumeSway),
+        faceX + facingX * plumeReach,
+        faceY + facingY * plumeReach,
+      );
+      ctx.bezierCurveTo(
+        faceX + facingX * plumeReach + sideX * (r * 0.35 + plumeSway),
+        faceY + facingY * plumeReach + sideY * (r * 0.35 + plumeSway),
+        faceX + facingX * r * 0.68 + sideX * (r * 0.22 + plumeSway * 0.4),
+        faceY + facingY * r * 0.68 + sideY * (r * 0.22 + plumeSway * 0.4),
+        faceX + facingX * r * 0.18 + sideX * r * 0.12,
+        faceY + facingY * r * 0.18 + sideY * r * 0.12,
+      );
+      ctx.closePath();
+      ctx.fill();
+      for (const wisp of [-1, 1]) {
+        const sway = Math.sin(time * 3.1 + wisp * 1.7 + w) * r * 0.09;
+        ctx.strokeStyle = `rgba(214,201,255,${0.09 + breath * 0.07})`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(faceX + facingX * r * 0.24 + sideX * wisp * r * 0.06, faceY + facingY * r * 0.24 + sideY * wisp * r * 0.06);
+        ctx.quadraticCurveTo(
+          faceX + facingX * r * 0.66 + sideX * (wisp * r * 0.3 + sway),
+          faceY + facingY * r * 0.66 + sideY * (wisp * r * 0.3 + sway),
+          faceX + facingX * plumeReach * 0.9 + sideX * (wisp * r * 0.16 + sway * 1.7),
+          faceY + facingY * plumeReach * 0.9 + sideY * (wisp * r * 0.16 + sway * 1.7),
+        );
+        ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(215,202,255,${0.14 + breath * 0.12})`;
+      for (let mote = 0; mote < 3; mote += 1) {
+        const travel = (time * 0.5 + mote * 0.29 + w * 0.05) % 1;
+        const drift = Math.sin(time * 3.4 + mote * 2.2 + w) * r * 0.14 * travel;
+        ctx.beginPath();
+        ctx.arc(
+          faceX + facingX * plumeReach * (0.24 + travel * 0.72) + sideX * drift,
+          faceY + facingY * plumeReach * (0.24 + travel * 0.72) + sideY * drift,
+          Math.max(0.45, r * (0.022 + (1 - travel) * 0.025)),
+          0,
+          TAU,
+        );
+        ctx.fill();
+      }
+      ctx.restore();
       break;
     }
     case 'thornlord': {
