@@ -3208,14 +3208,46 @@ export function drawEnemy(
   }
 
   if (e.slowTimer > 0) {
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.32;
-    ctx.fillStyle = '#9ad0ff';
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, r * 1.18, 0, TAU);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
+
+    // 冷雾只托在轮廓外，不再用一块实心蓝把敌人糊成白球。
+    const frost = ctx.createRadialGradient(e.x, e.y, r * 0.62, e.x, e.y, r * 1.42);
+    frost.addColorStop(0, 'rgba(120,180,235,0)');
+    frost.addColorStop(0.72, 'rgba(139,199,255,0.11)');
+    frost.addColorStop(1, 'rgba(90,150,220,0)');
     ctx.globalAlpha = 1;
+    ctx.fillStyle = frost;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 1.42, 0, TAU);
+    ctx.fill();
+
+    // 四段错速霜弧贴着剪影巡游，外缘再缀几枚冰晶。
+    ctx.strokeStyle = '#b9e3ff';
+    ctx.lineWidth = 1.15;
+    for (let i = 0; i < 4; i += 1) {
+      const a = -time * 0.34 + e.wobble * 0.1 + (i / 4) * TAU;
+      ctx.globalAlpha = 0.24 + 0.1 * Math.sin(time * 3.1 + i * 1.7);
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.15, a, a + 0.52);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 4; i += 1) {
+      const a = time * 0.23 + e.wobble * 0.18 + (i / 4) * TAU + 0.35;
+      const mx = e.x + Math.cos(a) * r * 1.12;
+      const my = e.y + Math.sin(a) * r * 1.12;
+      const s = Math.max(1, r * (0.07 + (i % 2) * 0.025));
+      ctx.globalAlpha = 0.22 + 0.08 * Math.sin(time * 2.6 + i);
+      ctx.fillStyle = '#d8f2ff';
+      ctx.beginPath();
+      ctx.moveTo(mx, my - s);
+      ctx.lineTo(mx + s * 0.55, my);
+      ctx.lineTo(mx, my + s);
+      ctx.lineTo(mx - s * 0.55, my);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // 「标灯」：被旋灯照出来的那几只挂一圈细环。刻意不用慢/灼烧那种**实心**光晕——
@@ -3234,14 +3266,64 @@ export function drawEnemy(
   }
 
   if (e.burn > 0) {
+    const heat = Math.min(1, 0.35 + e.burn * 0.09);
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = '#ff7a2f';
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, r * 1.2, 0, TAU);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
+
+    // 热晕留在轮廓外，体内仍看得见敌人体色与眼睛。
+    const glow = ctx.createRadialGradient(e.x, e.y, r * 0.58, e.x, e.y, r * 1.55);
+    glow.addColorStop(0, 'rgba(255,124,32,0)');
+    glow.addColorStop(0.7, `rgba(255,112,28,${0.08 * heat})`);
+    glow.addColorStop(1, 'rgba(255,76,12,0)');
     ctx.globalAlpha = 1;
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 1.55, 0, TAU);
+    ctx.fill();
+
+    // 三道贴边火舌从上半轮廓窜起，长度随层数增长，所有摆动只由时间推导。
+    for (let i = 0; i < 3; i += 1) {
+      const a = -Math.PI * 0.84 + i * 0.62;
+      const bx = e.x + Math.cos(a) * r * 0.58;
+      const by = e.y + Math.sin(a) * r * 0.42;
+      const flicker = 0.78 + 0.22 * Math.sin(time * (7.5 + i) + e.wobble * 2 + i * 2.1);
+      const h = r * (0.5 + heat * 0.45 + i * 0.06) * flicker;
+      const w = Math.max(1, r * (0.11 + i * 0.018));
+      const lean = Math.sin(time * 5.2 + i * 1.9 + e.wobble) * w * 0.95;
+      ctx.globalAlpha = 0.32 + heat * 0.24;
+      ctx.fillStyle = i === 1 ? '#ffbd5c' : '#ff7a2f';
+      ctx.beginPath();
+      ctx.moveTo(bx - w, by);
+      ctx.quadraticCurveTo(bx - w * 0.78 + lean, by - h * 0.55, bx + lean, by - h);
+      ctx.quadraticCurveTo(bx + w * 0.9 + lean * 0.3, by - h * 0.42, bx + w, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.44 + heat * 0.24;
+      ctx.fillStyle = '#ffe4a8';
+      ctx.beginPath();
+      ctx.moveTo(bx - w * 0.42, by);
+      ctx.quadraticCurveTo(bx - w * 0.3 + lean * 0.6, by - h * 0.42, bx + lean * 0.65, by - h * 0.7);
+      ctx.quadraticCurveTo(bx + w * 0.44 + lean * 0.2, by - h * 0.34, bx + w * 0.42, by);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 两粒余烬交替往上逃，给静态截图也留下燃烧的方向。
+    for (let i = 0; i < 2; i += 1) {
+      const cycle = (time * 0.75 + e.wobble * 0.11 + i * 0.48) % 1;
+      ctx.globalAlpha = (1 - cycle) * (0.32 + heat * 0.3);
+      ctx.fillStyle = i === 0 ? '#ffd27a' : '#ff9a3c';
+      ctx.beginPath();
+      ctx.arc(
+        e.x + Math.sin(time * 3.4 + i * 2.2 + e.wobble) * r * 0.38,
+        e.y - r * (0.45 + cycle * 0.9),
+        Math.max(0.65, r * (0.055 - cycle * 0.02)),
+        0,
+        TAU,
+      );
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   if (e.def.behavior === 'bomber' && e.stateTimer > 0) {
