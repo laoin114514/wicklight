@@ -661,20 +661,111 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
     }
     case 'moth': {
       const flap = 0.55 + Math.abs(Math.sin(time * 11 + w)) * 0.5;
-      ctx.fillStyle = rgba('#fff3d0', 0.5);
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const halo = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 1.55);
+      halo.addColorStop(0, 'rgba(255,244,199,0.12)');
+      halo.addColorStop(0.5, 'rgba(255,226,146,0.05)');
+      halo.addColorStop(1, 'rgba(255,208,104,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.55, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+
       for (const side of [-1, 1]) {
+        const wingAngle = e.angle + side * 1.5;
+        const centerX = e.x + Math.cos(wingAngle) * r * 0.5;
+        const centerY = e.y + Math.sin(wingAngle) * r * 0.5;
+        const veinAngle = e.angle + side * 0.6;
+        const rx = r * 1.15 * flap;
+        const ry = r * 0.62;
+
         ctx.beginPath();
-        ctx.ellipse(
-          e.x + Math.cos(e.angle + side * 1.5) * r * 0.5,
-          e.y + Math.sin(e.angle + side * 1.5) * r * 0.5,
-          r * 1.15 * flap,
-          r * 0.62,
-          e.angle + side * 0.6,
-          0,
-          TAU,
-        );
+        ctx.ellipse(centerX, centerY, rx, ry, veinAngle, 0, TAU);
+        ctx.fillStyle = rgba('#f7e7bb', 0.31);
+        ctx.fill();
+        ctx.strokeStyle = rgba('#e2bd72', 0.55);
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,248,220,0.08)';
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, rx * 0.72, ry * 0.62, veinAngle, 0, TAU);
+        ctx.fill();
+
+        const rootX = e.x + Math.cos(e.angle + side * 0.42) * r * 0.18;
+        const rootY = e.y + Math.sin(e.angle + side * 0.42) * r * 0.18;
+        const veinX = Math.cos(veinAngle);
+        const veinY = Math.sin(veinAngle);
+        ctx.strokeStyle = 'rgba(64,44,16,0.45)';
+        ctx.lineWidth = 1.1;
+        for (let vein = 0; vein < 3; vein += 1) {
+          const across = (vein - 1) * r * 0.22;
+          const reach = rx * (0.56 + vein * 0.08);
+          const tipX = centerX + veinX * reach - veinY * across;
+          const tipY = centerY + veinY * reach + veinX * across;
+          const ctrlX = centerX + veinX * rx * 0.18 - veinY * across * 0.4;
+          const ctrlY = centerY + veinY * rx * 0.18 + veinX * across * 0.4;
+          ctx.beginPath();
+          ctx.moveTo(rootX, rootY);
+          ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(255,247,218,0.28)';
+        for (let spot = 0; spot < 2; spot += 1) {
+          const along = rx * (0.34 + spot * 0.22);
+          const across = (spot === 0 ? -1 : 1) * r * 0.17;
+          ctx.beginPath();
+          ctx.arc(centerX + veinX * along - veinY * across, centerY + veinY * along + veinX * across, r * 0.08, 0, TAU);
+          ctx.fill();
+        }
+      }
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(92,68,32,0.4)';
+      ctx.lineWidth = 1;
+      for (let band = 0; band < 3; band += 1) {
+        const back = r * (0.08 + band * 0.2);
+        const half = r * (0.38 - band * 0.045);
+        const centerX = e.x - facingX * back;
+        const centerY = e.y - facingY * back;
+        ctx.beginPath();
+        ctx.moveTo(centerX + sideX * half, centerY + sideY * half);
+        ctx.quadraticCurveTo(centerX - facingX * r * 0.07, centerY - facingY * r * 0.07, centerX - sideX * half, centerY - sideY * half);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(255,231,178,0.42)';
+      ctx.lineWidth = 1;
+      ctx.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        const sway = Math.sin(time * 4.6 + w + side * 0.9) * r * 0.05;
+        const startX = e.x + facingX * r * 0.56 + sideX * side * r * 0.08;
+        const startY = e.y + facingY * r * 0.56 + sideY * side * r * 0.08;
+        const tipX = startX + facingX * r * 0.78 + sideX * side * (r * 0.42 + sway);
+        const tipY = startY + facingY * r * 0.78 + sideY * side * (r * 0.42 + sway);
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo(startX + facingX * r * 0.34 + sideX * side * r * 0.04, startY + facingY * r * 0.34 + sideY * side * r * 0.04, tipX, tipY);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,244,207,0.46)';
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, Math.max(0.55, r * 0.045), 0, TAU);
         ctx.fill();
       }
+      ctx.restore();
       break;
     }
     case 'lancer': {
