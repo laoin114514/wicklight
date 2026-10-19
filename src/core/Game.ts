@@ -6095,40 +6095,157 @@ export class Game {
   private drawLamps(ctx: CanvasRenderingContext2D): void {
     if (!this.lamps.length) return;
     ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const l of this.lamps) {
       const fade = clamp(l.life / 2.6, 0, 1);
       const flicker = 1 + Math.sin(this.time * 9 + l.x * 0.05) * 0.08;
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      const sway = Math.sin(this.time * 5.5 + l.y * 0.03) * (0.5 + fade * 0.7);
+
+      // 一小段贴近灯身的铜色弧：说明这是"放下的饵"，但不把 340px 的引怪圈整个画出来
+      //（大圆在矮横屏上只剩两条像撕裂的弧，详见 data/lamp.ts 的那段取舍）。
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = (0.16 + 0.08 * fade) * (0.72 + 0.28 * Math.sin(this.time * 2.2 + l.x * 0.02));
+      ctx.strokeStyle = '#ffcf8a';
+      ctx.lineWidth = 0.9;
+      const lureSpin = this.time * 0.34 + l.y * 0.02;
+      for (let i = 0; i < 3; i += 1) {
+        const a = lureSpin + (i / 3) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(l.x, l.y + 1.5, 18.5, a, a + 0.34);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.44;
+      ctx.fillStyle = '#020307';
       ctx.beginPath();
-      ctx.ellipse(l.x, l.y + 7, 16, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(l.x, l.y + 7, 17, 6.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#2b2536';
+
+      // 底碟与四根短脚：先让这盏小灯有实体，再谈火。
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#14121a';
       ctx.beginPath();
-      ctx.moveTo(l.x - 7, l.y + 4);
-      ctx.lineTo(l.x + 7, l.y + 4);
-      ctx.lineTo(l.x + 4, l.y - 12);
-      ctx.lineTo(l.x - 4, l.y - 12);
+      ctx.ellipse(l.x, l.y + 4, 11, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#4b3a25';
+      ctx.beginPath();
+      ctx.ellipse(l.x, l.y + 3.2, 10, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#b58a4d';
+      ctx.lineWidth = 1.2;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(l.x + side * 8.5, l.y + 2.2);
+        ctx.lineTo(l.x + side * 7.6, l.y + 5.2);
+        ctx.stroke();
+      }
+
+      // 灯罩：两侧铜框夹住深色玻璃，腰间再箍一道铜箍。
+      ctx.fillStyle = '#1a1720';
+      ctx.beginPath();
+      ctx.moveTo(l.x - 7.3, l.y + 2);
+      ctx.lineTo(l.x + 7.3, l.y + 2);
+      ctx.lineTo(l.x + 5.2, l.y - 12);
+      ctx.lineTo(l.x - 5.2, l.y - 12);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#3d3550';
+      const glass = ctx.createLinearGradient(l.x - 6, 0, l.x + 6, 0);
+      glass.addColorStop(0, 'rgba(255,166,66,0.1)');
+      glass.addColorStop(0.35, `rgba(255,204,118,${0.18 + 0.16 * fade})`);
+      glass.addColorStop(0.72, `rgba(255,224,164,${0.1 + 0.16 * fade})`);
+      glass.addColorStop(1, 'rgba(255,140,40,0.06)');
+      ctx.fillStyle = glass;
       ctx.beginPath();
-      ctx.ellipse(l.x, l.y - 13, 10, 4, 0, 0, Math.PI * 2);
+      ctx.moveTo(l.x - 5.8, l.y + 0.6);
+      ctx.lineTo(l.x + 5.8, l.y + 0.6);
+      ctx.lineTo(l.x + 4.1, l.y - 10.7);
+      ctx.lineTo(l.x - 4.1, l.y - 10.7);
+      ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = '#b58a4d';
+      ctx.lineWidth = 1.15;
+      ctx.beginPath();
+      ctx.moveTo(l.x - 7.4, l.y + 1.8);
+      ctx.lineTo(l.x - 5.1, l.y - 12);
+      ctx.moveTo(l.x + 7.4, l.y + 1.8);
+      ctx.lineTo(l.x + 5.1, l.y - 12);
+      ctx.stroke();
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(l.x - 6.1, l.y - 5.8);
+      ctx.lineTo(l.x + 6.1, l.y - 5.8);
+      ctx.stroke();
+
+      // 顶盖、提梁与通气孔：只有一寸高，但足以读成"一盏提灯"，而不是发光的桩。
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#3f3020';
+      ctx.beginPath();
+      ctx.moveTo(l.x - 6.8, l.y - 12);
+      ctx.lineTo(l.x + 6.8, l.y - 12);
+      ctx.lineTo(l.x + 4.6, l.y - 15);
+      ctx.lineTo(l.x - 4.6, l.y - 15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#c9a05c';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.arc(l.x, l.y - 15, 5.8, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = '#1a1110';
+      for (const ox of [-2.2, 0, 2.2]) {
+        ctx.beginPath();
+        ctx.arc(l.x + ox, l.y - 13.4, 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       ctx.globalCompositeOperation = 'lighter';
-      const glowR = 44 * flicker * (0.4 + 0.6 * fade);
-      const g = ctx.createRadialGradient(l.x, l.y - 18, 0, l.x, l.y - 18, glowR);
-      g.addColorStop(0, `rgba(255,240,200,${0.55 * fade})`);
-      g.addColorStop(0.42, `rgba(255,170,70,${0.3 * fade})`);
+      const glowR = 46 * flicker * (0.38 + 0.62 * fade);
+      const g = ctx.createRadialGradient(l.x, l.y - 20, 0, l.x, l.y - 20, glowR);
+      g.addColorStop(0, `rgba(255,242,206,${0.58 * fade})`);
+      g.addColorStop(0.36, `rgba(255,175,74,${0.32 * fade})`);
       g.addColorStop(1, 'rgba(255,110,20,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(l.x, l.y - 18, glowR, 0, Math.PI * 2);
+      ctx.arc(l.x, l.y - 20, glowR, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(255,246,214,${0.8 * fade})`;
+
+      // 火舌分两层：外焰随呼吸左右摇，内焰只留一枚稳定的白核。
+      const height = 5.5 + 6.5 * fade;
+      ctx.globalAlpha = 0.7 * fade;
+      ctx.fillStyle = '#ff9a35';
       ctx.beginPath();
-      ctx.ellipse(l.x, l.y - 22, 4.5 * flicker, 8 * flicker * (0.45 + 0.55 * fade), 0, 0, Math.PI * 2);
+      ctx.moveTo(l.x + sway * 0.32, l.y - 14 - height * 1.7);
+      ctx.bezierCurveTo(l.x + 4.8, l.y - 21, l.x + 4.1, l.y - 14.5, l.x, l.y - 13.2);
+      ctx.bezierCurveTo(l.x - 4.1, l.y - 14.5, l.x - 3.8, l.y - 21, l.x + sway * 0.32, l.y - 14 - height * 1.7);
       ctx.fill();
+      ctx.globalAlpha = 0.86 * fade;
+      ctx.fillStyle = '#ffe2a0';
+      ctx.beginPath();
+      ctx.ellipse(l.x + sway * 0.12, l.y - 17.1, 2.1 + fade * 1.1, height * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 最后 2.6 秒：两颗火星从灯罩里逃出来，火本身已经在抖。
+      if (fade < 0.999) {
+        for (let i = 0; i < 2; i += 1) {
+          const cycle = (this.time * (0.45 + i * 0.16) + i * 0.37 + l.x * 0.001) % 1;
+          ctx.globalAlpha = (1 - cycle) * (1 - fade) * 0.72;
+          ctx.fillStyle = i === 0 ? '#ffd88a' : '#ff9a3c';
+          ctx.beginPath();
+          ctx.arc(
+            l.x + Math.sin(this.time * 2.4 + i * 2.3) * (2.5 + i * 1.8),
+            l.y - 18 - cycle * 17,
+            0.7 + (1 - cycle) * 0.65,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+      }
       ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
       // 两盏灯：亮芯（看得见的那盏）+ 一大圈很淡的光（"这一片都会被引过去"）
       // 「灯罩」加宽的那一圈也一起照亮：亮着的地方 = 会引怪的地方，这条对齐是这套牌的门面
       this.light.addLight(l.x, l.y, LAMP.radius * (0.4 + 0.6 * fade), 0.85 * fade, 0.05);
