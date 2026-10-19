@@ -36,6 +36,9 @@ export class HUD implements HUDHost {
   private curseSig = '~';
   private bountyEl!: HTMLElement;
   private bountySig = '~';
+  /** 新悬赏入栏的呼吸计时（秒）：只负责在结束时摘掉动画类。 */
+  private bountyPulse = 0;
+  private bountyPulseClass = 'is-new-a';
   private pyreEl!: HTMLElement;
   /** 底部那行常驻说明：接了手柄要换成手柄那一份（见 Game.setPadState）。 */
   private hintEl!: HTMLElement;
@@ -262,6 +265,14 @@ export class HUD implements HUDHost {
     el.className = 'toast';
     el.textContent = text;
     this.postCard(el, text, 'toast', 1.8, 2.6);
+  }
+
+  /** 新悬赏入栏：换一个类名重启 CSS 动画，别让同一局里下一关的悬赏静悄悄地换掉。 */
+  pulseBounty(): void {
+    this.bountyPulse = 2.2;
+    this.bountyPulseClass = this.bountyPulseClass === 'is-new-a' ? 'is-new-b' : 'is-new-a';
+    this.bountyEl.classList.remove('is-new-a', 'is-new-b');
+    this.bountyEl.classList.add(this.bountyPulseClass);
   }
 
   /**
@@ -809,6 +820,10 @@ export class HUD implements HUDHost {
   update(dt: number): void {
     const g = this.game;
     this.updateCards(dt);
+    if (this.bountyPulse > 0) {
+      this.bountyPulse -= dt;
+      if (this.bountyPulse <= 0) this.bountyEl.classList.remove('is-new-a', 'is-new-b');
+    }
     this.width(this.hpFill, g.player.hp / g.player.stats.maxHp);
     this.width(this.oilFill, g.player.oilFrac);
     this.width(this.xpFill, g.xpFrac);

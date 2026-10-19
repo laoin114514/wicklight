@@ -311,6 +311,8 @@ export interface HUDHost {
   toast(text: string): void;
   /** 首次遭遇的提示卡（标题 + 一行说明）。 */
   tip(title: string, text: string): void;
+  /** 新悬赏落到任务追踪栏：让那块牌子自己亮一下，不再往屏幕中央叠一条重复 toast。 */
+  pulseBounty(): void;
   announce(text: string, big?: boolean): void;
   /** 底部那行常驻说明换一份（接了手柄就换成手柄那一行；传 null = 换回键盘那一行）。 */
   setHint(text: string | null): void;
@@ -955,9 +957,12 @@ export class Game {
     // 今日灯芯的悬赏也从剧本里来（无尽模式退回按深度抽）
     const forced = plan && !this.endless ? plan.bounties[Math.min(this.stageIndex, plan.bounties.length - 1)] : null;
     const forcedDef = forced ? BOUNTY_MAP[forced] : null;
-    const def = forcedDef && this.bountyAvailable(forcedDef, depth) ? this.bounties.force(forcedDef) : this.bounties.roll(this.rng, depth);
-    const where = this.endless ? `第 ${this.wave} 波` : '本关';
-    this.hud?.toast(`${def.icon} 悬赏 · ${def.name}（${where}）`);
+    if (forcedDef && this.bountyAvailable(forcedDef, depth)) this.bounties.force(forcedDef);
+    else this.bounties.roll(this.rng, depth);
+    // 悬赏栏本身就是这张任务的常驻位置（桌面在左侧、掌上在右侧），
+    // 开局再往屏幕中央叠一条同样的 toast 只会和关卡卡、图鉴卡抢地方。
+    // 改成入栏时让那块牌子自己呼吸一次——信息没有少，只是回到它该在的地方。
+    this.hud?.pulseBounty();
   }
 
   /** 该悬赏在当前深度是否可行（要打的敌人得真刷得出来、要会的机制得先见过）。 */
@@ -5037,7 +5042,9 @@ export class Game {
     const left = handheld ? Math.min(258, w * 0.34) : Math.min(244, w * 0.3);
     const right = handheld ? Math.min(222, w * 0.36) : Math.min(134, w * 0.17);
     // 顶部留得更多：屏幕正中偏上是公告 / 图鉴 / 成就的常驻位，箭头挤进去会被它们盖住
-    const top = handheld ? Math.min(198, h * 0.34) : Math.min(196, h * 0.32);
+    // 桌面顶部中央是关卡卡 / 图鉴 / 精英提示的地盘：安全线压到那叠卡片下面，
+    // 箭头才不会从提示卡的边里探出半个尖。掌上由 HUD 的单条横带自己排队，维持原值。
+    const top = handheld ? Math.min(198, h * 0.34) : Math.min(232, h * 0.34);
     const bottom = handheld ? Math.min(96, h * 0.3) : Math.min(84, h * 0.17);
     const targets: { x: number; y: number; label: string; color: string }[] = [];
     for (const py of this.level.pyres) if (!py.lit) targets.push({ x: py.x, y: py.y, label: '灯台', color: '#ffb15e' });
