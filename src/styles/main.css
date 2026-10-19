@@ -7829,3 +7829,133 @@ body.is-touch .lvl-actions__hint { display: none; }
   .ach__reward { padding: 1px 4px 2px; font-size: 8px; }
   .ach-actions { margin-top: 5px; padding-top: 5px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v160 · 商店：竖屏货架改成横排价签
+   图标在左，名字、说明与数值对照向右展开，价格守在上角；
+   刷新与继续吸在面板底边，熔铸台再往下也不会把出口压出屏幕。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--shop {
+  padding: 20px 22px 12px;
+}
+.panel--shop .shop-grid { gap: 10px; }
+.panel--shop .shop-item { padding: 13px 14px 12px; }
+.panel--shop .shop-item__icon { width: 42px; height: 42px; margin-bottom: 8px; font-size: 24px; }
+.panel--shop .shop-item__name { margin-bottom: 4px; }
+.panel--shop .shop-item__blurb { min-height: 0; line-height: 1.45; }
+.panel--shop .shop-item__price { margin-top: 8px; }
+
+.shop-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  margin: 10px 0 0;
+  padding: 9px 0 2px;
+  border-top: 1px solid rgba(198, 158, 98, 0.16);
+  background: linear-gradient(180deg, rgba(36, 29, 22, 0), rgba(36, 29, 22, 0.97) 38%, #241d16 100%);
+}
+
+@media (max-width: 720px) {
+  .panel--shop { padding: 16px 12px 8px; }
+  .panel--shop .panel__title { margin-bottom: 7px; font-size: 18px; letter-spacing: 2px; }
+  .panel--shop .shop-wallet { margin-bottom: 8px; font-size: 10px; letter-spacing: 0.5px; }
+  .panel--shop .shop-wallet b { font-size: 15px; }
+  .panel--shop .shop-arena { margin: -3px 0 7px; font-size: 10px; }
+  .panel--shop .shop-grid { grid-template-columns: 1fr; gap: 6px; }
+  .panel--shop .shop-item {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'icon name price'
+      'icon blurb blurb'
+      'icon delta delta';
+    column-gap: 10px;
+    row-gap: 3px;
+    align-items: start;
+    padding: 9px 10px;
+  }
+  .panel--shop .shop-item__icon {
+    grid-area: icon;
+    align-self: center;
+    width: 36px;
+    height: 36px;
+    margin: 0;
+    font-size: 19px;
+  }
+  .panel--shop .shop-item__name { grid-area: name; margin: 1px 0 0; font-size: 14.5px; line-height: 1.3; }
+  .panel--shop .shop-item__blurb {
+    grid-area: blurb;
+    display: -webkit-box;
+    overflow: hidden;
+    min-height: 0;
+    font-size: 9.8px;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .panel--shop .shop-item__price {
+    grid-area: price;
+    align-self: start;
+    justify-self: end;
+    margin: 0;
+    padding: 1px 9px 1px 6px;
+    font-size: 9.5px;
+  }
+  .panel--shop .shop-item .card__delta {
+    grid-area: delta;
+    gap: 2px 8px;
+    margin: 2px 0 0;
+    padding-top: 3px;
+    border-top: 1px dashed rgba(198, 158, 98, 0.14);
+  }
+  .panel--shop .shop-item .card__delta .dl { font-size: 8.8px; }
+  .panel--shop .shop-item.is-sold::after { display: none; }
+  .panel--shop .forge { margin-top: 7px; }
+  .panel--shop .forge__head { gap: 6px; }
+  .panel--shop .forge__head b { font-size: 12px; }
+  .panel--shop .forge__head i { font-size: 11px; }
+  .panel--shop .forge__row { margin-top: 5px; }
+  .shop-actions { margin-top: 7px; padding-top: 7px; }
+}
+
+@media (max-width: 400px) {
+  .panel--shop { padding: 13px 9px 7px; }
+  .panel--shop .panel__title { font-size: 16px; letter-spacing: 1.5px; }
+  .panel--shop .panel__title::before,
+  .panel--shop .panel__title::after { display: none; }
+  .panel--shop .shop-item {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 7px 8px;
+  }
+  .panel--shop .shop-item__icon { width: 30px; height: 30px; font-size: 16px; }
+  .panel--shop .shop-item__name { font-size: 13.5px; }
+  .panel--shop .shop-item__blurb { font-size: 9.2px; }
+  .panel--shop .shop-item__price { padding: 1px 7px 1px 5px; font-size: 8.8px; }
+  .panel--shop .forge { padding: 8px 9px 7px; }
+  .panel--shop .forge-note { display: none; }
+  .shop-actions { margin-top: 5px; padding-top: 5px; }
+  .shop-actions { gap: 6px; }
+  .shop-actions .btn { padding: 6px 9px; font-size: 11px; letter-spacing: 0.6px; }
+  .shop-actions .key { padding: 1px 3px; font-size: 8px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--shop { padding: 9px 14px 6px; }
+  .panel--shop .panel__title { margin-bottom: 4px; font-size: 16px; letter-spacing: 2px; }
+  .panel--shop .shop-wallet { margin-bottom: 5px; font-size: 9.5px; }
+  .panel--shop .shop-wallet b { font-size: 14px; }
+  .panel--shop .shop-arena { margin: -2px 0 5px; font-size: 9px; }
+  .panel--shop .shop-grid { gap: 6px; }
+  .panel--shop .shop-item { padding: 8px 9px 7px; }
+  .panel--shop .shop-item__icon { width: 31px; height: 31px; margin-bottom: 5px; font-size: 18px; }
+  .panel--shop .shop-item__name { margin-bottom: 2px; font-size: 13.5px; }
+  .panel--shop .shop-item__blurb { font-size: 9.5px; line-height: 1.35; }
+  .panel--shop .shop-item__price { margin-top: 5px; padding: 1px 8px 1px 5px; font-size: 9px; }
+  .panel--shop .shop-item .card__delta { margin-top: 4px; padding-top: 3px; }
+  .panel--shop .shop-item .card__delta .dl { font-size: 8.5px; }
+  .panel--shop .forge { margin-top: 6px; }
+  .shop-actions { margin-top: 5px; padding-top: 5px; }
+}

@@ -1143,7 +1143,7 @@ export class UIManager implements UIHost {
         ${this.nextArenaLine()}
         <div class="shop-grid">${items}</div>
         ${this.forgeBlock()}
-        <div class="row-actions">
+        <div class="row-actions shop-actions">
           <button class="btn ${g.gold >= 8 ? '' : 'is-locked'}" data-act="reroll">刷新商品 (8 🪙)<span class="key">R</span></button>
           <button class="btn btn--primary" data-act="leave">${g.endless ? '继续战斗' : '继续前进'}</button>
         </div>
