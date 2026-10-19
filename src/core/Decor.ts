@@ -1683,17 +1683,52 @@ function hairlineCrack(ctx: CanvasRenderingContext2D, d: Decor): void {
 }
 
 function emberDot(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const pulse = 0.5 + Math.sin(time * 2.6 + d.x * 0.06 + d.y * 0.03) * 0.5;
-  ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 2.6);
-  g.addColorStop(0, `rgba(255,196,120,${0.5 * pulse})`);
-  g.addColorStop(0.45, `rgba(255,110,40,${0.2 * pulse})`);
-  g.addColorStop(1, 'rgba(255,80,20,0)');
-  ctx.fillStyle = g;
+  const phase = time * 2.05 + d.x * 0.043 + d.y * 0.029;
+  const pulse = 0.42 + Math.sin(phase) * 0.2;
+  const mirror = Math.sin(d.x * 0.017 + d.y * 0.023) < 0 ? -1 : 1;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(5,2,2,0.24)';
   ctx.beginPath();
-  ctx.arc(d.x, d.y, d.r * 2.6, 0, TAU);
+  ctx.ellipse(px(0.04), py(0.2), d.r * 0.6, d.r * 0.22, 0.04 * mirror, 0, TAU);
   ctx.fill();
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(28,12,7,0.6)';
+  ctx.beginPath();
+  ctx.moveTo(px(-0.48), py(0.02));
+  ctx.lineTo(px(-0.16), py(-0.22));
+  ctx.lineTo(px(0.25), py(-0.15));
+  ctx.lineTo(px(0.42), py(0.09));
+  ctx.lineTo(px(0.12), py(0.26));
+  ctx.lineTo(px(-0.29), py(0.21));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(255,91,24,${0.07 + pulse * 0.05})`;
+  ctx.beginPath();
+  ctx.ellipse(px(0.02), py(0.1), d.r * 0.72, d.r * 0.27, 0.02 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,144,52,${0.18 + pulse * 0.16})`;
+  ctx.beginPath();
+  ctx.ellipse(px(-0.11), py(-0.04), d.r * 0.2, d.r * 0.1, 0.16 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,207,125,${0.22 + pulse * 0.2})`;
+  ctx.beginPath();
+  ctx.arc(px(-0.12), py(-0.06), Math.max(0.4, d.r * 0.055), 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,108,33,${0.09 + pulse * 0.08})`;
+  ctx.beginPath();
+  ctx.arc(px(0.2), py(0.02), Math.max(0.35, d.r * 0.04), 0, TAU);
+  ctx.fill();
+
+  const rise = (time * 0.2 + d.x * 0.0017 + d.y * 0.0023) % 1;
+  ctx.fillStyle = `rgba(255,157,66,${(1 - rise) * 0.16})`;
+  ctx.beginPath();
+  ctx.arc(px(0.04 + Math.sin(phase * 0.6) * 0.06), py(-0.08 - rise * 0.48), Math.max(0.35, d.r * 0.016), 0, TAU);
+  ctx.fill();
+  ctx.restore();
 }
 
 function mushroomDot(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
