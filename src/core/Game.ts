@@ -6111,25 +6111,100 @@ export class Game {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const moonGlow = ctx.createRadialGradient(mx, my, 0, mx, my, mr * 4.2);
-    moonGlow.addColorStop(0, 'rgba(200,218,255,0.30)');
-    moonGlow.addColorStop(0.35, 'rgba(150,175,235,0.10)');
+    moonGlow.addColorStop(0, 'rgba(200,218,255,0.2)');
+    moonGlow.addColorStop(0.35, 'rgba(150,175,235,0.075)');
     moonGlow.addColorStop(1, 'rgba(120,150,220,0)');
     ctx.fillStyle = moonGlow;
     ctx.fillRect(0, 0, w, h);
+    // 月盘本身用正常混合：加法只留给外圈冷光，月面才不会被泛光洗成一块纯白。
+    ctx.globalCompositeOperation = 'source-over';
     const moonBody = ctx.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, mr * 0.1, mx, my, mr);
-    moonBody.addColorStop(0, 'rgba(245,250,255,0.95)');
-    moonBody.addColorStop(0.75, 'rgba(206,220,248,0.85)');
-    moonBody.addColorStop(1, 'rgba(160,180,220,0.6)');
+    moonBody.addColorStop(0, 'rgba(219,231,250,0.98)');
+    moonBody.addColorStop(0.7, 'rgba(177,194,226,0.96)');
+    moonBody.addColorStop(1, 'rgba(131,150,190,0.92)');
     ctx.fillStyle = moonBody;
     ctx.beginPath();
     ctx.arc(mx, my, mr, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(150,168,205,0.35)';
-    for (const [ox, oy, cr] of [[-0.28, -0.22, 0.19], [0.22, 0.1, 0.13], [0.05, 0.36, 0.09]]) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(mx, my, mr * 0.995, 0, Math.PI * 2);
+    ctx.clip();
+    // 月海：几片不规则冷灰先压出明暗，不让月亮只剩一个均匀的白色圆盘。
+    for (const [ox, oy, rx, ry, tilt, alpha] of [
+      [-0.2, -0.13, 0.33, 0.19, 1.7, 0.1],
+      [0.21, 0.2, 0.28, 0.16, -0.8, 0.085],
+      [0.03, -0.35, 0.2, 0.11, 0.4, 0.06],
+    ] as const) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#44506f';
       ctx.beginPath();
-      ctx.arc(mx + mr * ox, my + mr * oy, mr * cr, 0, Math.PI * 2);
+      ctx.ellipse(mx + mr * ox, my + mr * oy, mr * rx, mr * ry, tilt, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // 环形山：内凹阴影 + 受光侧薄边 + 背光侧暗弧，大小错开，避免三枚同样的大圆。
+    for (const [ox, oy, cr, tilt] of [
+      [-0.31, -0.21, 0.115, 0.7],
+      [-0.07, -0.34, 0.055, 2.1],
+      [0.24, -0.02, 0.09, 3.2],
+      [0.16, 0.29, 0.065, 1.2],
+      [0.31, 0.31, 0.035, 2.6],
+      [-0.18, 0.23, 0.045, 0.2],
+    ] as const) {
+      const cxp = mx + mr * ox;
+      const cyp = my + mr * oy;
+      const rr = mr * cr;
+      const bowl = ctx.createRadialGradient(cxp - rr * 0.24, cyp - rr * 0.26, rr * 0.08, cxp, cyp, rr);
+      bowl.addColorStop(0, 'rgba(68,82,118,0.42)');
+      bowl.addColorStop(0.64, 'rgba(96,110,146,0.2)');
+      bowl.addColorStop(1, 'rgba(84,98,132,0.03)');
+      ctx.fillStyle = bowl;
+      ctx.beginPath();
+      ctx.ellipse(cxp, cyp, rr, rr * 0.82, tilt, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(248,252,255,0.3)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.ellipse(cxp, cyp, rr * 0.92, rr * 0.76, tilt, Math.PI * 1.04, Math.PI * 1.72);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(48,60,92,0.26)';
+      ctx.beginPath();
+      ctx.ellipse(cxp, cyp, rr * 0.88, rr * 0.72, tilt, Math.PI * 0.04, Math.PI * 0.7);
+      ctx.stroke();
+    }
+    // 受光侧留一线冷白边；月面边缘因此不是描出来的圆，而是被光擦亮的一侧。
+    ctx.globalAlpha = 0.34;
+    ctx.strokeStyle = '#f4fbff';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(mx, my, mr * 0.97, -2.5, -0.85);
+    ctx.stroke();
+    ctx.restore();
+
+    // 月下两缕极薄的云，只横穿下缘；两端渐隐，不能像两根灰杠。
+    for (let i = 0; i < 2; i += 1) {
+      const baseY = my + mr * (0.48 + i * 0.26);
+      const shift = Math.sin(time * 0.07 + i * 2.1) * mr * 0.14;
+      const veil = ctx.createLinearGradient(mx - mr * 1.5, 0, mx + mr * 1.5, 0);
+      veil.addColorStop(0, 'rgba(159,178,219,0)');
+      veil.addColorStop(0.32, 'rgba(159,178,219,0.13)');
+      veil.addColorStop(0.68, 'rgba(159,178,219,0.09)');
+      veil.addColorStop(1, 'rgba(159,178,219,0)');
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = veil;
+      ctx.lineWidth = 1.1 + i * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(mx - mr * 1.45 + shift, baseY);
+      ctx.bezierCurveTo(
+        mx - mr * 0.72,
+        baseY - mr * (0.11 + i * 0.03),
+        mx + mr * 0.5,
+        baseY + mr * 0.08,
+        mx + mr * 1.36 + shift,
+        baseY - mr * 0.04,
+      );
+      ctx.stroke();
     }
     ctx.restore();
 
