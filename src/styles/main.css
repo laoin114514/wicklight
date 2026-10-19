@@ -9520,3 +9520,302 @@ body.is-touch .lvl-actions__hint { display: none; }
   .outcome-seal--defeat::before,
   .outcome-seal--defeat::after { animation: none; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v177 · 入场仪式：点灯、验火、再横过手机
+   开机页和竖屏闸门通常只停留几秒，却决定玩家对整部作品的第一印象。这里
+   把它们收进同一套语言：提灯玻璃、黄铜提梁、缓慢上浮的火星，以及一块带
+   内框与铆钉的铁牌。信息层级不变，只是不再像一张通用加载提示。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.boot {
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 44% 34% at 50% 48%, rgba(255, 164, 58, 0.17), rgba(255, 128, 32, 0) 72%),
+    radial-gradient(ellipse 76% 54% at 50% 54%, rgba(76, 49, 17, 0.24), rgba(7, 8, 12, 0) 74%),
+    radial-gradient(circle at 50% 46%, #171106 0%, #0a0a0d 45%, #06070b 72%);
+}
+.boot::before,
+.boot::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+.boot::before {
+  inset: -24%;
+  z-index: -2;
+  background:
+    repeating-conic-gradient(from 2deg at 50% 48%, rgba(255, 218, 150, 0.032) 0deg 1.2deg, rgba(255, 218, 150, 0) 1.2deg 9deg);
+  -webkit-mask-image: radial-gradient(ellipse 48% 44% at 50% 48%, #000 0, rgba(0, 0, 0, 0.45) 45%, transparent 72%);
+  mask-image: radial-gradient(ellipse 48% 44% at 50% 48%, #000 0, rgba(0, 0, 0, 0.45) 45%, transparent 72%);
+  animation: boot-rays 52s linear infinite;
+}
+.boot::after {
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(circle, rgba(255, 202, 122, 0.5) 0 1px, rgba(255, 202, 122, 0) 1.7px),
+    radial-gradient(circle, rgba(255, 151, 63, 0.32) 0 0.8px, rgba(255, 151, 63, 0) 1.4px);
+  background-size: 173px 149px, 227px 193px;
+  background-position: 23px 12px, 74px 61px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 4%, #000 28%, #000 78%, transparent 96%);
+  mask-image: linear-gradient(180deg, transparent 4%, #000 28%, #000 78%, transparent 96%);
+  opacity: 0.3;
+  animation: boot-embers 18s linear infinite;
+}
+@keyframes boot-rays { to { rotate: 360deg; } }
+@keyframes boot-embers {
+  from { background-position: 23px 12px, 74px 61px; }
+  to { background-position: 23px -137px, 74px -132px; }
+}
+
+/* 提灯本体：玻璃罩 + 黄铜提梁 + 底座，火只在罩里呼吸。 */
+.boot__flame {
+  position: relative;
+  width: 46px;
+  height: 64px;
+  border: 1px solid rgba(219, 166, 94, 0.58);
+  border-radius: 14px 14px 18px 18px / 11px 11px 24px 24px;
+  background:
+    radial-gradient(ellipse 54% 43% at 50% 64%, #fff9e6 0 9%, #ffd889 28%, #ffa23e 53%, rgba(239, 111, 20, 0.48) 68%, rgba(33, 18, 7, 0.62) 84%),
+    linear-gradient(180deg, rgba(255, 222, 160, 0.09), rgba(19, 12, 7, 0.75));
+  box-shadow:
+    inset 0 0 0 3px rgba(22, 14, 8, 0.48),
+    inset 0 -9px 14px rgba(0, 0, 0, 0.38),
+    0 0 34px 8px rgba(255, 156, 48, 0.32),
+    0 0 88px 24px rgba(255, 126, 30, 0.16);
+  animation: boot-lamp 2.3s ease-in-out infinite;
+}
+.boot__flame::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -23px;
+  width: 28px;
+  height: 25px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(198, 146, 76, 0.7);
+  border-bottom: 0;
+  border-radius: 50% 50% 3px 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 178, 0.16), 0 0 9px rgba(255, 174, 73, 0.12);
+}
+.boot__flame::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 56px;
+  height: 8px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(194, 142, 72, 0.58);
+  border-radius: 3px 3px 5px 5px;
+  background:
+    linear-gradient(90deg, rgba(93, 59, 23, 0.72), rgba(181, 127, 59, 0.58) 45%, rgba(96, 61, 24, 0.72)),
+    #2b1c0c;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 225, 168, 0.16);
+}
+@keyframes boot-lamp {
+  0%, 100% { filter: brightness(0.94); }
+  42% { filter: brightness(1.08); }
+  70% { filter: brightness(1); }
+}
+
+.boot__logo {
+  color: transparent;
+  background: linear-gradient(180deg, #fff7e2 0%, #efd09b 43%, #b98445 68%, #f0ca8a 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  filter: drop-shadow(0 0 22px rgba(255, 176, 72, 0.34)) drop-shadow(0 2px 0 rgba(0, 0, 0, 0.62));
+  text-shadow: none;
+}
+.boot__logo span {
+  color: #ffc96b;
+  -webkit-text-fill-color: #ffc96b;
+  filter: drop-shadow(0 0 16px rgba(255, 158, 48, 0.42));
+}
+.boot__sub { color: rgba(230, 209, 174, 0.54); letter-spacing: 5px; }
+.boot__bar {
+  position: relative;
+  width: 238px;
+  height: 6px;
+  border: 1px solid rgba(196, 143, 73, 0.35);
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 222, 160, 0.13) 0 1px, rgba(0, 0, 0, 0) 1px 19px),
+    linear-gradient(180deg, #030407, #111014);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(255, 221, 164, 0.05);
+}
+.boot__bar i {
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, #ffe3a7, #f0a33d 52%, #b55412);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 222, 0.52), 0 0 18px rgba(255, 156, 42, 0.5);
+}
+.boot__hint {
+  color: rgba(229, 208, 172, 0.52);
+  letter-spacing: 2.5px;
+  animation: boot-hint 2.4s ease-in-out infinite;
+}
+@keyframes boot-hint {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
+/* 竖屏闸门：同一盏提灯，换成一块钉在夜里的铁牌。 */
+.rotate.is-on {
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 58% 28% at 50% 64%, rgba(255, 148, 51, 0.12), rgba(255, 122, 24, 0) 72%),
+    radial-gradient(circle at 50% 40%, rgba(71, 47, 17, 0.52) 0%, rgba(9, 9, 12, 0.94) 58%),
+    var(--iron-lo);
+}
+.rotate.is-on::before,
+.rotate.is-on::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.rotate.is-on::before {
+  z-index: -2;
+  background:
+    repeating-conic-gradient(from 3deg at 50% 46%, rgba(255, 211, 139, 0.026) 0deg 1.1deg, rgba(255, 211, 139, 0) 1.1deg 11deg);
+  -webkit-mask-image: radial-gradient(ellipse 58% 40% at 50% 44%, #000, transparent 74%);
+  mask-image: radial-gradient(ellipse 58% 40% at 50% 44%, #000, transparent 74%);
+  animation: boot-rays 62s linear infinite;
+}
+.rotate.is-on::after {
+  z-index: -1;
+  background:
+    radial-gradient(circle, rgba(255, 192, 104, 0.36) 0 1px, transparent 1.7px) 0 0 / 191px 167px,
+    radial-gradient(circle, rgba(255, 140, 49, 0.28) 0 0.8px, transparent 1.4px) 52px 71px / 241px 211px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 7%, #000 30%, #000 80%, transparent 96%);
+  mask-image: linear-gradient(180deg, transparent 7%, #000 30%, #000 80%, transparent 96%);
+  opacity: 0.28;
+  animation: boot-embers 21s linear infinite;
+}
+.rotate__card {
+  position: relative;
+  isolation: isolate;
+  gap: 13px;
+  padding: 30px 30px 25px;
+  border-color: rgba(199, 144, 72, 0.48);
+  background:
+    radial-gradient(ellipse 86% 44% at 50% 0%, rgba(255, 176, 71, 0.1), rgba(255, 176, 71, 0) 64%),
+    repeating-linear-gradient(90deg, rgba(255, 222, 168, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 13px),
+    linear-gradient(180deg, rgba(42, 34, 23, 0.97), rgba(15, 13, 10, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 225, 173, 0.14),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.48),
+    inset 0 0 54px rgba(0, 0, 0, 0.36),
+    0 22px 54px rgba(0, 0, 0, 0.62);
+}
+.rotate__card::before,
+.rotate__card::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+.rotate__card::before {
+  inset: 7px;
+  z-index: -1;
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(219, 166, 94, 0.48), rgba(219, 166, 94, 0.48)) left top / 18px 1px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.38), rgba(219, 166, 94, 0.38)) left top / 1px 18px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.48), rgba(219, 166, 94, 0.48)) right top / 18px 1px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.38), rgba(219, 166, 94, 0.38)) right top / 1px 18px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.4), rgba(219, 166, 94, 0.4)) left bottom / 18px 1px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.3), rgba(219, 166, 94, 0.3)) left bottom / 1px 18px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.4), rgba(219, 166, 94, 0.4)) right bottom / 18px 1px no-repeat,
+    linear-gradient(rgba(219, 166, 94, 0.3), rgba(219, 166, 94, 0.3)) right bottom / 1px 18px no-repeat;
+  opacity: 0.72;
+}
+.rotate__card::after {
+  left: 50%;
+  bottom: 11px;
+  width: 58px;
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(210, 158, 86, 0.42), transparent);
+}
+.rotate__lamp {
+  width: 48px;
+  height: 68px;
+  border-color: rgba(216, 163, 91, 0.72);
+  border-radius: 15px 15px 20px 20px / 12px 12px 26px 26px;
+  background:
+    radial-gradient(ellipse 52% 42% at 50% 63%, rgba(255, 247, 218, 0.84) 0 12%, rgba(255, 205, 125, 0.45) 45%, rgba(255, 142, 46, 0.15) 72%),
+    linear-gradient(180deg, rgba(91, 63, 29, 0.9), rgba(23, 16, 9, 0.96));
+  box-shadow:
+    inset 0 0 0 3px rgba(20, 13, 8, 0.52),
+    inset 0 -8px 13px rgba(0, 0, 0, 0.34),
+    0 0 28px rgba(255, 151, 56, 0.2);
+}
+.rotate__lamp::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  width: 26px;
+  height: 23px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(196, 143, 72, 0.65);
+  border-bottom: 0;
+  border-radius: 50% 50% 3px 3px;
+}
+.rotate__lamp::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 56px;
+  height: 7px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(190, 137, 68, 0.52);
+  border-radius: 3px 3px 5px 5px;
+  background: linear-gradient(180deg, rgba(114, 77, 35, 0.92), rgba(34, 23, 11, 0.96));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+}
+.rotate__lamp i {
+  background: radial-gradient(ellipse at 50% 64%, #fffbea 0 9%, #ffe1a6 30%, #ffad4e 58%, rgba(255, 113, 23, 0) 78%);
+  filter: drop-shadow(0 0 8px rgba(255, 163, 61, 0.7));
+}
+.rotate__title {
+  color: #f4d39a;
+  text-shadow: 0 0 18px rgba(255, 176, 71, 0.18), 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+.rotate__sub { color: rgba(230, 211, 179, 0.62); }
+.rotate__btn {
+  border-color: rgba(222, 168, 94, 0.56);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, rgba(0, 0, 0, 0) 1px 5px),
+    linear-gradient(180deg, rgba(124, 88, 38, 0.95), rgba(47, 32, 14, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 234, 189, 0.24),
+    inset 0 -1px 0 rgba(62, 35, 8, 0.52),
+    0 5px 14px rgba(0, 0, 0, 0.44),
+    0 0 18px rgba(255, 161, 62, 0.1);
+}
+
+@media (max-height: 600px) {
+  .rotate__card { gap: 10px; padding: 22px 24px 19px; }
+  .rotate__lamp { scale: 0.88; margin-top: 5px; }
+  .rotate__title { font-size: 19px; }
+  .rotate__sub { font-size: 11.5px; line-height: 1.6; }
+  .rotate__btn { padding: 8px 18px 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot::before,
+  .boot::after,
+  .boot__flame,
+  .boot__hint,
+  .rotate.is-on::before,
+  .rotate.is-on::after,
+  .rotate__lamp { animation: none; }
+}
