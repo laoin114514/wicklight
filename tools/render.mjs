@@ -131,6 +131,35 @@ const SCENES = {
     }
     for (let i = 0; i < 4; i += 1) step();
   },
+  lantern() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 40; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.weapons.clear();
+    p.recomputeStats();
+    p.hp = p.stats.maxHp;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    const target = game.enemies.spawn('shade', 340, 0, 1, 0);
+    target.hp = 1e9;
+    target.maxHp = 1e9;
+    target.damage = 0;
+    target.speed = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (let i = 0; i < 3; i += 1) step();
+  },
   swarm() {
     game.newRun('ember', 'normal', false);
     fight(900, { spawnEvery: 7, spawnCount: 4 });

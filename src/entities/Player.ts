@@ -1734,21 +1734,33 @@ export class Player {
     ctx.translate(this.leanF * R * 0.035, this.leanS * R * 0.035);
     ctx.globalCompositeOperation = 'lighter';
     const coneLen = (130 + 150 * this.brightness) * (0.6 + 0.4 * coneScale);
-    const cone = ctx.createLinearGradient(0, 0, this.radius + coneLen, 0);
-    cone.addColorStop(0, `rgba(255,206,140,${0.16 * flick * coneScale})`);
-    cone.addColorStop(0.5, `rgba(255,172,86,${0.06 * flick * coneScale})`);
-    cone.addColorStop(1, 'rgba(255,150,60,0)');
-    ctx.fillStyle = cone;
-    ctx.beginPath();
-    ctx.moveTo(this.radius * 0.6, -3);
-    ctx.quadraticCurveTo(this.radius + coneLen * 0.6, -34, this.radius + coneLen, -62);
-    ctx.lineTo(this.radius + coneLen, 62);
-    ctx.quadraticCurveTo(this.radius + coneLen * 0.6, 34, this.radius * 0.6, 3);
-    ctx.closePath();
-    ctx.fill();
+    const bands = [
+      { width: 1, alpha: 0.012 },
+      { width: 0.82, alpha: 0.016 },
+      { width: 0.66, alpha: 0.022 },
+      { width: 0.5, alpha: 0.03 },
+      { width: 0.34, alpha: 0.04 },
+      { width: 0.2, alpha: 0.055 },
+    ];
+    for (const band of bands) {
+      const half = 64 * band.width;
+      const alpha = band.alpha * flick * coneScale;
+      const cone = ctx.createLinearGradient(0, 0, this.radius + coneLen, 0);
+      cone.addColorStop(0, `rgba(255,210,145,${alpha})`);
+      cone.addColorStop(0.45, `rgba(255,172,86,${alpha * 0.52})`);
+      cone.addColorStop(1, 'rgba(255,150,60,0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(this.radius * 0.6, -3);
+      ctx.quadraticCurveTo(this.radius + coneLen * 0.58, -half * 0.64, this.radius + coneLen, -half);
+      ctx.lineTo(this.radius + coneLen, half);
+      ctx.quadraticCurveTo(this.radius + coneLen * 0.58, half * 0.64, this.radius * 0.6, 3);
+      ctx.closePath();
+      ctx.fill();
+    }
     // 锥心的亮芯
     const core = ctx.createRadialGradient(0, 0, this.radius, 0, 0, this.radius + coneLen * 0.55);
-    core.addColorStop(0, `rgba(255,224,168,${0.2 * flick * coneScale})`);
+    core.addColorStop(0, `rgba(255,224,168,${0.16 * flick * coneScale})`);
     core.addColorStop(1, 'rgba(255,170,80,0)');
     ctx.fillStyle = core;
     ctx.beginPath();
@@ -1758,6 +1770,25 @@ export class Player {
     ctx.lineTo(this.radius * 0.6, 3);
     ctx.closePath();
     ctx.fill();
+
+    const dust = 18;
+    for (let i = 0; i < dust; i += 1) {
+      const frac = (time * (0.17 + (i % 4) * 0.014) + i * 0.137) % 1;
+      const reach = this.radius * 0.65 + coneLen * frac;
+      const half = 3 + 59 * Math.pow(frac, 1.08);
+      const drift = Math.sin(time * 0.9 + i * 2.17) * half * 0.78;
+      const twinkle = 0.5 + 0.5 * Math.sin(time * 3.4 + i * 1.9);
+      const rad = (1 + (i % 3) * 0.5) * (1 - frac * 0.25);
+      ctx.globalAlpha = (0.18 + twinkle * 0.36) * (1 - frac * 0.66) * flick * coneScale;
+      ctx.fillStyle = i % 4 === 0 ? '#fff6dc' : '#ffd394';
+      ctx.beginPath();
+      ctx.arc(reach, drift, Math.max(0.5, rad), 0, TAU);
+      ctx.fill();
+      if (i % 4 === 0) {
+        ctx.globalAlpha *= 0.62;
+        ctx.fillRect(reach - rad * 3.2, drift - 0.4, rad * 6.4, 0.8);
+      }
+    }
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
 
