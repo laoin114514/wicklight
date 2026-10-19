@@ -1173,7 +1173,8 @@ export class UIManager implements UIHost {
 
   private dead(): void {
     this.show(`
-      <div class="panel panel--small panel--vellum">
+      <div class="panel panel--small panel--vellum panel--defeat">
+        <div class="outcome-seal outcome-seal--defeat">✧</div>
         <div class="panel__title">灯火熄灭</div>
         ${this.killerLine()}
         <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
@@ -1195,7 +1196,8 @@ export class UIManager implements UIHost {
 
   private victory(): void {
     this.show(`
-      <div class="panel panel--small panel--vellum">
+      <div class="panel panel--small panel--vellum panel--triumph">
+        <div class="outcome-seal outcome-seal--clear">✦</div>
         <div class="panel__title">焚尽长夜</div>
         <div class="subtitle">你举着灯，走完了长夜之城的最后一段黑暗。</div>
         ${this.tourLine()}

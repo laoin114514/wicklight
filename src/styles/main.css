@@ -831,7 +831,7 @@ body.is-touch .hud__pause { display: grid; }
 .panel--shop { width: min(94vw, 860px); }
 .shop-wallet { text-align: center; color: var(--text-dim); margin-bottom: 14px; letter-spacing: 1px; }
 .shop-wallet b { color: var(--amber-bright); font-size: 18px; }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .shop-item {
   pointer-events: auto;
   cursor: pointer;
@@ -846,7 +846,18 @@ body.is-touch .hud__pause { display: grid; }
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .shop-item:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5); }
-.shop-item__icon { font-size: 30px; margin-bottom: 6px; }
+.shop-item__icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  font-size: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  background: radial-gradient(circle at 38% 30%, color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, 0.08)), rgba(11, 10, 14, 0.88) 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 18px color-mix(in srgb, var(--accent) 16%, transparent);
+}
 .shop-item__name { font-size: 17px; font-weight: 800; margin-bottom: 5px; }
 .shop-item__blurb { font-size: 12px; color: #cdc2ad; line-height: 1.5; min-height: 34px; }
 .shop-item__price { margin-top: 10px; color: var(--amber-bright); font-weight: 700; font-size: 13px; }
@@ -1269,6 +1280,34 @@ body.is-touch .hud__wave { display: none; }
 /* 结算：先说清楚是被谁扑灭的 / 这一路点了几座灯台 */
 .killer { text-align: center; margin: 10px 0 2px; font-size: 13.5px; color: var(--text-dim); }
 .killer b { color: var(--c, #ff6b81); font-size: 15px; }
+
+.outcome-seal {
+  width: 56px;
+  height: 56px;
+  margin: -7px auto 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 25px;
+  line-height: 1;
+  border: 1px solid rgba(255, 206, 128, 0.4);
+  background: radial-gradient(circle at 42% 34%, rgba(255, 225, 166, 0.18), rgba(20, 14, 10, 0.86) 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 240, 205, 0.18), 0 0 24px rgba(255, 168, 70, 0.16);
+}
+.outcome-seal--defeat {
+  color: #ff9a84;
+  border-color: rgba(255, 116, 92, 0.36);
+  background: radial-gradient(circle at 42% 34%, rgba(255, 112, 82, 0.2), rgba(26, 12, 10, 0.9) 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 205, 190, 0.12), 0 0 28px rgba(190, 45, 30, 0.22);
+}
+.outcome-seal--clear {
+  color: #ffe0a0;
+  border-color: rgba(255, 206, 128, 0.52);
+  background: radial-gradient(circle at 42% 34%, rgba(255, 214, 132, 0.25), rgba(28, 19, 9, 0.9) 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 247, 216, 0.22), 0 0 30px rgba(255, 170, 60, 0.28);
+}
+.panel--defeat .panel__title { color: #ff9f88; text-shadow: 0 0 20px rgba(220, 64, 42, 0.36); }
+.panel--triumph .panel__title { color: #ffe1a2; text-shadow: 0 0 24px rgba(255, 184, 74, 0.58); }
 .tour { text-align: center; margin: 4px 0 2px; font-size: 12.5px; color: var(--text-dim); }
 .tour b { color: var(--amber-bright); font-size: 14px; }
 .ember-gain--ach b { font-size: 16px; color: #8affc1; }
@@ -3050,6 +3089,14 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .fire { padding: 8px 9px; }
   .fire__per { font-size: 11px; }
   .fire-note { display: none; }
+  .shop-wallet { margin-bottom: 7px; }
+  .shop-grid { gap: 8px; }
+  .shop-item { padding: 10px 11px; }
+  .shop-item__icon { width: 34px; height: 34px; margin-bottom: 5px; font-size: 19px; }
+  .shop-item__name { margin-bottom: 3px; font-size: 15px; }
+  .shop-item__blurb { min-height: 0; font-size: 10.5px; line-height: 1.35; }
+  .shop-item__price { margin-top: 6px; padding: 1px 9px; }
+  .outcome-seal { width: 34px; height: 34px; margin: -5px auto 4px; font-size: 17px; }
 }
 /* ── 16. 横屏提示卡 / 键帽：别压 HUD、别讲键盘、别贴脸 ───────────────────
    三条都是手机上才有的问题：
