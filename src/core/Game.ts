@@ -6497,55 +6497,184 @@ export class Game {
     for (const g of this.grounds) {
       if (g.ignites) this.drawOilFire(ctx, g);
       else if (g.kind === 'poison') this.drawPoisonGround(ctx, g);
-    }
-    for (const g of this.grounds) {
-      if (g.kind !== 'mud' && g.kind !== 'frost') continue;
-      // 滞行雾与霜冻都是"压暗"而不是"发光"：用普通混合盖一层，再用虚线勾出边界，
-      // 让玩家一眼知道"这块地会拖住我"。
-      const icy = g.kind === 'frost';
-      const fade = clamp(g.life / (icy ? 6 : 8), 0, 1);
-      ctx.globalAlpha = fade * 0.72;
-      const mg = ctx.createRadialGradient(g.x, g.y, g.r * 0.22, g.x, g.y, g.r);
-      if (icy) {
-        mg.addColorStop(0, 'rgba(24,44,58,0.9)');
-        mg.addColorStop(0.72, 'rgba(72,124,150,0.6)');
-        mg.addColorStop(1, 'rgba(150,210,240,0)');
-      } else {
-        mg.addColorStop(0, 'rgba(20,28,38,0.94)');
-        mg.addColorStop(0.72, 'rgba(40,56,72,0.66)');
-        mg.addColorStop(1, 'rgba(70,92,116,0)');
-      }
-      ctx.fillStyle = mg;
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = fade * (0.42 + 0.12 * Math.sin(g.life * 3));
-      ctx.strokeStyle = icy ? '#cfeaff' : '#b6cfe2';
-      ctx.lineWidth = 2.4;
-      ctx.setLineDash(icy ? [4, 7] : [9, 11]);
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      else if (g.kind === 'mud') this.drawMudGround(ctx, g);
+      else if (g.kind === 'frost') this.drawFrostGround(ctx, g);
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
     for (const g of this.grounds) {
-      if (g.kind === 'mud' || g.kind === 'poison' || g.ignites) continue;
+      if (g.ignites || (g.kind && g.kind !== 'fire')) continue;
       const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-      if (g.kind === 'frost') {
-        // 给霜冻一点冷光：它藏在黑暗里的话，玩家根本没机会躲
-        g2.addColorStop(0, 'rgba(150,215,255,0.2)');
-        g2.addColorStop(1, 'rgba(90,150,200,0)');
-      } else {
-        g2.addColorStop(0, 'rgba(255,120,40,0.5)');
-        g2.addColorStop(1, 'rgba(255,60,20,0)');
-      }
+      g2.addColorStop(0, 'rgba(255,120,40,0.5)');
+      g2.addColorStop(1, 'rgba(255,60,20,0)');
       ctx.fillStyle = g2;
       ctx.beginPath();
       ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
+  }
+
+  /** 滞行雾：一层贴着地面的冷灰雾，雾带缓慢横移，边界仍是可读的虚线。 */
+  private drawMudGround(ctx: CanvasRenderingContext2D, g: Ground): void {
+    const fade = clamp(g.life / 8, 0, 1);
+    const ph = g.phase ?? (g.x * 0.011 + g.y * 0.019);
+    const t = this.time;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 雾团压在脚边：几团圆斑打破正圆边界，中心再压一层更深的低雾。
+    for (let i = 0; i < 6; i += 1) {
+      const a = ph + t * 0.035 + i * 1.4708;
+      const d = g.r * (0.14 + 0.09 * ((i * 3) % 3));
+      const rr = g.r * (0.44 + 0.1 * ((i * 5) % 3));
+      ctx.globalAlpha = (0.08 + 0.025 * ((i * 7) % 4)) * fade;
+      ctx.fillStyle = '#101720';
+      ctx.beginPath();
+      ctx.arc(g.x + Math.cos(a) * d, g.y + Math.sin(a) * d, rr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const base = ctx.createRadialGradient(g.x - g.r * 0.14, g.y - g.r * 0.18, 0, g.x, g.y, g.r * 0.98);
+    base.addColorStop(0, `rgba(25,35,45,${0.68 * fade})`);
+    base.addColorStop(0.5, `rgba(18,27,36,${0.52 * fade})`);
+    base.addColorStop(1, 'rgba(11,18,26,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.98, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 雾带不发光，只用很薄的冷灰反光勾出"它在动"。
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i += 1) {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(ph + t * 0.07 + i * 2.0944);
+      ctx.globalAlpha = (0.05 + 0.025 * Math.sin(t * 0.8 + i * 1.6 + ph)) * fade;
+      ctx.strokeStyle = '#a7c3d4';
+      ctx.lineWidth = 1.2 + i * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(-g.r * (0.5 + i * 0.06), -5 + i * 5);
+      ctx.bezierCurveTo(-g.r * 0.2, -g.r * 0.27, g.r * 0.22, g.r * 0.26, g.r * (0.5 + i * 0.05), 4 - i * 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 雾中浮起的三粒冷尘：只指示"这里有东西在呼吸"。
+    for (let i = 0; i < 3; i += 1) {
+      const cycle = (t * 0.19 + i * 0.31 + ph * 0.13) % 1;
+      const mx = g.x + Math.sin(ph + i * 2.3 + t * 0.7) * g.r * (0.2 + i * 0.08);
+      const my = g.y + g.r * 0.08 - cycle * g.r * 0.42;
+      ctx.globalAlpha = (1 - cycle) * (0.08 + 0.05 * i) * fade;
+      ctx.fillStyle = '#c9deea';
+      ctx.beginPath();
+      ctx.arc(mx, my, 0.8 + (1 - cycle) * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = fade * (0.38 + 0.1 * Math.sin(g.life * 3));
+    ctx.strokeStyle = '#b6cfe2';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([9, 11]);
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /** 霜冻：薄冰面、放射冰裂与悬浮霜晶；冷光只用来让暗处的边界能被看见。 */
+  private drawFrostGround(ctx: CanvasRenderingContext2D, g: Ground): void {
+    const fade = clamp(g.life / 6, 0, 1);
+    const ph = g.phase ?? (g.x * 0.017 - g.y * 0.013);
+    const t = this.time;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    const base = ctx.createRadialGradient(g.x, g.y, g.r * 0.08, g.x, g.y, g.r);
+    base.addColorStop(0, `rgba(36,64,82,${0.7 * fade})`);
+    base.addColorStop(0.66, `rgba(42,78,98,${0.5 * fade})`);
+    base.addColorStop(1, 'rgba(110,170,205,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    const sheen = ctx.createRadialGradient(g.x - g.r * 0.12, g.y - g.r * 0.16, 0, g.x, g.y, g.r * 0.82);
+    sheen.addColorStop(0, `rgba(176,226,255,${0.09 * fade})`);
+    sheen.addColorStop(0.52, `rgba(123,184,225,${0.045 * fade})`);
+    sheen.addColorStop(1, 'rgba(80,140,190,0)');
+    ctx.fillStyle = sheen;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.82, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 冰裂：九道主裂从内圈往外扎，偶尔分一根细叉。线只落在冰面内。
+    for (let i = 0; i < 9; i += 1) {
+      const a = ph + i * 2.39996 + Math.sin(t * 0.17 + i) * 0.035;
+      const reach = g.r * (0.56 + 0.18 * ((i * 3) % 3));
+      const x0 = g.x + Math.cos(a) * g.r * 0.17;
+      const y0 = g.y + Math.sin(a) * g.r * 0.17;
+      const x1 = g.x + Math.cos(a) * reach;
+      const y1 = g.y + Math.sin(a) * reach;
+      ctx.globalAlpha = (0.1 + 0.05 * ((i * 5) % 3)) * fade;
+      ctx.strokeStyle = '#d9f2ff';
+      ctx.lineWidth = 0.8 + (i % 2) * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      if (i % 3 === 1) {
+        const bx = x0 + (x1 - x0) * 0.62;
+        const by = y0 + (y1 - y0) * 0.62;
+        const branch = a + (i % 2 === 0 ? 0.36 : -0.36);
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(branch) * g.r * 0.16, by + Math.sin(branch) * g.r * 0.16);
+      }
+      ctx.stroke();
+    }
+
+    // 外缘霜晶：只露半截，告诉玩家这圈冰不是画出来的圆。
+    for (let i = 0; i < 5; i += 1) {
+      const a = ph + 0.52 + i * 1.2566 + Math.sin(t * 0.22 + i) * 0.025;
+      const d = g.r * 0.82;
+      const sx = g.x + Math.cos(a) * d;
+      const sy = g.y + Math.sin(a) * d;
+      const s = 2.1 + (i % 2) * 0.8;
+      ctx.globalAlpha = (0.14 + 0.05 * (i % 3)) * fade;
+      ctx.fillStyle = '#e8f8ff';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - s);
+      ctx.lineTo(sx + s * 0.62, sy);
+      ctx.lineTo(sx, sy + s);
+      ctx.lineTo(sx - s * 0.62, sy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    for (let i = 0; i < 4; i += 1) {
+      const cycle = (t * 0.22 + i * 0.29 + ph * 0.11) % 1;
+      const mx = g.x + Math.sin(ph + i * 1.9 + t * 0.8) * g.r * (0.18 + i * 0.06);
+      const my = g.y + Math.sin(ph + i * 2.7) * g.r * 0.18 - cycle * g.r * 0.32;
+      ctx.globalAlpha = (1 - cycle) * (0.1 + 0.035 * i) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#f2fbff' : '#b9e3ff';
+      ctx.beginPath();
+      ctx.arc(mx, my, 0.65 + (1 - cycle) * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = fade * (0.4 + 0.1 * Math.sin(t * 2.8 + ph));
+    ctx.strokeStyle = '#cfeaff';
+    ctx.lineWidth = 2.3;
+    ctx.setLineDash([4, 7]);
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
