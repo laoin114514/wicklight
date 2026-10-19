@@ -4592,3 +4592,126 @@ body.is-touch .key { display: none; }
   box-shadow: inset 0 1px 0 rgba(218, 255, 236, 0.12);
 }
 .fire.is-max .fire__cost::before { content: '✓'; color: #8affc1; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v147 · 抉择牌：祭坛的冷石凹龛与夜咒的蜡光凹龛
+
+   两个界面都是"从三件里拿一件"的仪式，但卡片本身只是渐变按钮。
+   这一版给图标压出一圈凹进去的圆龛，再在牌面里收一道细内框：
+     · 祭坛用月光冷的石框，图标周围有一圈很淡的霜光
+     · 夜咒用紫铜框，图标像压在蜡面下的一点暗火
+   只加材质，不改选项、排序、热键和点击区域。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.shrine-card,
+.curse-card {
+  position: relative;
+  overflow: hidden;
+}
+.shrine-card::after,
+.curse-card::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.shrine-card::after { border: 1px solid rgba(188, 218, 255, 0.07); }
+.curse-card::after { border: 1px solid rgba(244, 210, 255, 0.055); }
+
+.shrine-card__icon,
+.curse-card__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 1px 0 2px;
+  border-radius: 50%;
+  font-size: 27px;
+  line-height: 1;
+}
+.shrine-card__icon {
+  border: 1px solid color-mix(in srgb, var(--accent, #9cc7ff) 32%, rgba(214, 236, 255, 0.12));
+  background:
+    radial-gradient(circle at 38% 30%, rgba(234, 247, 255, 0.25), rgba(115, 164, 235, 0.08) 46%, rgba(4, 8, 18, 0.35) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(245, 252, 255, 0.18),
+    inset 0 -8px 13px rgba(0, 0, 0, 0.34),
+    0 0 18px color-mix(in srgb, var(--accent, #9cc7ff) 16%, transparent);
+  filter: drop-shadow(0 0 10px rgba(140, 190, 255, 0.34));
+}
+.curse-card__icon {
+  border: 1px solid color-mix(in srgb, var(--accent, #b992ff) 38%, rgba(244, 214, 255, 0.12));
+  background:
+    radial-gradient(circle at 38% 30%, rgba(255, 235, 255, 0.16), color-mix(in srgb, var(--accent, #b992ff) 10%, transparent) 46%, rgba(9, 5, 14, 0.42) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 255, 0.12),
+    inset 0 -9px 14px rgba(0, 0, 0, 0.38),
+    0 0 19px color-mix(in srgb, var(--accent, #b992ff) 15%, transparent);
+  filter: saturate(0.85) drop-shadow(0 0 10px color-mix(in srgb, var(--accent, #b992ff) 32%, transparent));
+}
+.shrine-card__name { text-shadow: 0 0 12px color-mix(in srgb, var(--accent, #8fa7ff) 28%, transparent); }
+.curse-card__name { text-shadow: 0 0 12px color-mix(in srgb, var(--accent, #b992ff) 24%, transparent); }
+.curse-card__gold {
+  position: relative;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 213, 0.18),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28);
+}
+.curse-card__gold::before {
+  content: '✦';
+  margin-right: 5px;
+  font-size: 7px;
+  color: rgba(255, 222, 149, 0.78);
+  vertical-align: 1px;
+}
+.shrine-card:hover,
+.curse-card:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 12px 28px rgba(0, 0, 0, 0.55),
+    0 0 24px color-mix(in srgb, var(--accent, #8fa7ff) 26%, transparent);
+}
+
+/* 窄屏的夜咒卡会折成横排：让凹龛、名称与回报各占一列，
+   描述吃掉剩下的宽度。否则 48px 圆龛会把名称和金币牌挤成两行。 */
+@media (max-width: 560px) {
+  .curse-card {
+    display: grid;
+    grid-template-columns: auto 40px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'key icon name gold'
+      'key icon blurb gold';
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 1px;
+    padding: 10px 12px;
+    text-align: left;
+  }
+  .curse-card > .hotkey { grid-area: key; }
+  .curse-card__icon {
+    grid-area: icon;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    font-size: 23px;
+  }
+  .curse-card__name {
+    grid-area: name;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .curse-card__blurb {
+    grid-area: blurb;
+    min-width: 0;
+    line-height: 1.5;
+    text-align: left;
+  }
+  .curse-card__gold {
+    grid-area: gold;
+    flex-shrink: 0;
+    margin: 0;
+    white-space: nowrap;
+  }
+}
