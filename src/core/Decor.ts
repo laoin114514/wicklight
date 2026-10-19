@@ -698,20 +698,110 @@ function pillar(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void 
 
 function rubble(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void {
   const night = themeId === 'nightcity';
-  ctx.fillStyle = night ? '#251e38' : '#232638';
-  for (let i = 0; i < 5; i += 1) {
-    const a = i * 1.9;
-    const ox = d.x + Math.cos(a) * d.r * 0.42;
-    const oy = d.y + Math.sin(a) * d.r * 0.3;
-    ctx.fillStyle = i % 2 ? night ? '#34284f' : '#2c3043' : night ? '#201a30' : '#1d2030';
+  const variant = Math.sin(d.x * 0.021 + d.y * 0.017);
+  const mirror = variant < 0 ? -1 : 1;
+  const body = night ? '#2b2340' : '#252a3a';
+  const lit = night ? '#3e315a' : '#343b52';
+  const dark = night ? '#171222' : '#151723';
+  const edge = night ? 'rgba(193,165,247,0.14)' : 'rgba(168,188,231,0.13)';
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+  const stone = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    rot: number,
+    fill: string,
+    crack: boolean,
+  ): void => {
+    const sw = w * d.r;
+    const sh = h * d.r;
+    ctx.save();
+    ctx.translate(px(x), py(y));
+    ctx.rotate((rot + variant * 0.04) * mirror);
     ctx.beginPath();
-    ctx.ellipse(ox, oy, d.r * 0.18, d.r * 0.12, a, 0, TAU);
+    ctx.moveTo(-sw * 0.5, sh * 0.15);
+    ctx.lineTo(-sw * 0.41, -sh * 0.31);
+    ctx.lineTo(-sw * 0.15, -sh * 0.5);
+    ctx.lineTo(sw * 0.2, -sh * 0.46);
+    ctx.lineTo(sw * 0.47, -sh * 0.12);
+    ctx.lineTo(sw * 0.5, sh * 0.26);
+    ctx.lineTo(sw * 0.18, sh * 0.47);
+    ctx.lineTo(-sw * 0.22, sh * 0.44);
+    ctx.closePath();
+    ctx.fillStyle = fill;
     ctx.fill();
-    ctx.fillStyle = night ? 'rgba(190,160,255,0.08)' : 'rgba(190,205,245,0.07)';
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = Math.max(0.7, d.r * 0.014);
+    ctx.stroke();
+    ctx.fillStyle = lit;
+    ctx.globalAlpha = 0.72;
     ctx.beginPath();
-    ctx.ellipse(ox - d.r * 0.04, oy - d.r * 0.045, d.r * 0.08, d.r * 0.04, a, 0, TAU);
+    ctx.moveTo(-sw * 0.41, -sh * 0.27);
+    ctx.lineTo(-sw * 0.14, -sh * 0.46);
+    ctx.lineTo(sw * 0.17, -sh * 0.42);
+    ctx.lineTo(sw * 0.38, -sh * 0.12);
+    ctx.lineTo(sw * 0.08, -sh * 0.06);
+    ctx.lineTo(-sw * 0.18, -sh * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = Math.max(0.55, d.r * 0.008);
+    ctx.beginPath();
+    ctx.moveTo(-sw * 0.38, -sh * 0.3);
+    ctx.lineTo(-sw * 0.13, -sh * 0.47);
+    ctx.lineTo(sw * 0.16, -sh * 0.43);
+    ctx.stroke();
+    if (crack) {
+      ctx.strokeStyle = 'rgba(6,8,13,0.42)';
+      ctx.lineWidth = Math.max(0.6, d.r * 0.01);
+      ctx.beginPath();
+      ctx.moveTo(sw * 0.05, -sh * 0.4);
+      ctx.lineTo(sw * 0.09, -sh * 0.16);
+      ctx.lineTo(sw * 0.01, sh * 0.02);
+      ctx.lineTo(sw * 0.08, sh * 0.19);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.33)';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.02 * mirror, d.y + d.r * 0.27, d.r * 0.63, d.r * 0.15, -0.03 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = night ? 'rgba(63,46,91,0.2)' : 'rgba(45,49,68,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.02, d.y + d.r * 0.24, d.r * 0.72, d.r * 0.12, -0.04 * mirror, 0, TAU);
+  ctx.fill();
+
+  stone(-0.27, 0.04, 0.56, 0.43, -0.08, body, true);
+  stone(0.3, 0.1, 0.4, 0.32, 0.21, dark, false);
+  stone(-0.1, -0.08, 0.44, 0.19, -0.24, lit, false);
+  stone(-0.4, 0.23, 0.28, 0.23, 0.12, body, false);
+  stone(-0.08, 0.28, 0.38, 0.2, -0.04, lit, false);
+  stone(0.24, 0.26, 0.3, 0.22, 0.23, body, true);
+  stone(0.49, 0.29, 0.17, 0.14, -0.2, dark, false);
+
+  ctx.fillStyle = dark;
+  for (const [x, y, rx, ry, rot] of [
+    [-0.56, 0.31, 0.08, 0.04, 0.3],
+    [0.04, 0.4, 0.07, 0.035, -0.12],
+    [0.4, 0.38, 0.055, 0.03, 0.22],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
     ctx.fill();
   }
+  ctx.strokeStyle = night ? 'rgba(108,87,145,0.2)' : 'rgba(95,105,130,0.18)';
+  ctx.lineWidth = Math.max(0.5, d.r * 0.007);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.49), py(0.17));
+  ctx.lineTo(px(-0.37), py(0.14));
+  ctx.moveTo(px(0.38), py(0.18));
+  ctx.lineTo(px(0.47), py(0.22));
+  ctx.stroke();
 }
 
 function brazier(ctx: CanvasRenderingContext2D, d: Decor, time: number, themeId: string): void {
