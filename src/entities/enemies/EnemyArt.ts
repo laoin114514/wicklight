@@ -3261,18 +3261,86 @@ export function drawEnemy(
     const t = 1 - e.stateTimer / 0.6;
     // v101：预警线是"它这一下会冲到哪儿"，而冲锋本身会撞停在墙面上（v84）。
     // 线画满 340px 会穿过墙，给一个实际到不了的承诺；和光矛 / 抽油线一样只画到墙面。
-    const reach = rayWalls(e.x, e.y, Math.cos(e.angle), Math.sin(e.angle), 340, walls);
+    const dirX = Math.cos(e.angle);
+    const dirY = Math.sin(e.angle);
+    const sideX = -dirY;
+    const sideY = dirX;
+    const reach = rayWalls(e.x, e.y, dirX, dirY, 340, walls);
+    const endX = e.x + dirX * reach;
+    const endY = e.y + dirY * reach;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.3 + 0.5 * t;
-    ctx.strokeStyle = '#ff5a86';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([12, 9]);
+
+    // 先铺一条低亮度的冲锋走廊：宽度从刺脊脚下微微张开，和"它这么宽会撞过来"对得上。
+    const lane = ctx.createLinearGradient(e.x, e.y, endX, endY);
+    lane.addColorStop(0, `rgba(255,90,134,${0.025 + t * 0.035})`);
+    lane.addColorStop(0.72, `rgba(255,90,134,${0.045 + t * 0.08})`);
+    lane.addColorStop(1, 'rgba(255,90,134,0)');
+    ctx.fillStyle = lane;
+    const half = 5.2 + t * 3.2;
+    ctx.beginPath();
+    ctx.moveTo(e.x - sideX * half * 0.35, e.y - sideY * half * 0.35);
+    ctx.lineTo(endX - sideX * half, endY - sideY * half);
+    ctx.lineTo(endX + sideX * half, endY + sideY * half);
+    ctx.lineTo(e.x + sideX * half * 0.35, e.y + sideY * half * 0.35);
+    ctx.closePath();
+    ctx.fill();
+
+    // 中轴仍是那条可量的预警线；虚线向前流动，蓄力越满走得越快。
+    ctx.globalAlpha = 0.34 + 0.48 * t;
+    ctx.strokeStyle = '#ffd0de';
+    ctx.lineWidth = 1.7 + 1.2 * t;
+    ctx.setLineDash([12 + 8 * t, 9 - 3 * t]);
+    ctx.lineDashOffset = -time * (34 + t * 46);
     ctx.beginPath();
     ctx.moveTo(e.x, e.y);
-    ctx.lineTo(e.x + Math.cos(e.angle) * reach, e.y + Math.sin(e.angle) * reach);
+    ctx.lineTo(endX, endY);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+
+    // 两条侧轨把"危险走廊"框出来，不和中间那条判读线抢亮度。
+    const rail = 6.4 + t * 4.2;
+    ctx.strokeStyle = '#ff5a86';
+    ctx.lineWidth = 1 + 0.8 * t;
+    for (const side of [-1, 1]) {
+      ctx.globalAlpha = 0.16 + 0.32 * t;
+      ctx.beginPath();
+      ctx.moveTo(e.x + sideX * rail * side, e.y + sideY * rail * side);
+      ctx.lineTo(endX + sideX * rail * side, endY + sideY * rail * side);
+      ctx.stroke();
+    }
+
+    // 走廊里向前游动的短箭纹：一眼能看出它要往哪边冲，而不是只看到一根红线。
+    const span = Math.max(0, reach - 22);
+    const gap = 43;
+    const scroll = (time * (42 + t * 30)) % gap;
+    ctx.strokeStyle = '#ff8aa7';
+    ctx.lineWidth = 1.1;
+    for (let d = 16 + scroll; d < span; d += gap) {
+      const px = e.x + dirX * d;
+      const py = e.y + dirY * d;
+      const size = 3 + 1.8 * t;
+      ctx.globalAlpha = (0.16 + t * 0.3) * (0.72 + 0.28 * Math.sin(time * 6 + d * 0.11));
+      ctx.beginPath();
+      ctx.moveTo(px - sideX * size, py - sideY * size);
+      ctx.lineTo(px + dirX * size * 1.7, py + dirY * size * 1.7);
+      ctx.lineTo(px + sideX * size, py + sideY * size);
+      ctx.stroke();
+    }
+
+    // 末端的横括弧就是它实际会停下的地方；墙前与空地上的长度仍是同一个 `reach`。
+    ctx.globalAlpha = 0.34 + 0.38 * t;
+    ctx.strokeStyle = '#ffd0de';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(endX - sideX * 6.5, endY - sideY * 6.5);
+    ctx.lineTo(endX + sideX * 6.5, endY + sideY * 6.5);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.3 + 0.5 * t;
+    ctx.strokeStyle = '#ff5a86';
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.arc(e.x, e.y, r * (1.35 + t * 0.6), 0, TAU);
     ctx.stroke();
