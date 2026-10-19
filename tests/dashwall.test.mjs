@@ -122,6 +122,35 @@ function deepest(game, p, frames, wall, probe) {
   return deepestPen;
 }
 
+/** 画一遍场上的刺脊，只取那条从它脚下出发的蓄力预警线。 */
+function lancerLine(game, walls) {
+  const segments = [];
+  let last = null;
+  const gradient = { addColorStop() {} };
+  const ctx = new Proxy(
+    {},
+    {
+      get(target, key) {
+        if (key === 'moveTo') return (x, y) => { last = [x, y]; };
+        if (key === 'lineTo') return (x, y) => { segments.push([...(last ?? []), x, y]); };
+        if (key === 'createRadialGradient' || key === 'createLinearGradient' || key === 'createPattern') {
+          return () => gradient;
+        }
+        if (key === 'measureText') return () => ({ width: 6 });
+        if (key === 'getTransform') return () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+        if (key in target) return target[key];
+        return () => {};
+      },
+      set(target, key, value) {
+        target[key] = value;
+        return true;
+      },
+    },
+  );
+  game.enemies.draw(ctx, 0, 0, 0, undefined, walls);
+  return segments.filter(([x0, y0]) => Math.abs(x0) < 1e-9 && Math.abs(y0) < 1e-9);
+}
+
 test('正面撞墙：这次冲刺当场收掉，有声、有尘，人没被挤进墙里', async (t) => {
   const { game, p, sounds } = await open(t, 'head');
   const wall = BARRIER();
@@ -229,4 +258,26 @@ test('斜着擦上去照旧滑过去：前进量与空地那一发逐位相同�
   assert.ok(slant.dy > 0 && slant.dy < free.dy, `y 方向该被墙截住（空地 ${free.dy.toFixed(2)} → 撞墙 ${slant.dy.toFixed(2)}）`);
   assert.equal(pen, 0, `斜擦也不许陷进墙里（实测最深 ${pen.toFixed(3)}）`);
   assert.ok(!slant.sounds.includes('bash'), `斜着擦过去还在往前走，不该响（响了 ${JSON.stringify(slant.sounds)}）`);
+});
+
+test('刺脊的蓄力预警线也停在墙面上：墙后不画，墙旁与无墙逐位不变', async (t) => {
+  const { game } = await open(t, 'chargeLine');
+  game.enemies.clear();
+  const lancer = game.enemies.spawn('lancer', 0, 0, 1, 1);
+  lancer.angle = 0;
+  lancer.stateTimer = 0.3;
+  lancer.spawnTimer = 0;
+
+  const lengthOf = (walls) => {
+    const line = lancerLine(game, walls).find(([x0, y0]) => Math.abs(x0) < 1e-9 && Math.abs(y0) < 1e-9);
+    assert.ok(line, '应画出那条从刺脊脚下出发的预警线');
+    return line[2] - line[0];
+  };
+  const opened = lengthOf([]);
+  const walled = lengthOf([{ x: 100, y: -200, w: 30, h: 400 }]);
+  const beside = lengthOf([{ x: 0, y: 180, w: 400, h: 30 }]);
+
+  assert.ok(Math.abs(opened - 340) < 1e-9, `无墙时预警线该画满 340px（实测 ${opened}）`);
+  assert.ok(Math.abs(walled - 100) < 1e-9, `墙后那段不该画出来（实测停在 ${walled}px）`);
+  assert.equal(beside, opened, '墙在旁边时预警线应逐位不变');
 });

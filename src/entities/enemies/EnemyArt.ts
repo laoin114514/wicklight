@@ -4,6 +4,8 @@
  */
 import type { Enemy } from './Enemy';
 import { AFFIX_MAP } from '../../data/affixes';
+import { rayWalls } from '../../systems/CollisionSystem';
+import type { Rect } from '../../systems/LevelGen';
 
 const TAU = Math.PI * 2;
 
@@ -578,7 +580,14 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
   }
 }
 
-export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number, px: number, py: number): void {
+export function drawEnemy(
+  ctx: CanvasRenderingContext2D,
+  e: Enemy,
+  time: number,
+  px: number,
+  py: number,
+  walls: readonly Rect[] = [],
+): void {
   const r = e.radius;
   const id = e.defId;
   // 首领的血肉压得更暗，靠轮廓与光效而不是整体高亮来表现压迫感
@@ -675,6 +684,9 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
 
   if (e.def.behavior === 'charge' && e.stateTimer > 0) {
     const t = 1 - e.stateTimer / 0.6;
+    // v101：预警线是"它这一下会冲到哪儿"，而冲锋本身会撞停在墙面上（v84）。
+    // 线画满 340px 会穿过墙，给一个实际到不了的承诺；和光矛 / 抽油线一样只画到墙面。
+    const reach = rayWalls(e.x, e.y, Math.cos(e.angle), Math.sin(e.angle), 340, walls);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.3 + 0.5 * t;
@@ -683,7 +695,7 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     ctx.setLineDash([12, 9]);
     ctx.beginPath();
     ctx.moveTo(e.x, e.y);
-    ctx.lineTo(e.x + Math.cos(e.angle) * 340, e.y + Math.sin(e.angle) * 340);
+    ctx.lineTo(e.x + Math.cos(e.angle) * reach, e.y + Math.sin(e.angle) * reach);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath();
@@ -700,7 +712,33 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 10]);
     ctx.beginPath();
-    ctx.arc(e.x, e.y, 210, 0, TAU);
+    const radius = 210;
+    // v102：速度光环已经只增益墙这一侧（v99），虚线却还画满整圆。
+    // 这圈线是"它能照顾到哪儿"的承诺，得和光照一样停在墙面上：
+    // 用 72 个角度采样问同一句 `rayWalls`，只把可见的连续区间画成弧。
+    const segments = 72;
+    const visible: boolean[] = [];
+    for (let i = 0; i < segments; i += 1) {
+      const a = ((i + 0.5) / segments) * TAU;
+      visible.push(rayWalls(e.x, e.y, Math.cos(a), Math.sin(a), radius, walls) >= radius);
+    }
+    if (visible.every(Boolean)) {
+      ctx.arc(e.x, e.y, radius, 0, TAU);
+    } else {
+      for (let i = 0; i < segments;) {
+        if (!visible[i]) {
+          i += 1;
+          continue;
+        }
+        let end = i;
+        while (end + 1 < segments && visible[end + 1]) end += 1;
+        const a0 = (i / segments) * TAU;
+        const a1 = ((end + 1) / segments) * TAU;
+        ctx.moveTo(e.x + Math.cos(a0) * radius, e.y + Math.sin(a0) * radius);
+        ctx.arc(e.x, e.y, radius, a0, a1);
+        i = end + 1;
+      }
+    }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
@@ -711,6 +749,10 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
     const dy = py - e.y;
     const d = Math.hypot(dx, dy);
     if (d < 460) {
+      // v98：抽油已经停在墙面上（v97），画出来的那根线也得停在同一处。
+      // `rayWalls` 与 `wallBetween` 用的是同一条线段：1 = 一路通到玩家，
+      // 小于 1 就是先撞上了墙，线只画到墙面为止。
+      const reach = rayWalls(e.x, e.y, dx, dy, 1, walls);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.34 + 0.16 * Math.sin(time * 9);
@@ -719,7 +761,7 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, time: number,
       ctx.setLineDash([7, 9]);
       ctx.beginPath();
       ctx.moveTo(e.x, e.y);
-      ctx.lineTo(px, py);
+      ctx.lineTo(e.x + dx * reach, e.y + dy * reach);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();

@@ -56,6 +56,9 @@ async function open(t, tag = '') {
   }
   game.enemies.clear();
   game.projectiles.clear();
+  // 这一份量的是"脉冲跟着灯火走多远"，不是墙把哪一段吃掉（v104 的可见弧另有
+  // `tests/selfwall.test.mjs`）；随机地图上偶尔横着一堵墙，会让整圆读数直接变成 0。
+  game.level.walls.length = 0;
   game.player.x = 0;
   game.player.y = 0;
   game.player.stats.maxHp = 1e6;

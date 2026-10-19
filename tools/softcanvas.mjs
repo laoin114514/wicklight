@@ -317,6 +317,8 @@ class Ctx2D {
     this.textBaseline = 'alphabetic';
     this.path = [];
     this.cur = null;
+    /** `clip()` 之后的设备像素多边形；空数组 = 不裁。多个 clip 取交集。 */
+    this.clipPolys = [];
   }
 
   get __data() {
@@ -375,6 +377,7 @@ class Ctx2D {
       font: this.font,
       textAlign: this.textAlign,
       textBaseline: this.textBaseline,
+      clipPolys: this.clipPolys.slice(),
     });
   }
 
@@ -391,6 +394,7 @@ class Ctx2D {
     this.font = s.font;
     this.textAlign = s.textAlign;
     this.textBaseline = s.textBaseline;
+    this.clipPolys = s.clipPolys;
   }
 
   /** CSS 坐标 → 设备像素（含超采样倍率）。 */
@@ -560,6 +564,23 @@ class Ctx2D {
     data[i + 3] = oa * 255;
   }
 
+  /** 像素中心是否在每一层 clip 多边形里（裁剪路径按并集填充，多次 clip 取交集）。 */
+  __inClip(x, y) {
+    if (!this.clipPolys.length) return true;
+    for (const poly of this.clipPolys) {
+      let hit = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+        const xi = poly[i][0];
+        const yi = poly[i][1];
+        const xj = poly[j][0];
+        const yj = poly[j][1];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+      }
+      if (!hit) return false;
+    }
+    return true;
+  }
+
   /** 对若干多边形做非零环绕扫描线填充。 */
   __fillPolys(polys, paint) {
     const alpha = this.globalAlpha;
@@ -619,9 +640,12 @@ class Ctx2D {
         if (px1 > this.__bw - 1) px1 = this.__bw - 1;
         if (solid) {
           const a = p.a * alpha;
-          for (let x = px0; x <= px1; x += 1) this.__blend((rowBase + x) * 4, p.r, p.g, p.b, a);
+          for (let x = px0; x <= px1; x += 1) {
+            if (this.__inClip(x + 0.5, y + 0.5)) this.__blend((rowBase + x) * 4, p.r, p.g, p.b, a);
+          }
         } else {
           for (let x = px0; x <= px1; x += 1) {
+            if (!this.__inClip(x + 0.5, y + 0.5)) continue;
             const i = (rowBase + x) * 4;
             const c = p.colorAt(x, y);
             if (c[3] > 0) this.__blend(i, c[0], c[1], c[2], c[3] * alpha);
@@ -720,6 +744,7 @@ class Ctx2D {
     const sd = img.__data;
     for (let y = y0; y <= y1; y += 1) {
       for (let x = x0; x <= x1; x += 1) {
+        if (!this.__inClip(x + 0.5, y + 0.5)) continue;
         const q = pt(inv, x + 0.5, y + 0.5);
         const u = (q[0] - dx) / dw;
         const v = (q[1] - dy) / dh;
@@ -809,11 +834,35 @@ class Ctx2D {
   }
 
   getImageData(x, y, w, h) {
-    return { width: w, height: h, data: new Uint8ClampedArray(Math.max(1, w * h * 4)) };
+    const iw = Math.max(0, w | 0);
+    const ih = Math.max(0, h | 0);
+    const data = new Uint8ClampedArray(Math.max(1, iw * ih * 4));
+    const ss = this.__ss;
+    const src = this.__data;
+    // 坐标跟绘制 API 一样按逻辑像素算；超采样画布上取每个逻辑像素中心那一颗。
+    for (let py = 0; py < ih; py += 1) {
+      const sy = Math.floor((y + py + 0.5) * ss);
+      if (sy < 0 || sy >= this.__bh) continue;
+      for (let px = 0; px < iw; px += 1) {
+        const sx = Math.floor((x + px + 0.5) * ss);
+        if (sx < 0 || sx >= this.__bw) continue;
+        const si = (sy * this.__bw + sx) * 4;
+        const di = (py * iw + px) * 4;
+        data[di] = src[si];
+        data[di + 1] = src[si + 1];
+        data[di + 2] = src[si + 2];
+        data[di + 3] = src[si + 3];
+      }
+    }
+    return { width: iw, height: ih, data };
   }
 
   putImageData() {}
-  clip() {}
+  clip() {
+    const polys = this.path.filter((s) => s.pts.length >= 3).map((s) => s.pts.map((p) => [p[0], p[1]]));
+    // 空路径在 Canvas 里会把后续绘制全裁掉；用一条退化的多边形表示"什么都不剩"。
+    this.clipPolys = polys.length ? this.clipPolys.concat(polys) : [[]];
+  }
 }
 
 function circlePoly(c, r) {

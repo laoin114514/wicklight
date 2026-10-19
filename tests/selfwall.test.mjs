@@ -9,7 +9,7 @@
  * 墙在这两件身上一个字节都改不了。
  *
  * 这一版给它们补上"看得见"：一趟光从你身上出去，一堵墙后面那截是没有的。
- * 七项钉的是七件事，前六项各自都有**对照组**（撤掉墙 / 墙挪到旁边 / 人换到墙的另一边）：
+ * 八项钉的是八件事，前六项各自都有**对照组**（撤掉墙 / 墙挪到旁边 / 人换到墙的另一边）：
  *   1. 燎灯隔着墙 0.0；撤掉墙照旧挨满，"墙在旁边"与无墙**逐位相同**；
  *   2. 环形火环同一套四条；
  *   3. 墙只吃掉它背后那一段：两只怪一上一下，只挡上面那只；而且「旺火」的人头**只数照得到的**；
@@ -18,6 +18,8 @@
  *   6. 燎野（燎灯的进化）走同一条规矩；
  *   7. **钉子**：燃爆照旧不看墙（它是炸出去的一下，不是照过去的一条光）——
  *      要把它也接进墙的规矩，先改这一条。
+ *   8. v104 把这一拍的**画面**也接上同一句视线：有墙时只画可见弧，墙后不再亮一整圈；
+ *      无墙仍走原来的整圆分支。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -212,6 +214,83 @@ test('燎野（燎灯的进化）走同一条规矩', async (t) => {
   const wildWall = measure(game, p, [[-280, 0]], [WALL], { weapon: 'aura_wild' })[0];
   assert.ok(wildOpen > 0, `燎野撤墙要挨得到：${wildOpen}`);
   assert.equal(wildWall, 0, `燎野也照不到墙后面：${wildWall}`);
+});
+
+test('那一圈脉冲也只画墙这一侧（无墙仍是整圆）', async (t) => {
+  const { game, p } = await open(t, 'pulse');
+  const originalFull = game.particles.shockwave;
+  const originalArc = game.particles.shockwaveArc;
+  const originalBurst = game.particles.burst;
+  let full = 0;
+  const arcs = [];
+  const bursts = [];
+  game.particles.shockwave = (...args) => {
+    full += 1;
+    void args;
+  };
+  game.particles.shockwaveArc = (...args) => {
+    arcs.push([args[5], args[6]]);
+  };
+  game.particles.burst = (...args) => {
+    bursts.push([args[0], args[1]]);
+  };
+  t.after(() => {
+    game.particles.shockwave = originalFull;
+    game.particles.shockwaveArc = originalArc;
+    game.particles.burst = originalBurst;
+  });
+
+  const pulse = (walls) => {
+    game.level.walls.length = 0;
+    for (const w of walls) game.level.walls.push(w);
+    full = 0;
+    arcs.length = 0;
+    bursts.length = 0;
+    arm(p, 'aura');
+    p.x = 0;
+    p.y = 0;
+    p.auraCd = 0;
+    p.updateWeapons(dt, game.playerCtx(), null);
+    return { full, arcs: arcs.slice(), bursts: bursts.slice() };
+  };
+
+  const opened = pulse([]);
+  assert.equal(opened.full, 1, `无墙时仍应是一整圆：${opened.full} 段整圆`);
+  assert.equal(opened.arcs.length, 0, '无墙时不该改走弧段分支');
+  assert.equal(opened.bursts.length, 5, `无墙时五粒边缘火星不该少：${opened.bursts.length}`);
+
+  const walled = pulse([WALL]);
+  assert.equal(walled.full, 0, '有墙时不许再画整圆');
+  assert.ok(walled.arcs.length >= 1, '墙这一侧应至少留下一段可见弧');
+  const span = walled.arcs.reduce((sum, [a0, a1]) => sum + (a1 - a0), 0);
+  assert.ok(span < Math.PI * 2 - 0.5, `墙后那一段弧不该画出来（实际 ${span.toFixed(2)} 弧度）`);
+  assert.ok(walled.arcs.every(([a0, a1]) => !(a0 <= Math.PI && Math.PI <= a1)), '墙所在角度 π 不该落在任何可见弧里');
+  assert.equal(walled.bursts.length, 5, `墙这一侧仍应固定五粒边缘火星：${walled.bursts.length}`);
+  assert.ok(walled.bursts.every(([x]) => x > -40), `边缘火星不该落在墙后：${JSON.stringify(walled.bursts)}`);
+
+  const beside = pulse([BESIDE]);
+  assert.equal(beside.full, 1, '墙在旁边时应退回原来的整圆');
+  assert.deepEqual(beside.arcs, [], '墙在旁边时不该画弧段');
+
+  // 再把入口真的跑一遍：弧段不是只停在数据里，Canvas 上得到的也必须是 `arc(a0, a1)`。
+  game.particles.clear();
+  game.particles.shockwaveArc = originalArc;
+  originalArc.call(game.particles, 0, 0, '#fff', 100, 0.2, 0.3, 1.1);
+  const drawn = [];
+  const ctx = new Proxy({}, {
+    get(target, key) {
+      if (key === 'arc') return (x, y, r, a0, a1) => drawn.push([x, y, r, a0, a1]);
+      if (key in target) return target[key];
+      return () => {};
+    },
+    set(target, key, value) {
+      target[key] = value;
+      return true;
+    },
+  });
+  game.particles.draw(ctx);
+  assert.equal(drawn.length, 1, `应只画一段弧：${drawn.length}`);
+  assert.ok(Math.abs(drawn[0][3] - 0.3) < 1e-9 && Math.abs(drawn[0][4] - 1.1) < 1e-9, `弧段角度应原样落到 Canvas：${drawn[0]}`);
 });
 
 test('钉子：燃爆照旧不看墙（它是炸出去的一下，不是照过去的一条光）', async (t) => {

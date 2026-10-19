@@ -26,6 +26,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'vortex_payoff', name: '收网', blurb: '一次「旋灯」收网，收尾那一下同时打到 10 只敌人。', embers: 40, group: '战斗' },
   { id: 'pour_douse', name: '火上浇油', blurb: '往自己倒出来的那片火上再浇一瓢，那一刻火里已经有 5 只敌人在烧。', embers: 40, group: '战斗' },
   { id: 'aura_crowd', name: '照单全收', blurb: '一次「燎灯」的脉冲同时烤到 8 只敌人。', embers: 40, group: '战斗' },
+  { id: 'wallfire_crowd', name: '一壁五焚', blurb: '一次「壁火」同时烧到 5 只敌人。', embers: 40, group: '战斗' },
   // 「弃灯」这一族（v83）：一条量"它真的引来了一群"（门槛 8 只，见 data/lamp.ts 的 `crowd`），
   // 一条量"收网那一下炸到了几只"（「焚灯」）。两条都数**只数**，不数伤害——
   // 伤害要乘灯火（满油 ≈ 1.35 倍、烧干 ≈ 0.65 倍），同一个操作能差两倍，只数才不会飘。

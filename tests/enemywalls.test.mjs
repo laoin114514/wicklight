@@ -486,6 +486,13 @@ test('撞晕的怪还是一具身体：站在它身上照样挨咬', async (t) =
   run(game, 1);
   assert.ok(p.hp < hp, `发呆的怪贴着你还是要咬（hp ${hp} → ${p.hp}）`);
 
+  // 灯火贴着怪烧的那一下也带 40 击退（v111 起会真的推动）；这一条量的是"发呆时 AI 不走"，
+  // 所以先把这一口的冲量读掉、再把灯火接触的冷却拉长，别让自动攻击混进来。
+  e.knockVx = 0;
+  e.knockVy = 0;
+  e.knockTimer = 0;
+  p.orbit.hitCooldown.set(e.id, 1e9);
+
   // 对照：它发呆的这几帧里一步都不许挪（发呆就是发呆）
   const x0 = e.x;
   const y0 = e.y;

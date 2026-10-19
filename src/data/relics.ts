@@ -278,7 +278,7 @@ export const RELICS: RelicDef[] = [
   { id: 'lampburst', tribe: 'flame', name: '焚灯', blurb: '「分灯」那盏灯被吃掉时炸开一圈：伤害 34、半径 120，并给圈里的人点上两层灼烧——它本来就只打算引它们过来。', icon: '🔥', color: '#ff7a2f', rarity: 'rare', price: 75, mods: { lampBurst: 1 } },
   { id: 'lampshade', tribe: 'lamp', name: '灯罩', blurb: '「分灯」引怪半径 +40%（340 → 476px）、多亮 4 秒（11 → 15 秒）——一盏灯照得更宽，也站得更久。', icon: '🏮', color: '#ffe27a', rarity: 'rare', price: 75, mods: { lampLure: 0.4, lampSpan: 4 } },
   { id: 'lampember', tribe: 'oil', name: '拾灯', blurb: '「分灯」被吃掉的那一刻，正在朝它走的每一只回 0.6% 灯油（一盏最多收回代价的六成）——引的人越多，这盏灯越便宜。', icon: '🫗', color: '#ffd24e', rarity: 'common', price: 55, mods: { lampEmber: 0.006 } },
-  { id: 'lamphaze', tribe: 'shade', name: '灯晕', blurb: '朝弃灯走的那几只走在它的光里，移速 -30%——灯替你拖住的那几秒，就是你拉开的那几步。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { lampSnare: 0.3 } },
+  { id: 'lamphaze', tribe: 'shade', name: '灯晕', blurb: '朝弃灯走的那几只走在它的光里，移速 -30%；墙后的那一片不算光里——灯替你拖住的那几秒，就是你拉开的那几步。', icon: '🌫️', color: '#9a8cff', rarity: 'rare', price: 70, mods: { lampSnare: 0.3 } },
 
   // ── 「拨芯」这条线：把"把火压小"变成一套牌 ──
   // 拨芯（v69）交出去的只是一个**动词**：按一下省掉 65% 的油，代价是灯火半径与火力一起缩。
@@ -292,6 +292,7 @@ export const RELICS: RelicDef[] = [
   { id: 'wickember', tribe: 'flame', name: '暗火', blurb: '拨着芯时每次命中都为敌人添一层灼烧——火不在灯里，拨芯拨不到它。', icon: '🔥', color: '#ff7a2f', rarity: 'epic', price: 95, mods: { wickEmber: 1 } },
   { id: 'wickstride', tribe: 'lamp', name: '夜步', blurb: '拨着芯时移动速度 +12%——火矮下去了，脚步反而放得开。', icon: '👣', color: '#7be0ff', rarity: 'common', price: 45, mods: { wickStride: 0.12 } },
   { id: 'wickthrift', tribe: 'oil', name: '守芯', blurb: '拨着芯时灯油自己省回来：每秒 +0.3%（标准灯火下净烧速 0.63 → 0.33%/秒）。', icon: '🕯️', color: '#ffd24e', rarity: 'common', price: 50, mods: { wickThrift: 0.003 } },
+
 ];
 
 export const RELIC_MAP: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));

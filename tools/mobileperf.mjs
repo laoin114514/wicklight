@@ -254,6 +254,8 @@ const instrument = () => {
         scale: r.scale,
         lights: g.light.lastLightCount,
         lit: g.light.lastLitCount,
+        shadowed: g.light.lastShadowedCount,
+        visibilityLookups: g.light.lastVisibilityLookups,
         lightTex: typeof g.light.textureScale === 'number' ? +g.light.textureScale.toFixed(2) : 1,
         prof: g.profile
           ? `light${g.profile.lightScale} bloom${g.profile.bloomDivisor}x${g.profile.bloomPasses} detail${g.profile.detailScale} dens${g.profile.particleScale}`
@@ -450,7 +452,10 @@ try {
   console.log(`\n帧数 ${out.frames} · 平均 ${out.avg}ms (${out.fps}fps) · p50 ${out.p50} · p95 ${out.p95} · 最慢 ${out.max}`);
   console.log(`画面 ${out.info.canvas} (${out.info.mp}MPx) dpr ${out.info.dpr} scale ${out.info.scale}`);
   console.log(`[环境] maxDpr ${out.info.maxDpr} · 环境 dpr ${out.info.dprEnv} · 消融 "${out.info.killEnv}"`);
-  console.log(`[档位] ${out.info.prof} · 光照贴图 ×${out.info.lightTex} · 帧率上限 ${out.info.cap || '不限'} · 落屏光源 ${out.info.lit}/${out.info.lights}`);
+  console.log(
+    `[档位] ${out.info.prof} · 光照贴图 ×${out.info.lightTex} · 帧率上限 ${out.info.cap || '不限'} · 落屏光源 ${out.info.lit}/${out.info.lights}` +
+      ` · 灯影 ${out.info.shadowed}（多边形 ${out.info.visibilityLookups}）`,
+  );
   console.log(`场上：${out.info.enemies} 敌 / ${out.info.particles} 粒子 / ${out.info.lights} 光源 / ${out.info.floaters} 飘字`);
   console.log('\n每帧阶段耗时（ms）：');
   for (const k of known) {

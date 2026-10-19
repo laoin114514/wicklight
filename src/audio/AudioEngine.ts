@@ -233,6 +233,12 @@ export class AudioEngine {
         //（一轮弹幕擦过去五六下，响成一片就变成噪音了）。
         if (this.throttle('graze', 75)) this.tone(1580, 0.06, 'sine', 0.032, 2100);
         break;
+      case 'wallfire':
+        // 壁火：先是一记石墙上的闷撞，再有一层往上窜的火焰亮音——它必须和普通撞墙的 `bash`
+        // 分得开：`bash` 是"这次冲刺没了"，而这一声是"这一下换来了火"。
+        this.noise(0.3, 0.12, 480, 0.65);
+        this.tone(180, 0.34, 'sawtooth', 0.09, 520);
+        break;
       case 'blaze':
         // 灯焰高涨：火"腾"地一下窜起来——低频的爆 + 往上扫的亮音
         this.noise(0.3, 0.14, 1400, 0.6);

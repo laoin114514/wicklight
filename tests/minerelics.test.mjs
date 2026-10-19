@@ -314,8 +314,9 @@ test('绊线：踩响的那一圈被拖住一半，而圈外的怪一点没慢',
     }
     assert.equal(game.mines.length, 0, '追兵走进触发圈，那颗雷该响了');
     const shot = { slow: chaser.slowFactor, timer: chaser.slowTimer, farTimer: far.slowTimer };
-    // 再跑 1.2 秒，量它**自己走了多远**。两边的击退是一模一样的（同一颗雷、同一个位置），
-    // 所以这个位移差就是"脚力差"——也就是这一件买到的东西，而不是位置带来的巧合。
+    // 先等两边的击退冲量走完（v111 起它会真的推动），再量接下来 1.2 秒**自己走了多远**。
+    // 两边的脚力差才是这一件买到的东西；把固定击退量混进同一段位移，比值就不再是 0.5。
+    run(game, 9);
     const x0 = chaser.x;
     const y0 = chaser.y;
     run(game, 72);

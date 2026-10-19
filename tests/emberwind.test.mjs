@@ -256,3 +256,31 @@ test('余烬风：熄了的灯台不扑火，站远了也不扑', async (t) => {
   run(far, 0, 0, 3);
   assert.equal(far.emberStacks, EW.stackMax, `站在 ${EW.pyreRadius}px 之外不该扑火`);
 });
+
+test('余烬风：灯台的光被墙挡住时，不抖层（v105）', async (t) => {
+  const game = await open(t, 'pyre-wall');
+  const { data } = globalThis.window.__WICKLIGHT__;
+  const EW = data.emberwind;
+  game.emberwindTimer = 0;
+  game.embers.length = 0;
+  // 灯台在玩家右边 120px，墙正好立在两者之间：画面上这一段光被墙裁掉，
+  // 规则也不该再把玩家算进"灯台的光里"。
+  pyreAt(game, EW.pyreRadius - 40, 0);
+  game.player.x = 0;
+  game.player.y = 0;
+  game.emberStacks = EW.stackMax;
+  game.level.walls.push({ x: 50, y: -80, w: 20, h: 160 });
+
+  run(game, 0, 0, 1.2);
+  assert.equal(game.emberPyreNear, false, '墙后不算站在灯台的光里');
+  assert.equal(game.emberStacks, EW.stackMax, '墙后的层数不该被灯台抖掉');
+
+  // 墙挪到旁边：玩家与灯台在同一侧，庇护照旧生效（证明裁的是中间那堵墙，
+  // 不是"地图上只要有一堵墙就不庇护"）。
+  game.level.walls.length = 0;
+  game.level.walls.push({ x: 0, y: 80, w: 140, h: 20 });
+  game.emberStacks = EW.stackMax;
+  run(game, 0, 0, 1.2);
+  assert.equal(game.emberPyreNear, true, '墙在旁边时仍在灯台的光里');
+  assert.equal(game.emberStacks, EW.stackMax - 1, '墙旁边每秒照旧抖掉一层');
+});

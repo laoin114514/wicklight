@@ -1,4 +1,5 @@
 import { Pool } from '../../core/Pool';
+import { isLitAt } from '../../core/LightRules';
 import { ENEMY_MAP } from '../../data/enemies';
 import { HUNT } from '../../data/hunt';
 import type { EnemyDef } from '../../types';
@@ -15,6 +16,20 @@ import type { Rect } from '../../systems/LevelGen';
  * 撞一次墙发呆 0.55s，等于它每次撞墙白丢自己五分之一的出手机会。
  */
 const WALL_BASH_STUN = 0.55;
+
+/**
+ * 被武器 / 壁火 / 伏灯**推**进墙里的那一下（v111）。
+ *
+ * v110 之前，所有 `knockback` 都写进 `vx/vy`，而 `behave` 下一帧会按追击方向重算速度——
+ * 实测一只速度 0 的靶挨了 200 击退之后位移是 **0**。现在冲量单独存、走 0.14 秒：
+ * 它不再跟 AI 争夺同一个速度字段，也不会一帧就把一段位移走完。
+ * 撞墙这一段只给 0.36 秒硬直（比刺脊自己撞墙的 0.55 短）：这是玩家用位置换来的，
+ * 但触发它的成本比"骗一次冲锋"低，所以收益也该小一点。
+ */
+const KNOCK_SPAN = 0.14;
+const KNOCK_WALL_MIN = 18;
+const KNOCK_WALL_STUN = 0.36;
+const KNOCK_WALL_CD = 0.9;
 
 /**
  * 贴着墙磨了这么久还没挪窝就算"卡死"，下帧换个方向重来（秒）。
@@ -156,6 +171,18 @@ export interface Enemy {
   affix: string | null;
   /** 来自「引灯」/「疾风」光环的速度倍率，每帧重算 */
   buff: number;
+  /**
+   * 被击退时那一段**独立于 AI 走位**的冲量（px/s）。
+   *
+   * 不能直接写进 `vx/vy`：`behave` 每帧都会按追击方向重算速度，下一帧就把那一下盖掉了。
+   * v111 之前所有武器的 `knockback` 实际位移都是 0（`tests/knockwall.test.mjs` 钉着）。
+   */
+  knockVx: number;
+  knockVy: number;
+  /** 冲量还剩多久（秒）。走完就归零，AI 照旧接管。 */
+  knockTimer: number;
+  /** 两次"撞进墙里"的硬直之间至少隔多久，防止贴墙连击把怪永久按住。 */
+  knockWallCd: number;
   /** 掠影记账：这只怪下一次能记「掠影」还要等多久（同一只怪不许每帧都算一次） */
   grazeCd: number;
   /**
@@ -196,6 +223,8 @@ export interface LightCtx {
   px: number;
   py: number;
   lightRadius: number;
+  /** 场上的墙。省略 = 还没有墙可挡（台架与老调用点仍能直接构造这个上下文）。 */
+  walls?: readonly Rect[];
 }
 
 export interface EnemyContext {
@@ -356,6 +385,10 @@ export class EnemySystem {
     dr: 0,
     affix: null,
     buff: 1,
+    knockVx: 0,
+    knockVy: 0,
+    knockTimer: 0,
+    knockWallCd: 0,
     hunt: false,
     huntSpeed: 1,
     grazeCd: 0,
@@ -410,6 +443,10 @@ export class EnemySystem {
     e.dr = 0;
     e.affix = null;
     e.buff = 1;
+    e.knockVx = 0;
+    e.knockVy = 0;
+    e.knockTimer = 0;
+    e.knockWallCd = 0;
     e.hunt = false;
     e.huntSpeed = 1;
     e.grazeCd = 0;
@@ -422,9 +459,7 @@ export class EnemySystem {
   }
 
   private isLit(e: Enemy, lc: LightCtx): boolean {
-    const dx = e.x - lc.px;
-    const dy = e.y - lc.py;
-    return dx * dx + dy * dy <= lc.lightRadius * lc.lightRadius;
+    return isLitAt(lc.px, lc.py, lc.lightRadius, e.x, e.y, lc.walls);
   }
 
   isVulnerable(e: Enemy, lc: LightCtx): boolean {
@@ -441,8 +476,9 @@ export class EnemySystem {
     e.hitFlash = 0.12;
     if (knockback > 0) {
       const d = Math.hypot(knockX, knockY) || 1;
-      e.vx += (knockX / d) * knockback;
-      e.vy += (knockY / d) * knockback;
+      e.knockVx = (knockX / d) * knockback;
+      e.knockVy = (knockY / d) * knockback;
+      e.knockTimer = KNOCK_SPAN;
     }
     if (e.hp <= 0) {
       this.ctxRef?.onDeath(e);
@@ -450,6 +486,50 @@ export class EnemySystem {
       return true;
     }
     return false;
+  }
+
+  /**
+   * 把击退冲量走完：独立于 `behave` 的那份速度，所以 AI 每帧重算也不会把它抹掉。
+   *
+   * 只有冲量真的**顶向墙面**（法线反方向分量够大）才触发硬直；贴着墙平行推过去
+   * 仍然只是滑行。冷却按只算一次，免得高频武器在对墙位置把一只怪永久按在墙上。
+   */
+  private stepKnockback(e: Enemy, dt: number, ctx: EnemyContext): void {
+    if (e.knockWallCd > 0) e.knockWallCd = Math.max(0, e.knockWallCd - dt);
+    if (e.knockTimer <= 0) return;
+
+    const stepX = e.knockVx * dt;
+    const stepY = e.knockVy * dt;
+    const walls = ctx.walls;
+    let hit: { nx: number; ny: number } | null = null;
+    if (walls && walls.length > 0) {
+      const res = slideStep(e.x, e.y, e.radius, stepX, stepY, walls);
+      e.x = res.x;
+      e.y = res.y;
+      if (res.hit) hit = { nx: res.nx, ny: res.ny };
+    } else {
+      e.x += stepX;
+      e.y += stepY;
+    }
+    e.knockTimer = Math.max(0, e.knockTimer - dt);
+
+    if (hit && e.knockWallCd <= 0) {
+      const intoWall = -(e.knockVx * hit.nx + e.knockVy * hit.ny);
+      if (intoWall >= KNOCK_WALL_MIN) {
+        e.wallStun = Math.max(e.wallStun, KNOCK_WALL_STUN);
+        e.knockWallCd = KNOCK_WALL_CD;
+        e.dashing = 0;
+        e.dashVx = 0;
+        e.dashVy = 0;
+        ctx.burst(e.x, e.y, 8, '#cbd4e8', { speed: 110, size: 2.6, life: 0.4 });
+        ctx.shake(0.1);
+        ctx.bash?.();
+      }
+    }
+    if (e.knockTimer <= 0) {
+      e.knockVx = 0;
+      e.knockVy = 0;
+    }
   }
 
   /**
@@ -501,7 +581,13 @@ export class EnemySystem {
       const rr2 = aura * aura;
       for (const o of this.pool.all) {
         if (!o.active || o === e) continue;
-        if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= rr2) o.buff = Math.max(o.buff, 1.35);
+        // v99：引灯提的是灯、疾风提的是风，但两者都是「光环」。墙已经把引灯的光裁到了
+        // 同一侧，速度光环就不该隔墙继续传给墙后的那几只——否则玩家会看到墙后没光、
+        // 怪却照样贴着引灯加速。只在真的过了半径后才问一次线段，普通怪一帧的账不变。
+        const d2 = (o.x - e.x) ** 2 + (o.y - e.y) ** 2;
+        if (d2 > rr2) continue;
+        if (ctx.walls && ctx.walls.length > 0 && wallBetween(e.x, e.y, o.x, o.y, ctx.walls)) continue;
+        o.buff = Math.max(o.buff, 1.35);
       }
     }
     // 「蚀油」：贴着你时持续抽走灯油，逼你拉开距离
@@ -510,6 +596,8 @@ export class EnemySystem {
       const dx = ctx.px - e.x;
       const dy = ctx.py - e.y;
       if (dx * dx + dy * dy > 150 * 150) continue;
+      // 同一句也管「蚀油」：它是贴在身边抽，墙仍然是墙。
+      if (ctx.walls && ctx.walls.length > 0 && wallBetween(e.x, e.y, ctx.px, ctx.py, ctx.walls)) continue;
       ctx.snuffLight(dt * 0.02);
       if (Math.random() < dt * 5) ctx.burst(ctx.px, ctx.py, 1, '#c98fe8', { speed: 46, size: 2, life: 0.45 });
     }
@@ -517,6 +605,7 @@ export class EnemySystem {
       if (!e.active) continue;
       e.wobble += dt * 4;
       if (e.spawnTimer > 0) e.spawnTimer -= dt;
+      this.stepKnockback(e, dt, ctx);
       if (ctx.regen > 0 && e.hp < e.maxHp) {
         e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ctx.regen * dt);
         if (Math.random() < dt * 1.5) ctx.burst(e.x, e.y, 1, '#8affc1', { speed: 24, size: 2, life: 0.4 });
@@ -606,7 +695,9 @@ export class EnemySystem {
     const pdx = ctx.px - e.x;
     const pdy = ctx.py - e.y;
     const playerDist = lure ? Math.hypot(pdx, pdy) || 1 : d;
-    const lit = this.isLit(e, ctx);
+    // 只有「畏光 / 必须有光」这两类会用到它：普通怪每帧都去问一次墙，
+    // 等于凭空给满场敌人加一遍线段判定。其余行为拿到 false 也不会读。
+    const lit = e.def.lightShy || e.def.requiresLight ? this.isLit(e, ctx) : false;
     let speedMul = slow * e.buff;
     // 循灯：离得越远脚力越足，但**绝对速度不超过 HUNT.ceiling**——"永远追不上走路的你"
     // 是这一条的恒等式（不然就成了"跑不掉"，而不是"不用回头去捡"）。
@@ -791,12 +882,14 @@ export class EnemySystem {
         break;
       }
       case 'siphon': {
-        // 吊在中距离持续抽灯油：站着不动只会越来越黑（循灯时同样不再吊着）
-        const keep = hunt ? 0 : 300;
+        // 吊在中距离持续抽灯油：站着不动只会越来越黑（循灯时同样不再吊着）。
+        // v97：墙后面的那只抽不到油，也不再满足于隔墙吊着——和喷糜者（v90）一样先压上来。
+        const blind = ctx.walls && ctx.walls.length > 0 ? wallBetween(e.x, e.y, ctx.px, ctx.py, ctx.walls) : false;
+        const keep = hunt || blind ? 0 : 300;
         const dir = d > keep + 30 ? 1 : d < keep - 30 ? -1 : 0;
         e.vx = nx * e.speed * speedMul * dir;
         e.vy = ny * e.speed * speedMul * dir;
-        if (playerDist < 460) {
+        if (!blind && playerDist < 460) {
           ctx.snuffLight(dt * 0.025);
           if (Math.random() < dt * 8) ctx.burst(e.x, e.y, 1, '#c98fe8', { speed: 30, size: 2, life: 0.5 });
         }
@@ -1072,6 +1165,7 @@ export class EnemySystem {
     px = 0,
     py = 0,
     view?: { x: number; y: number; halfW: number; halfH: number },
+    walls: readonly Rect[] = [],
   ): void {
     ctx.save();
     // 屏幕外的敌人不必画：每个敌人都要起渐变、描边、画血雾，几十只一起就是几毫秒。
@@ -1088,7 +1182,7 @@ export class EnemySystem {
       }
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
-      drawEnemy(ctx, e, time, px, py);
+      drawEnemy(ctx, e, time, px, py, walls);
     }
     ctx.restore();
   }

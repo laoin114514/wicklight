@@ -51,10 +51,26 @@ export class UIManager implements UIHost {
   private returnState: GameState = 'menu';
   /** 图鉴里正在查看详情的条目（`kind:id`），为空时显示目录。 */
   codexFocus: string | null = null;
+  /** 图鉴搜索词（v113）：只看已发现条目，搜索框本身不会把 ??? 翻出来。 */
+  private codexQuery = '';
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
     this.build();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
+        if (this.game.state !== 'codex' || this.codexFocus) return;
+        const active = document.activeElement as HTMLElement | null;
+        const editing = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+        if (editing) return;
+        if (e.key !== '/' && e.code !== 'Slash' && !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f')) return;
+        const input = this.screen.querySelector('.cx-search__input') as HTMLInputElement | null;
+        if (!input) return;
+        e.preventDefault();
+        input.focus();
+        input.select();
+      });
+    }
   }
 
   private build(): void {
@@ -1368,12 +1384,54 @@ export class UIManager implements UIHost {
       <div class="panel panel--codex panel--vellum">
         <div class="panel__title">图鉴 · ${seen}/${total}</div>
         <div class="cx-bar"><i style="width:${pct}%"></i></div>
+        <label class="cx-search">
+          <input class="cx-search__input" type="search" placeholder="搜索已发现条目…（名称 / 说明 / 数值 · / 聚焦）" aria-label="搜索图鉴" />
+          <span class="cx-search__hit"></span>
+        </label>
         ${sections}
+        <div class="cx-none" hidden>没有找到已发现条目。搜索不会剧透尚未发现的 ???。</div>
         <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
       </div>
     `);
+    const input = this.screen.querySelector('.cx-search__input') as HTMLInputElement | null;
+    const hit = this.screen.querySelector('.cx-search__hit') as HTMLElement | null;
+    const none = this.screen.querySelector('.cx-none') as HTMLElement | null;
+    const applyFilter = () => {
+      const tokens = (input?.value ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      let found = 0;
+      this.screen.querySelectorAll<HTMLElement>('.cx-sec').forEach((section) => {
+        let visible = 0;
+        section.querySelectorAll<HTMLElement>('.cx').forEach((card) => {
+          const locked = card.classList.contains('is-locked');
+          if (!locked) found += 1;
+          const text = (card.textContent ?? '').toLowerCase();
+          const match = tokens.length === 0 ? true : !locked && tokens.every((token) => text.includes(token));
+          card.hidden = !match;
+          if (!match) return;
+          visible += 1;
+          if (!locked) shown += 1;
+        });
+        section.hidden = tokens.length > 0 && visible === 0;
+      });
+      if (hit) hit.textContent = tokens.length ? `找到 ${shown} 个已发现条目` : `${found} 个已发现条目`;
+      if (none) none.hidden = tokens.length === 0 || shown > 0;
+    };
+    if (input) {
+      input.value = this.codexQuery;
+      input.addEventListener('input', applyFilter);
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const first = [...this.screen.querySelectorAll<HTMLElement>('[data-cx]')].find((card) => !card.hidden);
+        if (!first) return;
+        e.preventDefault();
+        first.click();
+      });
+      applyFilter();
+    }
     this.on('[data-act="back"]', () => this.backToOrigin());
     this.onAll('[data-cx]', (el) => {
+      this.codexQuery = input?.value ?? this.codexQuery;
       this.codexFocus = el.dataset.cx as string;
       this.codex();
     });

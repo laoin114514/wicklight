@@ -310,6 +310,38 @@ test('灯晕：被引着的怪走在它的光里慢三成，而一条更狠的�
   );
 });
 
+test('灯晕也认墙：墙后的怪不在光里，墙旁与无墙照旧', async (t) => {
+  const game = await open(t, 'hazeWall');
+  build(game, ['lamphaze']);
+  game.tryPlantLamp();
+  const lamp = { x: game.lamps[0].x, y: game.lamps[0].y };
+
+  const probe = (walls) => {
+    game.level.walls.length = 0;
+    for (const wall of walls) game.level.walls.push(wall);
+    game.enemies.clear();
+    const foe = statue(game, lamp.x + 200, lamp.y);
+    const seen = [];
+    for (let i = 0; i < 3; i += 1) {
+      game.player.hp = 1e6;
+      game.setInput(0, 0, false, false);
+      game.update(1 / 60);
+      seen.push([foe.slowTimer, foe.slowFactor]);
+    }
+    return seen;
+  };
+
+  const opened = probe([]);
+  const walled = probe([{ x: lamp.x + 100, y: lamp.y - 300, w: 30, h: 600 }]);
+  const beside = probe([{ x: lamp.x - 500, y: lamp.y + 180, w: 1000, h: 30 }]);
+
+  assert.ok(opened.every(([timer]) => timer > 0.39), '无墙时灯晕应连续三帧续上减速');
+  assert.ok(opened.every(([, factor]) => Math.abs(factor - 0.7) < 1e-9), '无墙时应慢到七成');
+  assert.deepEqual(walled.map(([timer]) => timer), [0, 0, 0], '墙后不应被续上减速');
+  assert.ok(walled.every(([, factor]) => factor === 0.5), '墙后的减速倍率应保持出生值');
+  assert.deepEqual(beside, opened, '墙在旁边时灯晕应与无墙逐帧一致');
+});
+
 test('空城：一盏灯引来的敌人攒到门槛就解锁；没到就不解锁，而且吹灯客不算', async (t) => {
   const LAMP = LAMP_OF();
   const lure = async (tag, foes) => {

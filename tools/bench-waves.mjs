@@ -37,6 +37,11 @@
  *   · `chaser`——永远压向最近的那一只（一个"赶紧推进"的人）。它的 deadAir 天然低，
  *     但如果连它都要等，那才是真的卡住了（例如怪被墙卡死）。
  * 两个数的差距就是"这段垃圾时间到底怪游戏还是怪玩家"。
+ *
+ * v116 修正 `--stages`：这个开关此前只在"打完第 N 关并进入 victory"时生效，
+ * 而游戏在通关后会自动进补给站、再继续下一关——于是默认的"第一关 8 颗种子"实际会一路
+ * 打到死或打穿四关（holder 曾跑到第 3 关）。现在搭到第 N 关的补给站就收工：
+ * `--stages=1` 真的只量第一关，跨关对照才用 `--stages=4`。
  */
 import { installDomStubs } from '../tests/dom-stubs.mjs';
 
@@ -164,10 +169,17 @@ async function run({ seed, style, stages }) {
       if (e && !realSight(x, y, e.x, e.y)) {
         aimBlocked += 1;
         const md = Math.min(maxDist, requireLight ? game.player.lightRadius + 40 : maxDist);
+        const lc = game.lightCtx();
         let alt = false;
         game.enemies.forEach((o) => {
           if (o === e || alt) return;
-          if ((o.x - x) ** 2 + (o.y - y) ** 2 < md * md && realSight(x, y, o.x, o.y)) alt = true;
+          // 备用目标要能**被索敌选中**：无光者出了灯火那一段（它比普通怪多出的 40px
+          // 搜索余量）不算"看得见"，否则这一栏会把"灯外没解锁的无光者"记成白打。
+          if (
+            (o.x - x) ** 2 + (o.y - y) ** 2 < md * md
+            && realSight(x, y, o.x, o.y)
+            && game.enemies.isVulnerable(o, lc)
+          ) alt = true;
         });
         if (alt) aimWasted += 1;
       }
@@ -230,7 +242,11 @@ async function run({ seed, style, stages }) {
       g.chooseUpgrade(offer);
       return true;
     }
-    if (g.state === 'shop') { g.leaveShop(); return true; }
+    if (g.state === 'shop') {
+      if (g.stageIndex + 1 >= stages) return false;
+      g.leaveShop();
+      return true;
+    }
     if (g.state === 'curse') { g.chooseCurse(g.curseOffers[0].id); return true; }
     if (g.state === 'shrine') { g.leaveShrine(); return true; }
     if (g.state === 'dead' || g.state === 'victory') return false;

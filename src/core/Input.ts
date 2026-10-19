@@ -101,6 +101,11 @@ export class Input {
   private bind(): void {
     if (typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
+      // 图鉴搜索框（v113）这类真正的输入框里，WASD / 空格是打字，不是走位与冲刺。
+      // Esc 例外：玩家在搜索框里也想一键退回图鉴。
+      const target = e.target as HTMLElement | null;
+      const editing = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (editing && e.code !== 'Escape') return;
       const action = this.isAction(e.code);
       if (!action) return;
       if (e.repeat) return;
@@ -121,6 +126,8 @@ export class Input {
         e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       const action = this.isAction(e.code);
       if (!action) return;
       this.held.delete(action);

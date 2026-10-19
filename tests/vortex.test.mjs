@@ -135,6 +135,9 @@ test('旋灯：武器在池里、图鉴收录、进化链闭合', async (t) => {
   assert.ok(m.levels[0].count > v.levels[v.levels.length - 1].count, '漩涡灯一次两盏');
   assert.ok(game.codex.entry('weapon:vortex') && game.codex.entry('weapon:vortex_maelstrom'), '图鉴应收录两件');
   assert.ok(game.codex.entry('mechanic:vortex'), '图鉴应有一条「机制 · 旋灯」');
+  const wallRows = game.codex.entry('mechanic:vortex').rows;
+  assert.ok(wallRows.some(([k, v]) => k === '落在哪' && v.includes('停在墙前')), '机制页要讲落点撞墙会停在墙前');
+  assert.ok(wallRows.some(([k, v]) => k === '拽得多狠' && v.includes('墙这一侧')), '机制页要讲吸力不过墙');
   // 落点与吸力：数据表里该有的都在
   const VORTEX = VORTEX_OF();
   for (const [k, val] of Object.entries(VORTEX)) {
@@ -369,4 +372,80 @@ test('旋灯：升级会真的改数（等级越高，转得越勤、范围越�
   run(game, 2);
   assert.ok(game.vortexes.length > 0, '满级旋灯照样转得起来');
   assert.ok(game.vortexes[0].radius >= v.levels[v.levels.length - 1].radius, '半径用的是满级那一档');
+});
+
+test('旋灯：落点撞墙就停在墙前，不会把灯扔到另一边', async (t) => {
+  const game = await open(t, 'cast-wall');
+  const VORTEX = VORTEX_OF();
+  game.level.walls.length = 0;
+  game.level.walls.push({ x: 800, y: 600, w: 20, h: 200 });
+  const bursts = [];
+  const burst = game.particles.burst.bind(game.particles);
+  game.particles.burst = (...args) => {
+    bursts.push(args);
+    burst(...args);
+  };
+  assert.equal((game.save.tips ?? []).includes('vortex:wall'), false, '还没撞过墙时不该有这条提示');
+  game.placeVortexFrom(700, 700, 900, 700, 20, 200, 0, 0, 'vortex');
+  assert.equal(game.vortexes.length, 1, '这一下该真的扔出一盏');
+  const blocked = game.vortexes[0];
+  assert.ok(blocked.x < 800, `灯心该留在墙的这一侧（实际 x=${blocked.x.toFixed(1)}）`);
+  assert.ok(
+    blocked.x <= 800 - VORTEX.placePad + 1e-6,
+    `灯心与墙面之间要留出 ${VORTEX.placePad}px（实际 ${(800 - blocked.x).toFixed(1)}px）`,
+  );
+  assert.ok(Math.abs(blocked.y - 700) < 1e-6, `没有横向偏移时该沿原方向停下（实际 y=${blocked.y.toFixed(1)}）`);
+  assert.ok(blocked.clip.length > 2, '贴墙施放时该生成一块可见轮廓，给光圈做裁剪');
+  assert.ok(blocked.clip.some((p) => Math.abs(p.x - 800) < 1e-6), '轮廓要真的落在墙面上');
+  assert.ok(
+    bursts.some(([x, y]) => Math.abs(x - 800) < 1e-6 && Math.abs(y - 700) < 1e-6),
+    '撞墙接触点该冒一簇火星，让截停有画面反馈',
+  );
+  assert.equal(
+    bursts.filter(([, , , color]) => color === '#b9d9ff').length,
+    1,
+    '一次撞墙只该冒一簇冷色火星',
+  );
+  assert.equal(bursts.some(([x]) => x > 800), false, '火星不该落到墙后');
+  assert.ok((game.save.tips ?? []).includes('vortex:wall'), '第一次撞墙施放要讲一次落点与收尾的差别');
+
+  game.vortexes.length = 0;
+  game.level.walls.length = 0;
+  game.placeVortexFrom(700, 700, 840, 700, 20, 200, 0, 0, 'vortex');
+  assert.ok(Math.abs(game.vortexes[0].x - 840) < 1e-6, '没有墙时落点一个像素都不该被改');
+  assert.equal(game.vortexes[0].clip.length, 0, '附近没有墙时不付多边形裁剪的代价');
+  assert.equal(
+    bursts.filter(([, , , color]) => color === '#b9d9ff').length,
+    1,
+    '空地施放不该冒撞墙火星',
+  );
+});
+
+test('旋灯：吸力与“拽住几只”都不过墙', async (t) => {
+  const game = await open(t, 'pull-wall');
+  game.level.walls.length = 0;
+  game.level.walls.push({ x: 60, y: -200, w: 20, h: 400 });
+  game.placeVortex(0, 0, 20, 200, 0, 0);
+  const same = statue(game, -80, 0);
+  const behind = statue(game, 140, 0);
+  run(game, 30);
+  assert.ok(same.x > -80 + 15, `墙这一侧该被拽近（实际 ${same.x.toFixed(1)}）`);
+  assert.ok(Math.abs(behind.x - 140) < 1e-6 && Math.abs(behind.y) < 1e-6, '墙后的怪不该被吸力拖着走');
+  assert.equal(game.vortexBest, 1, '同时拽住几只也只数墙这一侧的那一只');
+});
+
+test('旋灯：进化那把也不会卷走墙后的弹幕', async (t) => {
+  const game = await open(t, 'drag-wall');
+  game.level.walls.length = 0;
+  game.level.walls.push({ x: 60, y: -200, w: 20, h: 400 });
+  game.placeVortex(0, 0, 20, 500, 0, 1);
+  const shot = (x) => game.projectiles.spawn({
+    x, y: 0, vx: 0, vy: 0, damage: 12, fromPlayer: false, radius: 5, color: '#c9a3ff', maxLife: 20,
+  });
+  const same = shot(-90);
+  const behind = shot(90);
+  run(game, 1);
+  assert.equal(same.active, false, '墙这一侧的弹幕照旧被卷到中心吞掉');
+  assert.equal(behind.active, true, '墙后的弹幕不该被卷走');
+  assert.ok(Math.abs(behind.x - 90) < 1e-6, '它连方向都不该被掰一下');
 });

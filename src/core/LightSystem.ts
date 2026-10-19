@@ -1,4 +1,7 @@
 import type { Camera } from './Camera';
+import type { Rect } from '../systems/LevelGen';
+import { distanceToRect, visibilityPolygon } from './Visibility';
+import type { VisibilityPoint } from './Visibility';
 
 interface Light {
   x: number;
@@ -13,6 +16,11 @@ export class LightSystem {
   private ctx: CanvasRenderingContext2D | null = null;
   private lights: Light[] = [];
   private glowLight: Light[] = [];
+  /** 世界坐标里的墙；每帧投到屏幕坐标，只给靠近光源的那几面算可见性。 */
+  private occluders: readonly Rect[] = [];
+  private screenWalls: Rect[] = [];
+  /** 同一帧里同芯的多盏灯（玩家外圈 + 内芯、灯台的火 + 引怪圈）共用一份多边形。 */
+  private visibilityCache = new Map<string, VisibilityPoint[]>();
   private sprite: HTMLCanvasElement | null = null;
   private glowSprite: HTMLCanvasElement | null = null;
   private spritesReady = false;
@@ -38,6 +46,10 @@ export class LightSystem {
   lastLightCount = 0;
   /** 上一帧真正落到屏幕上的光源数量（视野外的会被裁掉）。 */
   lastLitCount = 0;
+  /** 上一帧因为墙而裁过可见多边形的光源数量（供复现 / 冒烟测试读）。 */
+  lastShadowedCount = 0;
+  /** 上一帧真正算了几次可见多边形（命中缓存的不算，供性能回归读）。 */
+  lastVisibilityLookups = 0;
 
   constructor() {
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
@@ -54,6 +66,11 @@ export class LightSystem {
 
   setDarkness(v: number): void {
     this.darkness = v;
+  }
+
+  /** 世界里的墙（`LevelGen.Rect`）。没有它时整条遮挡路径空转。 */
+  setOccluders(walls: readonly Rect[]): void {
+    this.occluders = walls;
   }
 
   /** 跟随主画布的倍率：贴图按设备像素画，主画布就不用再缩它一遍。 */
@@ -131,9 +148,74 @@ export class LightSystem {
     }
   }
 
+  /**
+   * 把墙从世界坐标投到屏幕坐标。相机抖动也要算进来，否则墙画在抖、影子不抖，
+   * 墙边会出现一条几像素宽的亮缝。
+   *
+   * 这里**不按视口裁墙**：光源本身也可能在屏外，它照进屏幕的那半圈仍会被屏幕外的墙挡住。
+   * 墙本来只有十几面，逐盏灯再用半径筛一次比在这里猜"哪面墙有关"更便宜，也不会漏。
+   */
+  private buildScreenWalls(cam: Camera): void {
+    this.screenWalls.length = 0;
+    if (!this.occluders.length) return;
+    for (const wall of this.occluders) {
+      const p = cam.worldToScreen(wall.x, wall.y);
+      const rw = wall.w * cam.zoom;
+      const rh = wall.h * cam.zoom;
+      this.screenWalls.push({ x: p.x, y: p.y, w: rw, h: rh });
+    }
+  }
+
+  /**
+   * 给一条绘制命令套上"从这盏灯看得见的地方"这块裁剪区。返回 true 时调用方要 restore。
+   *
+   * 只问光源半径以内碰得到的墙：影子的起点就是墙面，半径外的墙不可能吃掉这盏灯的任何像素。
+   * 这也让远离墙的大多数光源（尤其是环绕火球与掉落物）完全不走射线。
+   */
+  private clipToVisibility(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radius: number,
+    w: number,
+    h: number,
+    count: boolean,
+  ): boolean {
+    if (!this.screenWalls.length) return false;
+    const near: Rect[] = [];
+    for (const wall of this.screenWalls) {
+      if (distanceToRect(x, y, wall) <= radius + 1) near.push(wall);
+    }
+    if (!near.length) return false;
+    // 几何只跟"灯在哪儿、墙在哪儿、屏幕多大"有关，跟这盏灯多亮、多大无关。
+    // 玩家每帧投内外两盏同芯灯，缓存把这份射线计算从两次压成一次。
+    const key = `${x.toFixed(2)},${y.toFixed(2)}`;
+    let poly = this.visibilityCache.get(key);
+    if (poly === undefined) {
+      this.lastVisibilityLookups += 1;
+      // 用全部墙而不是 `near`：同芯的另一盏灯可能半径不同，共用时不能少算一面墙。
+      // 更远的墙本来就会被 `visibilityPolygon` 的边界剔除，多传十几面矩形不值得另开一套键。
+      poly = visibilityPolygon(x, y, this.screenWalls, w, h);
+      this.visibilityCache.set(key, poly);
+    }
+    if (!poly.length) return false;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i += 1) ctx.lineTo(poly[i].x, poly[i].y);
+    ctx.closePath();
+    ctx.clip();
+    if (count) this.lastShadowedCount += 1;
+    return true;
+  }
+
   render(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number, time: number): void {
     this.lastLightCount = this.lights.length;
     this.lastLitCount = 0;
+    this.lastShadowedCount = 0;
+    this.lastVisibilityLookups = 0;
+    this.visibilityCache.clear();
+    this.buildScreenWalls(cam);
     const sprites = this.ensureSprites();
     // Additive warm glow pass directly on the main canvas.
     // 视野外的光源白白占填充率：按屏幕坐标裁掉（留一点余量，免得边缘的灯突然消失）
@@ -150,8 +232,10 @@ export class LightSystem {
         const s = cam.worldToScreen(l.x, l.y);
         const r = l.radius * cam.zoom;
         if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
+        const clipped = this.clipToVisibility(ctx, s.x, s.y, r, w, h, false);
         ctx.globalAlpha = l.intensity;
         ctx.drawImage(glow, s.x - r, s.y - r, r * 2, r * 2);
+        if (clipped) ctx.restore();
       }
       ctx.restore();
     } else if (this.glowLight.length) {
@@ -161,6 +245,7 @@ export class LightSystem {
         const s = cam.worldToScreen(l.x, l.y);
         const r = l.radius * cam.zoom;
         if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
+        const clipped = this.clipToVisibility(ctx, s.x, s.y, r, w, h, false);
         const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
         g.addColorStop(0, `rgba(255,214,140,${0.32 * l.intensity})`);
         g.addColorStop(0.4, `rgba(255,150,60,${0.16 * l.intensity})`);
@@ -169,6 +254,7 @@ export class LightSystem {
         ctx.beginPath();
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
         ctx.fill();
+        if (clipped) ctx.restore();
       }
       ctx.restore();
     }
@@ -199,9 +285,11 @@ export class LightSystem {
       if (r <= 0 || !onScreen(s.x, s.y, r)) continue;
       drawn += 1;
       const core = Math.min(1, l.intensity);
+      const clipped = this.clipToVisibility(cctx, s.x, s.y, r, w, h, true);
       if (hole) {
         cctx.globalAlpha = core;
         cctx.drawImage(hole, s.x - r, s.y - r, r * 2, r * 2);
+        if (clipped) cctx.restore();
         continue;
       }
       const g = cctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
@@ -215,6 +303,7 @@ export class LightSystem {
       cctx.beginPath();
       cctx.arc(s.x, s.y, r, 0, Math.PI * 2);
       cctx.fill();
+      if (clipped) cctx.restore();
     }
     cctx.globalAlpha = 1;
     cctx.globalCompositeOperation = 'source-over';

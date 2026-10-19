@@ -1,4 +1,6 @@
 import { Pool } from '../core/Pool';
+import { collideWalls, wallBetween } from '../systems/CollisionSystem';
+import type { Rect } from '../systems/LevelGen';
 
 export type PickupKind = 'xp' | 'oil' | 'heart' | 'chest' | 'gold';
 
@@ -48,8 +50,23 @@ export class PickupSystem {
     return p;
   }
 
-  update(dt: number, px: number, py: number, range: number, onCollect: (p: Pickup) => void): void {
+  /**
+   * 拾取物的物理与磁吸。
+   *
+   * v108：掉落物也有体积，也要认墙。磁吸先问"中间有没有墙"——墙后的那口油不会隔墙飞过来，
+   * 玩家得自己绕过去；位移最后再走一次 `collideWalls`，把掉进墙里的那一口推到最近的墙外。
+   * 无墙时两条分支都不改变原来的那一帧（同一条速度积分、同一个收集距离）。
+   */
+  update(
+    dt: number,
+    px: number,
+    py: number,
+    range: number,
+    onCollect: (p: Pickup) => void,
+    walls: readonly Rect[] = [],
+  ): void {
     const range2 = range * range;
+    const hasWalls = walls.length > 0;
     for (const p of this.pool.all) {
       if (!p.active) continue;
       p.life += dt;
@@ -57,7 +74,10 @@ export class PickupSystem {
       const dx = px - p.x;
       const dy = py - p.y;
       const d2 = dx * dx + dy * dy;
-      if (d2 < range2 || p.attracted) {
+      const clear = !hasWalls || !wallBetween(px, py, p.x, p.y, walls);
+      // 一旦被墙挡住就退出磁吸：否则玩家绕到墙这一侧时，它会在任意距离上重新起飞。
+      if (!clear) p.attracted = false;
+      if (clear && (d2 < range2 || p.attracted)) {
         p.attracted = true;
         const d = Math.max(1, Math.sqrt(d2));
         const pull = 320 + 2200 / d;
@@ -68,7 +88,16 @@ export class PickupSystem {
       p.vy *= 1 - Math.min(1, 4 * dt);
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      if (d2 < 20 * 20 || (p.attracted && d2 < 26 * 26)) {
+      if (hasWalls) {
+        const fixed = collideWalls(p.x, p.y, p.radius, walls);
+        if (fixed.x !== p.x || fixed.y !== p.y) {
+          p.x = fixed.x;
+          p.y = fixed.y;
+          p.vx = 0;
+          p.vy = 0;
+        }
+      }
+      if (clear && (d2 < 20 * 20 || (p.attracted && d2 < 26 * 26))) {
         onCollect(p);
         p.active = false;
       }

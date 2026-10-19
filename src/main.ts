@@ -12,6 +12,7 @@ import {
   PAD_TIP,
 } from './core/Gamepad';
 import { FocusRing, NAV_OVERLAP_TOLERANCE, NAV_REPEAT_DELAY, NAV_REPEAT_EVERY, pickNearest } from './core/Focus';
+import { visibilityPolygon } from './core/Visibility';
 import { HUD } from './ui/HUD';
 import { UIManager } from './ui/UIManager';
 import { TouchControls } from './ui/TouchControls';
@@ -82,6 +83,9 @@ function boot(): void {
     // 做成能脱离浏览器单量的纯函数，才有得测。
     FocusRing,
     pickNearest,
+    // 灯火被墙挡住（v94）：纯几何的多边形也交给测试——它在无头桩件里没有像素可看，
+    // 但"光停在墙的哪一面"这件事本身可以按点是否落在多边形里单量。
+    visibilityPolygon,
     NAV_OVERLAP_TOLERANCE,
     NAV_REPEAT_DELAY,
     NAV_REPEAT_EVERY,

@@ -29,6 +29,33 @@ const NOVA_BUFFER = 0.15;
 const DASH_BRAKE = 4;
 /** 逆着推、而且残余速度还在走速两倍以上的那一帧：在地上留一撮灰（见走路那一段里的注释）。 */
 const BRAKE_DUST = 2;
+/** 燎灯脉冲的可见角度采样数（v104）：72 段在 320px 外约每 28px 一段。 */
+const AURA_ARC_SEGMENTS = 72;
+
+/** 把一段圆形范围按"看得见 / 看不见"切成连续弧段；可见数组也给边缘火星挑角度。 */
+function sightArcs(
+  x: number,
+  y: number,
+  radius: number,
+  sight: (x0: number, y0: number, x1: number, y1: number) => boolean,
+): { visible: boolean[]; arcs: [number, number][] } {
+  const visible: boolean[] = [];
+  for (let i = 0; i < AURA_ARC_SEGMENTS; i += 1) {
+    const a = ((i + 0.5) / AURA_ARC_SEGMENTS) * TAU;
+    visible.push(sight(x, y, x + Math.cos(a) * radius, y + Math.sin(a) * radius));
+  }
+  const arcs: [number, number][] = [];
+  let start = -1;
+  for (let i = 0; i <= AURA_ARC_SEGMENTS; i += 1) {
+    const on = i < AURA_ARC_SEGMENTS && visible[i];
+    if (on && start < 0) start = i;
+    else if (!on && start >= 0) {
+      arcs.push([(start / AURA_ARC_SEGMENTS) * TAU, (i / AURA_ARC_SEGMENTS) * TAU]);
+      start = -1;
+    }
+  }
+  return { visible, arcs };
+}
 
 export interface PlayerContext {
   enemies: EnemySystem;
@@ -1135,7 +1162,18 @@ export class Player {
         // 这一拍长什么样：一圈冲击波从人身上扩到 `reach` 为止——**它在光边上停下**，
         // 于是"烫到哪儿"和"照着哪儿"是同一个圈（见 AURA.pulseFade）。走的是这个游戏
         // 一直在用的那套话（燃爆 / 收网 / 灯台都是它），而不是另画一条线。
-        ctx.particles.shockwave(this.x, this.y, def.color, reach, AURA.pulseFade);
+        // v104：伤害从 v88 起就逐只问 `sight`，这一圈却还是整圆。现在把同一句视线
+        // 采样到 72 个角度上：有墙时只画可见的连续弧，墙后那一段不再亮；
+        // 无墙仍走原来的整圆分支，视觉与随机数序列都不变。
+        const ring = sightArcs(this.x, this.y, reach, ctx.sight);
+        const openRing = ring.visible.every(Boolean);
+        if (openRing) {
+          ctx.particles.shockwave(this.x, this.y, def.color, reach, AURA.pulseFade);
+        } else {
+          for (const [a0, a1] of ring.arcs) {
+            ctx.particles.shockwaveArc(this.x, this.y, def.color, reach, AURA.pulseFade, a0, a1);
+          }
+        }
         // 「旺火」（遗物）先数再打：一次脉冲里光里挤着几只，决定**这一下**每只多重。
         // 数两遍（先数、再打）是刻意的——一遍数一遍打的话，"打到第几只"会跟着
         // "前面那几只死没死"变，人越多越旺就变成了人越多越乱。
@@ -1164,8 +1202,16 @@ export class Player {
         }
         // 边缘飞起的火星：这是"这盏灯在烧"唯一常驻的视觉，不烫到人时也看得见——
         // 不然一件没打到东西的武器在屏幕上就是彻底不存在。
+        const emberAngles = openRing
+          ? null
+          : ring.visible
+              .map((on, i) => (on ? ((i + 0.5) / AURA_ARC_SEGMENTS) * TAU : null))
+              .filter((a): a is number => a !== null);
         for (let i = 0; i < AURA.edgeEmbers; i += 1) {
-          const a = Math.random() * TAU;
+          // 墙后没有光边：火星只从看得见的那几段里挑。无墙时仍旧直接掷一个角度，
+          // 保持原来那五粒火星的分布与随机数调用顺序。
+          if (!openRing && !emberAngles?.length) break;
+          const a = openRing ? Math.random() * TAU : emberAngles![Math.floor(Math.random() * emberAngles!.length)];
           const r = reach * (0.9 + Math.random() * 0.1);
           ctx.particles.burst(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r, 1, def.color, {
             speed: 26,
@@ -1414,10 +1460,13 @@ export class Player {
           let diff = Math.atan2(dy, dx) - aim;
           while (diff > Math.PI) diff -= TAU;
           while (diff < -Math.PI) diff += TAU;
-          if (Math.abs(diff) <= half) {
-            this.hitEnemy(e, dmg, ctx, st, dx, dy, id);
-            ctx.enemies.applyBurn(e, 1, id);
-          }
+          if (Math.abs(diff) > half) return;
+          // v96：鞭是"挥出去的一道火弧"，墙前那一侧才是它够得着的范围。
+          // 这一条和火环 / 燎灯共用同一个 `sight`（墙在 `Game` 手里，Player 只问一句），
+          // 伤害与点火一起停住——不然会出现"没挨伤害却烧起来了"的半截规矩。
+          if (!ctx.sight(this.x, this.y, e.x, e.y)) return;
+          this.hitEnemy(e, dmg, ctx, st, dx, dy, id);
+          ctx.enemies.applyBurn(e, 1, id);
         });
         ctx.audio('hit');
         break;

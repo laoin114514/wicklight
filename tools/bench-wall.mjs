@@ -67,6 +67,10 @@
  *                  退 20px（58px，0）/ 退 40px（78px，0）/ 第二堵墙背后（48px，0）。
  *                  最后两格是同一件事的两条边界：**离墙一步就安全**，**第二堵墙照旧挡得住**。
  *                  这一栏用同一颗弹、同一帧、同一套伤害读数，种子只影响地图外的随机数。
+ *   · `siphon`（v97/98）—— **噬灯魅隔墙还抽不抽得动**：它从 400px 外吊住你，墙在 x=180~230。
+ *                  三格与 `selflight` 同一套摆法（无墙 / 隔着墙 / 墙在旁边），量 2 秒内真正
+ *                  记到 `snuffLight` 上的油与它压上来多少。期望是 **0.05 / 0 / 0.05** 的油，
+ *                  隔着墙那一格还会比另两格多挪一截（先绕过来再抽）。
  *   · `wide`   —— 1200px 宽的一堵墙，撞点在离右端 100px、离左端 1100px 的地方，玩家就在怪的正后方。
  *                  正对着撞的时候切向点积是 0，"往玩家那一边滑"这条判据给不出方向——剩下的是
  *                  "绕哪一头"。这一栏量的是那个判据：改前按 `e.id` 的奇偶掷硬币（同一份场景里
@@ -89,7 +93,7 @@ const SECS = Number(args.get('secs') ?? 30);
 const NOCOLLIDE = args.has('nocollide');
 const JSON_OUT = args.get('json') ?? null;
 const SEEDS = (args.get('seeds') ?? '11,29,47,83').split(',').map(Number);
-const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,aimpick,spitblind,spitaim,spitsplash,dashwall,dashfree,dashege').split(',');
+const ONLY = (args.get('only') ?? 'block,pocket,bash,wide,selflight,pyre,aimpick,spitblind,spitaim,spitsplash,siphon,vortex,dashwall,dashfree,dashege').split(',');
 const dt = 1 / 60;
 
 /** 开局：清场、清墙、把玩家与怪都交给脚本摆。 */
@@ -413,6 +417,46 @@ async function runLight(seed, id, kind) {
     lost += 1e9 - e.hp;
   }
   return lost;
+}
+
+/**
+ * v105：余烬风的灯台庇护。灯台摆在玩家右边 120px，墙换三种摆法；
+ * 给身上三层后空跑 2 秒，读回 `emberPyreNear` 与还剩几层。
+ * 期望：无墙 / 墙在旁边 → 1 层；墙在中间 → 3 层（灯影不算在光里）。
+ */
+const PYRE_CONF = {
+  none: [],
+  mid: [{ x: 50, y: -80, w: 20, h: 160 }],
+  beside: [{ x: 0, y: 80, w: 140, h: 20 }],
+};
+
+async function runPyreShelter(seed, kind) {
+  const { game, p } = await open(seed, `pyre-${kind}`);
+  p.x = 0;
+  p.y = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.hp = 1e6;
+  p.oil = p.oilMax;
+  game.level.walls.length = 0;
+  for (const w of PYRE_CONF[kind]) game.level.walls.push(w);
+  game.level.pyres.length = 0;
+  game.level.pyres.push({ x: 120, y: 0, lit: true, progress: 1, flame: 1 });
+  game.emberwindTimer = 0;
+  game.embers.length = 0;
+  game.emberStacks = 3;
+  game.emberPyreT = 1;
+  game.director.hazardTimer = 1e9;
+  for (let i = 0; i < 120; i += 1) {
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+  }
+  return { near: game.emberPyreNear ? 1 : 0, stacks: game.emberStacks };
 }
 
 /**
@@ -746,6 +790,115 @@ async function runSpitSplash(seed, cell) {
   return { hits, amount, hpLost: 1e9 - p.hp };
 }
 
+const SIPHON_WALL = { x: 180, y: -500, w: 50, h: 1000 };
+const SIPHON_CELLS = [
+  { id: 'none', name: '无墙', walls: [] },
+  { id: 'mid', name: '隔着墙', walls: [SIPHON_WALL] },
+  // 同一面墙挪到走廊上方：挡不到 (400,0)→(0,0) 那条线，用来钉住"只该管那条直线"
+  { id: 'beside', name: '墙在旁边', walls: [{ x: 180, y: 300, w: 50, h: 500 }] },
+];
+
+/** 站桩 2 秒；只数真正进到 `snuffLight` 的那部分油，不受玩家自己烧油影响。 */
+async function runSiphon(seed, cell) {
+  const { game, p } = await open(seed, `siphon-${cell.id}`);
+  game.enemies.clear();
+  game.projectiles.clear();
+  game.grounds.length = 0;
+  game.hazards.length = 0;
+  game.level.walls.length = 0;
+  for (const w of cell.walls) game.level.walls.push(w);
+  p.x = 0;
+  p.y = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.oil = p.oilMax;
+  p.stats.maxHp = 1e9;
+  p.hp = 1e9;
+  const e = game.enemies.spawn('siphon', 400, 0, 1, 1);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  e.damage = 0;
+  e.spawnTimer = 0;
+  const startX = e.x;
+  let snuff = 0;
+  const realCtx = game.enemyCtx.bind(game);
+  game.enemyCtx = () => {
+    const ctx = realCtx();
+    const realSnuff = ctx.snuffLight;
+    ctx.snuffLight = (amount) => {
+      snuff += amount;
+      realSnuff(amount);
+    };
+    return ctx;
+  };
+  for (let i = 0; i < 120; i += 1) {
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.hitStop = 0;
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+  }
+  game.enemyCtx = realCtx;
+  return { snuff: snuff / p.oilMax, moved: startX - e.x };
+}
+
+/**
+ * v116：旋灯的落点、吸力与卷弹认不认墙。三件事共用一张竖墙：
+ *   · 落点：从 (-100,0) 往 (200,0) 扔，墙在 x=60~80；灯心该停在墙前 18px（x=42）；
+ *   · 吸力：旋灯在原点，墙这一侧的怪该被拽动，墙外那只一步不动；
+ *   · 卷弹：墙这一侧的弹幕被中心吞掉，墙外那颗连方向都不该变。
+ */
+async function runVortexWall(seed, kind) {
+  const walled = kind === 'mid';
+  const { game, p } = await open(seed, `vortex-${kind}`);
+  if (walled) game.level.walls.push({ x: 60, y: -260, w: 20, h: 520 });
+
+  p.x = -100;
+  p.y = 0;
+  game.placeVortexFrom(p.x, p.y, 200, 0, 20, 200, 0, 0, 'vortex');
+  const cast = game.vortexes[0] ?? null;
+  const pad = walled && cast ? 60 - cast.x : null;
+  game.vortexes.length = 0;
+
+  game.enemies.clear();
+  game.projectiles.clear();
+  game.placeVortex(0, 0, 20, 500, 0, 1);
+  const foe = (x) => {
+    const e = game.enemies.spawn('shade', x, 0, 1, 1);
+    e.hp = 1e9;
+    e.maxHp = 1e9;
+    e.damage = 0;
+    e.spawnTimer = 0;
+    e.speed = 0;
+    return e;
+  };
+  const shot = (x) => game.projectiles.spawn({
+    x, y: 0, vx: 0, vy: 0, damage: 12, fromPlayer: false, radius: 5, color: '#c9a3ff', maxLife: 20,
+  });
+  const same = foe(-90);
+  const behind = foe(140);
+  const sameShot = shot(-90);
+  const behindShot = shot(90);
+  game.setInput(0, 0, false, false);
+  game.update(dt);
+  const sameAlive = sameShot.active ? 1 : 0;
+  const behindAlive = behindShot.active ? 1 : 0;
+  game.projectiles.clear();
+  for (let i = 0; i < 30; i += 1) {
+    game.setInput(0, 0, false, false);
+    game.update(dt);
+  }
+  return {
+    pad,
+    sameMoved: Math.abs(same.x + 90),
+    behindMoved: Math.abs(behind.x - 140),
+    sameAlive,
+    behindAlive,
+  };
+}
+
 const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (v === null ? '—' : v.toFixed(1));
 const out = {};
@@ -784,6 +937,59 @@ if (ONLY.includes('selflight')) {
     out[`selflight-${id}`] = { none: cells[0], mid: cells[1], beside: cells[2] };
     console.log(`${pad(name, 12)}${pad(cells[0].toFixed(1), 9)}${pad(cells[1].toFixed(1), 9)}${pad(cells[2].toFixed(1), 9)}`);
   }
+}
+if (ONLY.includes('vortex')) {
+  const cells = [];
+  for (const kind of ['none', 'mid']) {
+    const acc = { pad: null, sameMoved: 0, behindMoved: 0, sameAlive: 0, behindAlive: 0 };
+    for (const seed of SEEDS) {
+      const r = await runVortexWall(seed, kind);
+      if (r.pad !== null) acc.pad = r.pad;
+      acc.sameMoved += r.sameMoved;
+      acc.behindMoved += r.behindMoved;
+      acc.sameAlive += r.sameAlive;
+      acc.behindAlive += r.behindAlive;
+    }
+    const n = SEEDS.length;
+    cells.push({
+      pad: acc.pad,
+      sameMoved: acc.sameMoved / n,
+      behindMoved: acc.behindMoved / n,
+      sameAlive: acc.sameAlive / n,
+      behindAlive: acc.behindAlive / n,
+    });
+  }
+  console.log('');
+  console.log(`${pad('旋灯隔墙（v116）', 18)}${pad('无墙', 9)}${pad('隔着墙', 9)}`);
+  const row = (label, vals, digits = 1) => console.log(`${pad(label, 18)}${vals.map((v) => pad(v === null ? '—' : v.toFixed(digits), 9)).join('')}`);
+  row('灯心离墙(px)', [null, cells[1].pad]);
+  row('同一侧被拽(px)', cells.map((c) => c.sameMoved));
+  row('墙后被拽(px)', cells.map((c) => c.behindMoved));
+  row('墙后弹幕还在(0/1)', cells.map((c) => c.behindAlive), 0);
+  row('同一侧弹幕还在(0/1)', cells.map((c) => c.sameAlive), 0);
+  out['vortex-none'] = cells[0];
+  out['vortex-mid'] = cells[1];
+}
+if (ONLY.includes('pyre')) {
+  console.log('');
+  console.log(`${pad('灯台庇护（v105）', 16)}${pad('无墙', 9)}${pad('隔着墙', 9)}${pad('墙在旁边', 9)}`);
+  const near = [];
+  const stacks = [];
+  for (const kind of ['none', 'mid', 'beside']) {
+    let n = 0;
+    let s = 0;
+    for (const seed of SEEDS) {
+      const r = await runPyreShelter(seed, kind);
+      n += r.near;
+      s += r.stacks;
+    }
+    near.push(n / SEEDS.length);
+    stacks.push(s / SEEDS.length);
+    out[`pyre-${kind}`] = { near: n / SEEDS.length, stacks: s / SEEDS.length };
+  }
+  const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(1), 9)).join('')}`);
+  row('emberPyreNear', near);
+  row('余烬层数(2s后)', stacks);
 }
 if (ONLY.includes('aimpick')) {
   console.log('');
@@ -852,6 +1058,28 @@ if (ONLY.includes('spitsplash')) {
     out[`spitsplash-${cell.id}`] = { damage: lost / n, hits: hits / n };
   }
   console.log(`${pad('你掉的血', 16)}${cells.map((v) => pad(v.toFixed(1), 10)).join('')}`);
+}
+if (ONLY.includes('siphon')) {
+  console.log('');
+  console.log(`${pad('噬灯魅（v97/98）', 16)}${SIPHON_CELLS.map((c) => pad(c.name, 9)).join('')}`);
+  const snuff = [];
+  const moved = [];
+  for (const cell of SIPHON_CELLS) {
+    let oil = 0;
+    let step = 0;
+    for (const seed of SEEDS) {
+      const r = await runSiphon(seed, cell);
+      oil += r.snuff;
+      step += r.moved;
+    }
+    const n = SEEDS.length;
+    snuff.push(oil / n);
+    moved.push(step / n);
+    out[`siphon-${cell.id}`] = { snuff: oil / n, moved: step / n };
+  }
+  const row = (label, vals) => console.log(`${pad(label, 16)}${vals.map((v) => pad(v.toFixed(3), 9)).join('')}`);
+  row('抽走的油(2s)', snuff);
+  row('它挪了多远(px)', moved);
 }
 if (ONLY.includes('spitaim')) {
   console.log('');

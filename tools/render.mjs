@@ -3,7 +3,7 @@
  * 用于人眼检查画面效果（相当于手动开浏览器看一眼）。
  *
  * 模拟只跑 update（不渲染），最后只渲染少数几帧，因此速度可以接受。
- * 用法: node tools/render.mjs --scene play --out /tmp/wl/play.png [--ss 2] [--frames 420]
+ * 用法: node tools/render.mjs --scene play --out /tmp/wl/play.png [--ss 2] [--crop x,y,w,h --zoom N]
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +19,7 @@ const arg = (name, def) => {
 const SS = parseInt(arg('ss', '2'), 10);
 const ENTRY = new URL('../dist/app.js', import.meta.url);
 const OUTDIR = arg('outdir', '/tmp/wl');
+const OUT = arg('out', null);
 
 const env = installDomStubs({
   canvasClass: class extends SoftCanvas {
@@ -83,6 +84,47 @@ const SCENES = {
   play() {
     game.newRun('warden', 'normal', false);
     fight(420);
+  },
+  // 灯影（v94）：固定的一间靶房，只看"光停在墙的哪一面"。
+  // 两堵竖墙在左侧留一道缝，右上方留一只可见的靶、墙后放一只看不见的靶。
+  wallshadow() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (const s of game.level.shrines) {
+      s.x = 9e5;
+      s.y = 9e5;
+    }
+    for (const py of game.level.pyres) {
+      py.x = 9e5;
+      py.y = 9e5;
+    }
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.level.walls.length = 0;
+    game.level.walls.push(
+      { x: -230, y: -300, w: 86, h: 250 },
+      { x: -230, y: 60, w: 86, h: 250 },
+    );
+    const p = game.player;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    const visible = game.enemies.spawn('bulwark', -120, -130, 1, 0);
+    const hidden = game.enemies.spawn('bulwark', -470, -40, 1, 0);
+    for (const e of [visible, hidden]) {
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0;
+      e.speed = 0;
+    }
+    for (let i = 0; i < 4; i += 1) step();
   },
   swarm() {
     game.newRun('ember', 'normal', false);
@@ -347,6 +389,79 @@ const SCENES = {
     }
     fight(24, { spawnEvery: 400 });
   },
+  // 噬灯魅的抽油线（v98）：右边那只隔着墙，线必须停在墙面；左边那只没有遮挡，线照旧连到玩家。
+  siphonwall() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (const s of game.level.shrines) {
+      s.x = 9e5;
+      s.y = 9e5;
+    }
+    for (const py of game.level.pyres) {
+      py.x = 9e5;
+      py.y = 9e5;
+    }
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.level.walls.length = 0;
+    game.level.walls.push({ x: 70, y: -300, w: 60, h: 600 });
+    const p = game.player;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [x, y] of [[300, -60], [-280, 70]]) {
+      const e = game.enemies.spawn('siphon', x, y, 1, 0);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0;
+      e.spawnTimer = 0;
+      e.hitFlash = 0;
+    }
+    for (let i = 0; i < 4; i += 1) step();
+  },
+  // 旋灯撞墙（v116）：固定一间靶房，只看灯心、可见光圈和接触点火星停在墙的哪一面。
+  // 灯心应停在墙面左侧 18px；右侧那只只负责说明"墙后还有目标"，不该被吸过来。
+  vortexwall() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (const s of game.level.shrines) {
+      s.x = 9e5;
+      s.y = 9e5;
+    }
+    for (const py of game.level.pyres) {
+      py.x = 9e5;
+      py.y = 9e5;
+    }
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.level.walls.length = 0;
+    game.level.walls.push({ x: 150, y: -300, w: 60, h: 600 });
+    const p = game.player;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    const behind = game.enemies.spawn('shade', 280, 0, 1, 0);
+    behind.hp = 1e6;
+    behind.maxHp = 1e6;
+    behind.damage = 0;
+    behind.speed = 0;
+    game.placeVortexFrom(0, 0, 320, 0, 28, 200, 0, 0, 'vortex');
+    for (let i = 0; i < 4; i += 1) step();
+  },
   solo() {
     game.newRun('warden', 'normal', false);
     // 先跑够帧数让转场黑幕完全淡出，再清场，得到"静态肖像"式画面
@@ -446,15 +561,16 @@ for (let i = 0; i < 4; i += 1) step();
 game.render();
 
 const canvas = globalThis.document.getElementById('game');
-fs.mkdirSync(OUTDIR, { recursive: true });
 const crop = arg('crop', null);
-let out = path.join(OUTDIR, `${scene}.png`);
+let out = OUT ? path.resolve(OUT) : path.join(OUTDIR, `${scene}.png`);
 if (crop) {
   const [cx, cy, cw, ch] = crop.split(',').map(Number);
   const zoom = parseFloat(arg('zoom', '3'));
-  out = path.join(OUTDIR, `${scene}-crop.png`);
+  if (!OUT) out = path.join(OUTDIR, `${scene}-crop.png`);
+  fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, cropToPNG(canvas, cx, cy, cw, ch, zoom));
 } else {
+  fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, canvasToPNG(canvas));
 }
 

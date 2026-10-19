@@ -926,16 +926,39 @@ async function main() {
   // 离人远是为了量得干净——人这半秒里什么都不做，它吃到的每一滴血都只可能来自伏灯。
   const staged = await page.evaluate(() => {
     const g = window.__WICKLIGHT__.game;
+    const p = g.player;
     // 场上原来那些怪要清掉：它们会把这只石守从雷心上挤开（怪与怪之间会让位），
     // 那这一炸吃到的就成了边缘的衰减伤害（实测撞到过一次 41，判据是"正中该吃满 60"）。
     g.enemies.clear();
     g.mines.length = 0;
+    // 这一段只问"上弦与踩响"，把别的东西都关掉：自动撒雷会多出几颗，
+    // 新刷的怪会把石守挤出触发圈，随机地面 / 险境还会持续扣它的血。
+    // 上一版在真浏览器里就是被这些账干扰，出现"没炸却掉了 10 点血"的读数。
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.weapons.clear();
+    g.projectiles.clear();
+    g.grounds.length = 0;
+    g.hazards.length = 0;
+    // 随机地图的墙会把石守从 (240, 0) 挤开：它离雷心 40px 时就只吃 45，
+    // 那正是"正中该吃满 60"最容易被误判成伤害不对的地方。这一条只量上弦与触发。
+    window.__MINE_ARM_WALLS__ = [...g.level.walls];
+    g.level.walls.length = 0;
+    const d = g.director;
+    window.__MINE_ARM_DIR__ = { phase: d.phase, intro: d.introTimer, spawn: d.spawnTimer, spawned: d.spawned, wave: d.wave, hazard: d.hazardTimer };
+    d.phase = 'intro';
+    d.introTimer = 1e9;
+    d.spawnTimer = 1e9;
+    d.hazardTimer = 1e9;
     g.placeMine(240, 0, 60, 80, 40, 0, 'mine');
     window.__MINE__ = g.mines[0];
     const e = g.enemies.spawn('bulwark', 240, 0, 1, 0);
     e.hp = 1e6;
     e.maxHp = 1e6;
     e.speed = 0;
+    e.spawnTimer = 0;
     window.__MINE_TARGET__ = e;
     return { arm: +g.mines[0].arm.toFixed(2) };
   });
@@ -991,6 +1014,23 @@ async function main() {
   const litMine = ringDiff(noMine, withMine);
   expect(litMine > 40, '地上那盏伏灯真的画出来了（摆了雷，那片像素亮起来）', `变亮像素 ${litMine} 个`);
   await shot('03d-mine');
+  await page.evaluate(() => {
+    const d = window.__WICKLIGHT__.game.director;
+    const saved = window.__MINE_ARM_DIR__;
+    if (!saved) return;
+    d.phase = saved.phase;
+    d.introTimer = saved.intro;
+    d.spawnTimer = saved.spawn;
+    d.spawned = saved.spawned;
+    d.wave = saved.wave;
+    d.hazardTimer = saved.hazard;
+    delete window.__MINE_ARM_DIR__;
+    if (window.__MINE_ARM_WALLS__) {
+      const walls = window.__WICKLIGHT__.game.level.walls;
+      walls.splice(0, walls.length, ...window.__MINE_ARM_WALLS__);
+      delete window.__MINE_ARM_WALLS__;
+    }
+  });
 
   // ── 3a6. 连爆：一蹦一蹦地烧过去，不是同一帧一起炸 ──
   // 四颗雷排成一条线（间距 50px < 一颗的爆炸半径 60px），石守站在离人最近的那颗上
@@ -1259,6 +1299,10 @@ async function main() {
     g.vortexes.length = 0;
     g.vortexCount = 0;
     g.vortexBest = 0;
+    // 这一条量的是"旋灯把一圈人往里拢"，不是隔墙索敌。空掉墙，落点才会稳定是
+    // 最近的 (200, 0)，不会因为随机地图把更远但看得见的那只挑成目标。
+    window.__VORT_WALLS__ = [...g.level.walls];
+    g.level.walls.length = 0;
     // 这一波还在刷怪。新刷出来的一只走过来就会把"同时拽住几只"这个数搅乱——把导演挂起一会儿。
     const d = g.director;
     window.__DIRV__ = { phase: d.phase, intro: d.introTimer, spawn: d.spawnTimer, spawned: d.spawned, wave: d.wave, hazard: d.hazardTimer };
@@ -1452,6 +1496,10 @@ async function main() {
     p.y = 0;
     p.vx = 0;
     p.vy = 0;
+    if (window.__VORT_WALLS__) {
+      g.level.walls.splice(0, g.level.walls.length, ...window.__VORT_WALLS__);
+      delete window.__VORT_WALLS__;
+    }
     delete window.__VORT__;
     delete window.__SAVED_WEAPONS2__;
   });
@@ -1827,9 +1875,17 @@ async function main() {
     const outsideGap = [];
     const shock = g.particles.shockwave.bind(g.particles);
     g.particles.shockwave = (x, y, color, size, life) => {
-      rings.push({ size: +size.toFixed(2), at: +p.lightRadius.toFixed(2), life });
+      rings.push({ size: +size.toFixed(2), at: +p.lightRadius.toFixed(2), life, start: 0, end: Math.PI * 2 });
       outsideGap.push(+(Math.hypot(out.x - p.x, out.y - p.y) - size).toFixed(1));
       return shock(x, y, color, size, life);
+    };
+    // v104 起有墙时燎灯不再画整圆，而是把可见的连续弧一段段发出来。
+    // 探针两扇门都要接：只挂旧接口的话，真实地图里会读到"一圈都没有"。
+    const shockArc = g.particles.shockwaveArc.bind(g.particles);
+    g.particles.shockwaveArc = (x, y, color, size, life, start, end) => {
+      rings.push({ size: +size.toFixed(2), at: +p.lightRadius.toFixed(2), life, start, end });
+      outsideGap.push(+(Math.hypot(out.x - p.x, out.y - p.y) - size).toFixed(1));
+      return shockArc(x, y, color, size, life, start, end);
     };
     for (let f = 0; f < 90; f += 1) {
       // 圈外那一只**钉住**：它旁边那些被烫飞的圈内怪会把它撞进光里（实测有一次被挪到 y=-91 才挨的），
@@ -3193,12 +3249,45 @@ async function main() {
   await sleep(300);
   const openCards = await page.evaluate(() => document.querySelectorAll('[data-cx]').length);
   expect(openCards >= 3, '开局扫描 + 一局之后图鉴里出现了可点开的条目', `${openCards} 条`);
-  const opened = await page.evaluate(() => {
-    const el = document.querySelector('[data-cx]');
-    el.click();
-    return el.dataset.cx;
+  const searchTerm = await page.evaluate(() => {
+    const name = document.querySelector('[data-cx] .cx__name')?.textContent?.trim() ?? '';
+    return name.slice(0, 2);
   });
+  await page.fill('.cx-search__input', searchTerm);
+  await sleep(120);
+  const searched = await page.evaluate((term) => {
+    const input = document.querySelector('.cx-search__input');
+    const cards = [...document.querySelectorAll('.cx')];
+    const visible = cards.filter((card) => !card.hidden);
+    const visibleOpen = visible.filter((card) => card.classList.contains('is-open'));
+    return {
+      value: input?.value ?? '',
+      visibleOpen: visibleOpen.length,
+      lockedVisible: visible.filter((card) => card.classList.contains('is-locked')).length,
+      allMatch: visibleOpen.every((card) => (card.textContent ?? '').toLowerCase().includes(term.toLowerCase())),
+      hit: document.querySelector('.cx-search__hit')?.textContent ?? '',
+    };
+  }, searchTerm);
+  expect(searched.value === searchTerm && searched.visibleOpen > 0 && searched.allMatch, '图鉴搜索按已发现条目的名称 / 说明过滤', JSON.stringify(searched));
+  expect(searched.lockedVisible === 0, '搜索时未发现条目保持隐藏，不借搜索剧透', JSON.stringify(searched));
+  expect(searched.hit.includes('找到'), '搜索框旁写出命中数量', searched.hit);
+  await page.fill('.cx-search__input', '');
+  await sleep(120);
+  const cleared = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.cx')];
+    return { visible: cards.filter((card) => !card.hidden).length, total: cards.length };
+  });
+  expect(cleared.visible === cleared.total, '清空搜索后恢复完整目录（未发现条目也回来）', JSON.stringify(cleared));
+  await page.click('.panel--codex .panel__title');
+  await page.keyboard.press('/');
+  await sleep(80);
+  const searchFocused = await page.evaluate(() => document.activeElement?.classList.contains('cx-search__input') ?? false);
+  expect(searchFocused, '在 / 上按下就能聚焦图鉴搜索');
+  await page.fill('.cx-search__input', searchTerm);
+  await page.keyboard.press('Enter');
   await sleep(280);
+  const opened = await page.evaluate(() => document.querySelector('.cx-head__name')?.textContent?.trim() ?? '');
+  expect(opened.length > 0, '搜索后按回车打开第一条命中', opened);
   const detailLayout = await page.evaluate(() => window.__PROBE__.layout('.panel'));
   expect(detailLayout.issues.length === 0, '图鉴详情布局正常', detailLayout.issues.join('; '));
   const detailText = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
@@ -3209,8 +3298,11 @@ async function main() {
   await shot('01d-codex-detail');
   await page.click('[data-act="detail-back"]');
   await sleep(260);
-  const backToCodex = await page.evaluate(() => document.getElementById('ui-root').textContent || '');
-  expect(backToCodex.includes('图鉴 ·') && backToCodex.includes('尚未发现'), '从详情返回后回到图鉴目录');
+  const backToCodex = await page.evaluate(() => ({
+    text: document.getElementById('ui-root').textContent || '',
+    query: document.querySelector('.cx-search__input')?.value ?? '',
+  }));
+  expect(backToCodex.text.includes('图鉴 ·') && backToCodex.query === searchTerm, '从详情返回后回到图鉴目录并保留搜索词', JSON.stringify(backToCodex));
   await page.click('[data-act="back"]');
   await sleep(300);
 
@@ -4013,6 +4105,20 @@ async function main() {
   expect(holdPause.after.on === false, '暂停时触摸控件收起来（别压着暂停面板）', JSON.stringify(holdPause));
   expect(holdPause.back.on === true, '继续游戏后触摸控件回来', JSON.stringify(holdPause));
 
+  // 手机这一段跑得久，期间自然升级会弹面板；它盖在 HUD 上时，暂停键点不到。
+  // 先把可能挡住这枚键的面板收掉，再把升级门槛抬高——量的是暂停键，不是这一局的升级运气。
+  const pauseReady = await mobile.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    if (g.state === 'levelup' && g.currentOffers[0]) g.chooseUpgrade(g.currentOffers[0]);
+    if (g.state === 'shop') g.leaveShop();
+    if (g.state === 'curse' && g.curseOffers[0]) g.chooseCurse(g.curseOffers[0].id);
+    if (g.state === 'shrine') g.leaveShrine();
+    if (g.state === 'paused') g.togglePause();
+    g.xpToNext = Math.max(g.xpToNext, 1e9);
+    return { state: g.state, screen: document.querySelector('.screen.is-visible')?.className ?? null };
+  });
+  expect(pauseReady.state === 'playing', '手机暂停键量之前，战场处于可操作状态', JSON.stringify(pauseReady));
+
   // 手机上的暂停入口：键盘的 Esc 在手机上不存在，HUD 得有一个按钮，
   // 而且它不能压住记分栏（它就是挂在记分栏左上角外侧的那一枚）
   const pauseBtn = await mobile.evaluate(() => {
@@ -4539,6 +4645,142 @@ async function main() {
   // 拔掉：别把后面几条（还要用键盘 / 鼠标）拖下水
   await page.evaluate(() => { delete navigator.getGamepads; });
   await padFrames(2);
+
+  // ── 13. 壁火（v110）：真键盘冲刺撞墙，墙这一侧起火、墙后不挨 ──
+  // 这是墙第一次能被玩家主动当成武器。离线用例量了几何；这里量的是**真键盘那一路**：
+  // 按住 S + 空格，主循环收到输入、冲刺撞上墙、壁火真的落到敌人身上，而且图鉴与提示都记上。
+  const wallfireScene = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.level.walls.length = 0;
+    g.level.walls.push({ x: -200, y: -140, w: 400, h: 80 });
+    p.x = 0;
+    p.y = -260;
+    p.vx = 0;
+    p.vy = 0;
+    p.dashTimer = 0;
+    p.dashCd = 0;
+    p.invuln = 0;
+    p.hp = 1e6;
+    p.stats.maxHp = 1e6;
+    p.oil = p.oilMax;
+    p.weapons.clear();
+    g.director.introTimer = 1e9;
+    g.director.spawnTimer = 1e9;
+    const side = g.enemies.spawn('shade', 74, -170, 1, 1);
+    side.hp = 1e6;
+    side.maxHp = 1e6;
+    side.speed = 0;
+    const behind = g.enemies.spawn('shade', 0, -20, 1, 1);
+    behind.hp = 1e6;
+    behind.maxHp = 1e6;
+    behind.speed = 0;
+    window.__WALLFIRE_SIDE__ = side.id;
+    window.__WALLFIRE_BEHIND__ = behind.id;
+    window.__WALLFIRE_SOUNDS__ = [];
+    const real = g.audio.play.bind(g.audio);
+    g.audio.play = (name) => {
+      window.__WALLFIRE_SOUNDS__.push(name);
+      return real(name);
+    };
+    return { state: g.state, players: g.enemies.count };
+  });
+  expect(wallfireScene.state === 'playing' && wallfireScene.players === 2, '壁火靶场：战斗里有一只墙前、一只墙后的靶', JSON.stringify(wallfireScene));
+  await page.keyboard.down('KeyS');
+  // 先让人真的往墙那边走起来，再按冲刺：否则主循环可能在 S 被采样之前就锁定了冲刺方向。
+  await sleep(120);
+  const movingTowardWall = await page.evaluate(() => window.__WICKLIGHT__.game.player.y > -258);
+  expect(movingTowardWall, '壁火靶场：S 已经让玩家朝墙走');
+  // 冲刺只读"按住"状态：press() 的 down/up 可能整段落在两帧之间，主循环一次也看不到。
+  await page.keyboard.down('Space');
+  for (let i = 0; i < 20; i += 1) {
+    await sleep(80);
+    if (await page.evaluate(() => (window.__WICKLIGHT__.game.damageBySource.get('wallfire') ?? 0) > 0)) break;
+  }
+  await page.keyboard.up('Space');
+  await page.keyboard.up('KeyS');
+  await sleep(120);
+  const wallfire = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    let side = null;
+    let behind = null;
+    g.enemies.forEach((e) => {
+      if (e.id === window.__WALLFIRE_SIDE__) side = e;
+      if (e.id === window.__WALLFIRE_BEHIND__) behind = e;
+    });
+    return {
+      dmg: +(g.damageBySource.get('wallfire') ?? 0).toFixed(1),
+      sideHp: side ? +(side.maxHp - side.hp).toFixed(1) : null,
+      behindHp: behind ? +(behind.maxHp - behind.hp).toFixed(1) : null,
+      tip: (g.save.tips ?? []).includes('wall:fire'),
+      codex: g.codex.has('mechanic', 'wallfire'),
+      sounds: [...(window.__WALLFIRE_SOUNDS__ ?? [])],
+    };
+  });
+  expect(wallfire.dmg > 0 && wallfire.sideHp > 0, '按住 S + 空格撞墙：墙这一侧的靶真的挨了壁火', JSON.stringify(wallfire));
+  expect(wallfire.behindHp === 0, '墙后的靶一点都没挨（壁火不是整圆爆炸）', JSON.stringify(wallfire));
+  expect(wallfire.sounds.includes('wallfire'), '撞墙时响起壁火自己的声音', JSON.stringify(wallfire.sounds));
+  expect(wallfire.tip && wallfire.codex, '第一次壁火同时弹说明并记进图鉴', JSON.stringify(wallfire));
+  await shot('19-wallfire');
+
+  // ── 13b. 旋灯（v116）：真武器路径下，落点停在墙前，吸力不过墙，收尾仍整圆 ──
+  const vortexScene = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    g.enemies.clear();
+    g.projectiles.clear();
+    g.vortexes.length = 0;
+    g.level.walls.length = 0;
+    g.level.walls.push({ x: -200, y: -140, w: 400, h: 40 });
+    p.x = 0;
+    p.y = -260;
+    p.vx = 0;
+    p.vy = 0;
+    p.hp = 1e6;
+    p.stats.maxHp = 1e6;
+    p.oil = p.oilMax;
+    p.weapons.clear();
+    p.weapons.set('vortex', 5);
+    p.recomputeStats();
+    p.cooldowns.clear();
+    p.angle = -Math.PI / 2;
+    g.director.introTimer = 1e9;
+    g.director.spawnTimer = 1e9;
+    const behind = g.enemies.spawn('shade', 0, -80, 1, 1);
+    behind.hp = behind.maxHp = 1e6;
+    behind.speed = 0;
+    behind.damage = 0;
+    window.__VORTEX_BEHIND__ = behind.id;
+    return { state: g.state, behindY: behind.y };
+  });
+  expect(vortexScene.state === 'playing', '旋灯靶场：战斗里墙后有一只靶', JSON.stringify(vortexScene));
+  await page.waitForFunction(() => window.__WICKLIGHT__.game.vortexes.length > 0, null, { timeout: 3000 }).catch(() => {});
+  const vortexCast = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const v = g.vortexes[0] ?? null;
+    return { n: g.vortexes.length, y: v ? +v.y.toFixed(1) : null };
+  });
+  expect(vortexCast.n > 0 && vortexCast.y !== null, '旋灯真的沿自动索敌扔了出去', JSON.stringify(vortexCast));
+  expect(vortexCast.y > -170 && vortexCast.y < -140, '灯心停在墙前，没有落进墙体或墙后', JSON.stringify(vortexCast));
+  await sleep(260);
+  const vortexHold = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    let behind = null;
+    g.enemies.forEach((e) => { if (e.id === window.__VORTEX_BEHIND__) behind = e; });
+    return { y: behind ? +behind.y.toFixed(1) : null, active: g.vortexes.length };
+  });
+  expect(vortexHold.active > 0 && vortexHold.y === -80, '吸力不穿墙：墙后的靶在旋转期间一步没被拖', JSON.stringify(vortexHold));
+  await sleep(1150);
+  const vortexBurst = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    let behind = null;
+    g.enemies.forEach((e) => { if (e.id === window.__VORTEX_BEHIND__) behind = e; });
+    return { hpLost: behind ? +(behind.maxHp - behind.hp).toFixed(1) : null };
+  });
+  expect(vortexBurst.hpLost > 0, '收尾仍是“炸出去的一下”：墙后的靶照旧吃整圆伤害', JSON.stringify(vortexBurst));
+  await shot('19b-vortex-wall');
 
   // ── 收尾 ──
   expect(consoleErrors.length === 0, '无 console 错误', consoleErrors.slice(0, 4).join(' | '));

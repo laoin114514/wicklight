@@ -14,6 +14,9 @@ export interface Particle {
   drag: number;
   glow: boolean;
   ring: boolean;
+  /** 只有 `ring` 粒子会读：这一圈从哪个角度画到哪个角度（默认整圆）。 */
+  arcStart: number;
+  arcEnd: number;
   gravity: number;
 }
 
@@ -31,6 +34,8 @@ export class ParticleSystem {
     drag: 2,
     glow: true,
     ring: false,
+    arcStart: 0,
+    arcEnd: Math.PI * 2,
     gravity: 0,
   }), 512);
 
@@ -99,6 +104,24 @@ export class ParticleSystem {
   }
 
   shockwave(x: number, y: number, color: string, size = 40, life = 0.4): void {
+    this.shockwaveArc(x, y, color, size, life, 0, Math.PI * 2);
+  }
+
+  /**
+   * 只画一段圆弧的冲击波（v104）。
+   *
+   * 燃爆 / 伏灯 / 旋灯那些"炸出去的一下"故意不看墙，继续用整圆的 `shockwave`；
+   * 燎灯的脉冲是"光照到哪儿就烤到哪儿"，墙后那一段本就不该画出来。
+   */
+  shockwaveArc(
+    x: number,
+    y: number,
+    color: string,
+    size: number,
+    life: number,
+    arcStart: number,
+    arcEnd: number,
+  ): void {
     const p = this.pool.acquire();
     p.x = x;
     p.y = y;
@@ -111,6 +134,8 @@ export class ParticleSystem {
     p.drag = 0;
     p.glow = true;
     p.ring = true;
+    p.arcStart = arcStart;
+    p.arcEnd = arcEnd;
     p.gravity = 0;
   }
 
@@ -151,7 +176,7 @@ export class ParticleSystem {
         ctx.strokeStyle = p.color;
         ctx.lineWidth = 2 + 4 * t;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r, p.arcStart, p.arcEnd);
         ctx.stroke();
       } else {
         ctx.globalAlpha = t;

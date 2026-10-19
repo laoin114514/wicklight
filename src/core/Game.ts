@@ -1,4 +1,6 @@
 import { Camera } from './Camera';
+import { distanceToRect, visibilityPolygon, type VisibilityPoint } from './Visibility';
+import { isLitAt } from './LightRules';
 import { PostFX } from './PostFX';
 import { LightSystem } from './LightSystem';
 import { Renderer } from './Renderer';
@@ -22,7 +24,7 @@ import { generateLevel, refinishLevel, type Level } from '../systems/LevelGen';
 import { drawDecor } from './Decor';
 import type { Pyre, Shrine } from '../systems/LevelGen';
 import { CURSES, type CurseDef } from '../data/curses';
-import { collideWalls, clampToArena, pointInWalls, rayWalls, wallBetween } from '../systems/CollisionSystem';
+import { collideWallsAt, clampToArena, pointInWalls, rayWalls, wallBetween } from '../systems/CollisionSystem';
 import { UpgradeSystem } from '../systems/UpgradeSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { MetaSystem } from '../systems/MetaSystem';
@@ -41,6 +43,7 @@ import { DIFFICULTIES } from '../systems/DifficultySystem';
 import { STAGES, STAGE_MAP } from '../data/stages';
 import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
+import { WALLFIRE } from '../data/wallfire';
 import { MINE } from '../data/mines';
 import { VORTEX } from '../data/vortex';
 import { LAMP } from '../data/lamp';
@@ -180,6 +183,7 @@ const SOURCE_LABEL: Record<string, { name: string; color: string }> = {
   // 「焚灯」（v83）：弃灯被吃掉那一下炸出来的伤害。它不是武器（那盏灯早就分出去了），
   // 所以单起一行——结算里看到「弃灯」这两个字，玩家才知道那笔账是从哪儿来的。
   lamp: { name: '弃灯', color: '#ffb14e' },
+  wallfire: { name: '壁火', color: '#ff8a3c' },
   other: { name: '其他', color: '#8fa7ff' },
 };
 
@@ -260,6 +264,8 @@ interface Vortex {
   phase: number;
   /** 谁放的（武器 id）：收缩那一下的伤害记在它头上 */
   source: string;
+  /** 这盏灯看得见的范围（世界坐标；没有墙时为空，绘制不做裁剪） */
+  clip: VisibilityPoint[];
 }
 
 /** 地上的一盏弃灯（「分灯」放下的）。 */
@@ -277,6 +283,15 @@ interface Decal {
   life: number;
   maxLife: number;
   color: string;
+}
+
+/** 壁火撞完之后留在墙脚的那团余光（v112）：真实动态光 + 暖色 glow，不是第二段伤害。 */
+interface WallfireGlow {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  radius: number;
 }
 
 export interface UIHost {
@@ -446,6 +461,7 @@ export class Game {
   forgeUsed = false;
   shopHeader = '';
   decals: Decal[] = [];
+  wallfireGlows: WallfireGlow[] = [];
   arcs: { pts: number[]; life: number; maxLife: number; color: string; seed: number }[] = [];
   shrineOffers: ShrineOffer[] = [];
   private shrineOpen: Shrine | null = null;
@@ -810,6 +826,7 @@ export class Game {
     this.embersEarned = 0;
     this.gold = 0;
     this.decals.length = 0;
+    this.wallfireGlows.length = 0;
     this.hitStop = 0;
     this.slowmo = 0;
     this.oilPickups = 0;
@@ -1138,10 +1155,12 @@ export class Game {
       this.scanEncounters();
       this.scanWickFamily();
       this.scanLampFamily();
+      this.scanWallShadow();
     }
     this.light.begin();
     this.particles.update(dt);
     this.updateDecals(dt);
+    this.updateWallfireGlows(dt);
     this.updateArcs(dt);
     if (this.frameCooldowns.hurt > 0) this.frameCooldowns.hurt -= dt;
     if (this.comboTimer > 0) {
@@ -1228,7 +1247,11 @@ export class Game {
             : themeId === 'nightcity'
               ? '#e6dcff'
               : '#e2ecff';
-      this.particles.mote(this.player.x + Math.cos(a) * d, this.player.y + Math.sin(a) * d, tint);
+      const mx = this.player.x + Math.cos(a) * d;
+      const my = this.player.y + Math.sin(a) * d;
+      if (isLitAt(this.player.x, this.player.y, lr, mx, my, this.level.walls)) {
+        this.particles.mote(mx, my, tint);
+      }
     }
 
     const stage = this.currentStage();
@@ -1265,7 +1288,9 @@ export class Game {
       // 这一件响不响看的是油，油快攒够的时候玩家本来就该看得见那片战场
       this.light.addGlow(ax, ay, pourAim.pool * 1.25, 0.22 + 0.3 * pourAim.charge);
     }
-    const pcol = collideWalls(this.player.x, this.player.y, this.player.radius, this.level.walls);
+    const dashFromX = this.player.x;
+    const dashFromY = this.player.y;
+    const pcol = collideWallsAt(this.player.x, this.player.y, this.player.radius, this.level.walls);
     // 冲刺一头撞在墙面上（v86）：怪那边早就有交代了（`moveWithWalls` 撞停 + 发呆 0.55 秒），
     // 玩家这边一直是**不声不响**的——人只会觉得"我这下没冲出去"，不知道是自己撞了墙。
     // 收掉的是**这次冲刺**，不是罚站：冲刺本来就是拿来躲的，罚站比撞墙本身更难受；
@@ -1289,6 +1314,7 @@ export class Game {
         this.audio.play('bash');
         this.particles.burst(pcol.x, pcol.y, 8, '#cbd4e8', { speed: 130, size: 2.6, life: 0.4 });
         this.camera.addTrauma(0.1, this.settings.data.shake * this.settings.motionScale);
+        this.wallSlam(pcol.x, pcol.y, pcol.x - dashFromX, pcol.y - dashFromY);
       }
     }
     const clamped = clampToArena(pcol.x, pcol.y, this.player.radius, this.level.halfW, this.level.halfH);
@@ -1306,7 +1332,13 @@ export class Game {
     this.bossName = this.bossList.length ? this.bossList[0].name : null;
     this.bossFrac = this.bossList.length ? this.bossList[0].frac : 0;
 
-    this.projectiles.update(dt, (p) => this.nearestEnemy(p.x, p.y, 460), { x: this.player.x, y: this.player.y });
+    // 追踪弹也走同一条索敌（v103）：发射那一刻已经优先挑看得见的，飞行途中每帧
+    // 重定向却只按距离找，会让飞萤拐向墙后更近的那只、主动撞在墙面上。
+    // 全都隔着墙时 `preferVisible` 照旧退回最近的那只——这一条和 v89 的兜底相同。
+    this.projectiles.update(dt, (p) => this.nearestEnemy(p.x, p.y, 460, undefined, true), {
+      x: this.player.x,
+      y: this.player.y,
+    });
     this.updateBeams(dt);
     this.resolveProjectiles(dt);
     this.resolveGrounds(dt);
@@ -1316,7 +1348,14 @@ export class Game {
     this.resolveMines(dt);
     this.updatePyres(dt);
     this.updateLamps(dt);
-    this.pickups.update(dt, this.player.x, this.player.y, this.player.stats.pickupRange, (p) => this.collect(p));
+    this.pickups.update(
+      dt,
+      this.player.x,
+      this.player.y,
+      this.player.stats.pickupRange,
+      (p) => this.collect(p),
+      this.level.walls,
+    );
 
     this.camera.resize(this.renderer.width, this.renderer.height);
     this.camera.follow(this.player.x, this.player.y, dt);
@@ -1349,7 +1388,11 @@ export class Game {
       if (py.lit) continue;
       const dx = this.player.x - py.x;
       const dy = this.player.y - py.y;
-      if (dx * dx + dy * dy < 84 * 84) channel = py;
+      // v106：点燃不是隔墙按得动的按钮。84px 只负责"够不够近"，中间是否挡着一堵墙
+      // 仍交给全场共用的 `wallBetween`；否则墙影里点得着火，和 v94 起停在墙面上的灯光对不上。
+      if (dx * dx + dy * dy < 84 * 84 && !wallBetween(this.player.x, this.player.y, py.x, py.y, this.level.walls)) {
+        channel = py;
+      }
     }
     this.pyreChannel = channel;
     for (const py of pyres) {
@@ -1441,7 +1484,12 @@ export class Game {
     // 你放下的那盏小灯更脆：吹灯客贴身就是一口气的事
     for (let i = this.lamps.length - 1; i >= 0; i -= 1) {
       const l = this.lamps[i];
-      if ((l.x - x) ** 2 + (l.y - y) ** 2 < 70 * 70) {
+      // v107：够得着不等于够得着墙那边。弃灯的亮光从 v94 起就停在墙面上，
+      // 抽焰这条物理接触也不能隔墙发生；先做距离筛选，进圈后再问一次线段。
+      if (
+        (l.x - x) ** 2 + (l.y - y) ** 2 < 70 * 70 &&
+        !wallBetween(x, y, l.x, l.y, this.level.walls)
+      ) {
         this.lamps.splice(i, 1);
         this.particles.burst(l.x, l.y - 10, 12, '#b6a6ff', { speed: 80, size: 2.2, life: 0.5 });
         return;
@@ -1452,7 +1500,7 @@ export class Game {
     for (const py of this.level.pyres) {
       if (!py.lit || py.flame <= 0) continue;
       const d = Math.hypot(py.x - x, py.y - y);
-      if (d < bestD) {
+      if (d < bestD && !wallBetween(x, y, py.x, py.y, this.level.walls)) {
         bestD = d;
         best = py;
       }
@@ -1551,10 +1599,13 @@ export class Game {
       // 「灯晕」：走到这盏灯的光里的怪，脚就沉下去。判据和"它追不追这盏灯"完全一样
       // （引怪圈内 + 不是吹灯客/回声那两种有自己目标的性格），只是把它再慢一档——
       // 走的是 `applySlow` 那条共用的减速账，所以和霜印那 0.5 倍撞在一起时不会把人家顶回快的。
+      // v100：光已经被墙裁到同一侧，减速也得停在同一侧——墙后那只不在"它的光里"；
+      // 先在圈内做距离筛选，再问一次线段，圈外与无墙的账都不变。
       if (f.lampSnare > 0) {
         this.enemies.forEach((e) => {
           if (e.def.behavior === 'quench' || e.def.behavior === 'echo') return;
           if (Math.hypot(e.x - l.x, e.y - l.y) > lureR) return;
+          if (wallBetween(l.x, l.y, e.x, e.y, this.level.walls)) return;
           applySlow(e, LAMP.snareSpan, 1 - f.lampSnare);
         });
       }
@@ -1563,7 +1614,14 @@ export class Game {
         if (snuffed) return;
         const dx = e.x - l.x;
         const dy = e.y - l.y;
-        if (dx * dx + dy * dy <= LAMP.snuffR * LAMP.snuffR) snuffed = true;
+        // v107：啃灯是贴身的物理接触；墙后的怪就算圆心落在 34px 圈里，
+        // 也不该隔着墙角把灯吃掉（「焚灯」的结算也因此不会在墙后白白触发）。
+        if (
+          dx * dx + dy * dy <= LAMP.snuffR * LAMP.snuffR &&
+          !wallBetween(l.x, l.y, e.x, e.y, this.level.walls)
+        ) {
+          snuffed = true;
+        }
       });
       if (snuffed && l.life > 0.35) {
         l.life = 0.35;
@@ -1645,7 +1703,8 @@ export class Game {
       if (s.used || s.prompted) continue;
       const dx = this.player.x - s.x;
       const dy = this.player.y - s.y;
-      if (dx * dx + dy * dy < 46 * 46) {
+      // 祭坛也一样：46px 是伸手够得着的距离，不是隔墙递进去的窗口（v106）。
+      if (dx * dx + dy * dy < 46 * 46 && !wallBetween(this.player.x, this.player.y, s.x, s.y, this.level.walls)) {
         this.openShrine(s);
         return;
       }
@@ -1794,7 +1853,12 @@ export class Game {
   // ─── contexts ───
 
   private lightCtx(): LightCtx {
-    return { px: this.player.x, py: this.player.y, lightRadius: this.player.lightRadius };
+    return {
+      px: this.player.x,
+      py: this.player.y,
+      lightRadius: this.player.lightRadius,
+      walls: this.level.walls,
+    };
   }
 
   private playerCtx(): PlayerContext {
@@ -1837,7 +1901,7 @@ export class Game {
       mine: (x, y, damage, radius, trigger, fire, source) =>
         this.placeMine(x, y, damage, radius, trigger, fire, source),
       vortex: (x, y, damage, radius, burn, drag, source) =>
-        this.placeVortex(x, y, damage, radius, burn, drag, source),
+        this.placeVortexFrom(this.player.x, this.player.y, x, y, damage, radius, burn, drag, source),
       pour: (cost) => {
         this.pourCount += 1;
         this.pourSpent += cost;
@@ -2219,11 +2283,7 @@ export class Game {
     const lc = this.lightCtx();
     this.enemies.forEach((e) => {
       if (exclude && exclude.has(e.id)) return;
-      if (e.def.requiresLight) {
-        const dx = e.x - lc.px;
-        const dy = e.y - lc.py;
-        if (dx * dx + dy * dy > lc.lightRadius * lc.lightRadius) return;
-      }
+      if (e.def.requiresLight && !isLitAt(lc.px, lc.py, lc.lightRadius, e.x, e.y, walls)) return;
       const d = (e.x - x) ** 2 + (e.y - y) ** 2;
       if (d < bestD) {
         bestD = d;
@@ -2333,6 +2393,21 @@ export class Game {
     for (let i = this.decals.length - 1; i >= 0; i -= 1) {
       this.decals[i].life -= dt;
       if (this.decals[i].life <= 0) this.decals.splice(i, 1);
+    }
+  }
+
+  /** 壁火余光：每帧把还没烧完的那团光重新交给 LightSystem（`light.begin()` 每帧清空）。 */
+  private updateWallfireGlows(dt: number): void {
+    for (let i = this.wallfireGlows.length - 1; i >= 0; i -= 1) {
+      const g = this.wallfireGlows[i];
+      g.life -= dt;
+      if (g.life <= 0) {
+        this.wallfireGlows.splice(i, 1);
+        continue;
+      }
+      const fade = g.life / g.maxLife;
+      this.light.addLight(g.x, g.y, g.radius * (0.62 + 0.38 * fade), 0.58 * fade, 0.08);
+      this.light.addGlow(g.x, g.y, g.radius * 1.05, 0.44 * fade);
     }
   }
 
@@ -2607,6 +2682,41 @@ export class Game {
       '焚灯 / 灯罩 / 拾灯 / 灯晕都围着你按 E 分出去的那盏灯转——一次都不分，它们在手里就是四张废牌。' +
         '按 E（手机：右下角的「分灯」）放下一盏，摆在**你不打算去**的那个方向：追兵回头去扑它，你往另一边走。' +
         '台架上量过：灯落在追兵本来就要路过的线上几乎一点不省，拐个弯才买得到那两三秒。',
+    );
+  }
+
+  /**
+   * 第一次贴近一堵墙（v94）：v88 把伤害接上了墙、v94 又把灯火也接到墙面上，
+   * 但这两条规矩如果只写在 README 里，玩家第一次发现"墙后那只打不到"时只会以为武器坏了。
+   * 所以等玩家真的走到墙边（90px 内）再讲一次，而不是开局就把卡糊上来。
+   *
+   * 只讲一次，写进存档；触发距离按玩家半径 14 算，90px 大约是"贴着墙走"的那一圈。
+   */
+  private scanWallShadow(): void {
+    if (this.runTime < 4 || this.save.tips?.includes('wall:shadow')) return;
+    const p = this.player;
+    let near = false;
+    for (const wall of this.level.walls) {
+      if (distanceToRect(p.x, p.y, wall) <= 90) {
+        near = true;
+        break;
+      }
+    }
+    if (!near) return;
+    this.codex.discover('mechanic', 'wall');
+    this.showTip(
+      'wall:shadow',
+      '墙 · 灯火会停在墙面上',
+      '墙会挡住灯火：墙后那一片你看不见，烈焰鞭、燎灯与火环也照不过去。自动索敌只要旁边有看得见的，' +
+        '就不会把子弹递给墙后的那只；全都看不见时它仍会锁最近的那只——那一发会打在墙上。' +
+        '想打另一边，先绕过墙角。贴着墙站，喷糜者的糜液还会溅到半口；' +
+        '引灯与「疾风」的速度光环也过不去；余烬风里灯台的庇护同样只算墙这一侧的光。' +
+        '想点灯台或开祭坛，也得走到墙的这一侧。' +
+        '吹灯客与凑上来的怪同样吹不到、啃不到墙后的灯焰。' +
+        '墙后的掉落物不会隔墙被吸过来，掉在墙边的会停在墙外——想捡就绕过墙角。' +
+        '掠影也只算墙这一侧的危险：墙后的怪与弹幕再近都不加热度。' +
+        '旋灯的落点会在墙前停住，吸力、标灯与卷弹也只沿墙这一侧；' +
+        '燃爆 / 旋灯的收尾 / 雷弧是刻意留的例外——炸出去的那一下不看墙。',
     );
   }
 
@@ -2914,6 +3024,66 @@ export class Game {
   }
 
   /**
+   * 「壁火」（v110）：正面冲刺撞墙时，沿墙面朝玩家这一侧炸开。
+   *
+   * `nx/ny` 是撞墙修正量（`pcol - 冲刺落点`），它指向墙外，也就是玩家这一侧。
+   * 伤害没有走 `blast()`：那一族是故意不看墙的"炸出去的一下"，而壁火是墙面上被撞出来的火，
+   * 每一只都得先过 `wallBetween`。否则画面在墙这一侧、伤害却漏到墙后，和 v94 以后的光是两套规矩。
+   */
+  private wallSlam(x: number, y: number, nx: number, ny: number): void {
+    const len = Math.hypot(nx, ny) || 1;
+    const ux = nx / len;
+    const uy = ny / len;
+    const tx = -uy;
+    const ty = ux;
+    const radius = WALLFIRE.radius * (1 + (this.player.stats.areaMult - 1) * 0.5);
+    const damage = WALLFIRE.damage * this.player.stats.damageMult * this.player.damageScale;
+    this.codex.discover('mechanic', 'wallfire');
+    this.showTip(
+      'wall:fire',
+      '墙 · 壁火',
+      '正面冲刺撞墙会收掉这次冲刺，但沿墙面炸开一圈壁火：半径 128、伤害 32、两层灼烧，只烧墙这一侧。墙脚还会亮 0.7 秒，借它看清自己撞出了哪一片；一次烧到 5 只解「一壁五焚」。斜着擦墙照旧滑过去，也不会触发——想把墙当武器，就正面撞上去。',
+    );
+    this.audio.play('wallfire');
+    this.haptics.mine();
+    this.camera.addTrauma(0.14, this.settings.data.shake * this.settings.motionScale);
+    const gx = x + ux * 14;
+    const gy = y + uy * 14;
+    this.wallfireGlows.push({
+      x: gx,
+      y: gy,
+      life: WALLFIRE.afterglow,
+      maxLife: WALLFIRE.afterglow,
+      radius: WALLFIRE.glowRadius,
+    });
+    if (this.wallfireGlows.length > 6) this.wallfireGlows.shift();
+    this.light.addLight(gx, gy, WALLFIRE.glowRadius, 0.58, 0.08);
+    this.light.addGlow(gx, gy, WALLFIRE.glowRadius * 1.05, 0.5);
+    this.addDecal(gx, gy, radius * 0.34, 'rgba(36,12,4,0.5)', 7);
+    this.particles.burst(x + ux * 18, y + uy * 18, 12, '#ff8a3c', { speed: 150, size: 3.2, life: 0.5 });
+    for (let i = 0; i < 12; i += 1) {
+      const along = (i / 11 - 0.5) * radius * 1.55;
+      const out = 8 + this.rng.next() * 26;
+      this.particles.ember(x + ux * out + tx * along, y + uy * out + ty * along, i % 3 === 0 ? '#ff9a3a' : '#ffc46b');
+    }
+    let hits = 0;
+    this.enemies.forEach((e) => {
+      const dx = e.x - x;
+      const dy = e.y - y;
+      const d = Math.hypot(dx, dy);
+      if (d > radius + e.radius) return;
+      if (wallBetween(x, y, e.x, e.y, this.level.walls)) return;
+      const falloff = 1 - clamp((d / radius) * 0.5, 0, 0.6);
+      if (this.enemies.isVulnerable(e, this.lightCtx())) hits += 1;
+      this.applyHit(e, damage * falloff, false, dx, dy, WALLFIRE.knockback, {
+        burn: WALLFIRE.burn,
+        source: 'wallfire',
+      });
+    });
+    if (hits >= WALLFIRE.crowd) this.achievements.unlock('wallfire_crowd');
+  }
+
+  /**
    * 一圈爆炸，火球的落地爆炸与「伏灯」都是它。
    *
    * 抽出来是因为它们是同一件事——"以某点为心，按距离衰减打一圈"；
@@ -3082,9 +3252,66 @@ export class Game {
   }
 
   /**
-   * 转起一盏「旋灯」。
+   * 玩家真正扔出的旋灯：先沿"人 → 目标"把落点截在墙前，再交给 `placeVortex`。
    *
-   * 落点由玩家给（Player 只知道"我朝哪儿"，锁的是最近那只怪），
+   * 落点由 Player 算（它只知道"我朝哪儿"，锁的是最近那只怪），但 Player 不认识地图。
+   * 截停放在这里，和光照 / 索敌 / 拾取物用同一批墙：墙后的目标可以被选中，灯却不会穿过墙面
+   * 落到另一侧；靠墙扔时灯心留出 `placePad`，免得吸力线从墙里起头、把同一侧也判成隔墙。
+   */
+  placeVortexFrom(
+    originX: number,
+    originY: number,
+    x: number,
+    y: number,
+    damage: number,
+    radius: number,
+    burn: number,
+    drag: number,
+    source: string,
+  ): void {
+    const dx = x - originX;
+    const dy = y - originY;
+    const dist = Math.hypot(dx, dy);
+    let tx = x;
+    let ty = y;
+    let blocked = false;
+    let impactX = 0;
+    let impactY = 0;
+    if (dist > 1e-6) {
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const wallT = rayWalls(originX, originY, nx, ny, dist, this.level.walls);
+      if (wallT < dist) {
+        blocked = true;
+        impactX = originX + nx * wallT;
+        impactY = originY + ny * wallT;
+        const stop = Math.max(0, wallT - VORTEX.placePad);
+        tx = originX + nx * stop;
+        ty = originY + ny * stop;
+      }
+    }
+    const at = clampToArena(tx, ty, 4, this.level.halfW, this.level.halfH);
+    this.placeVortex(at.x, at.y, damage, radius, burn, drag, source);
+    if (blocked) {
+      // 接触点只在墙这一侧：灯心会退到墙前 18px，火花则留在真正撞上的那一面墙上，
+      // 让"这一下被墙接住了"不必等玩家读完提示才看得出来。
+      this.particles.burst(impactX, impactY, 7, '#b9d9ff', {
+        speed: 55,
+        size: 2,
+        life: 0.2,
+        drag: 9,
+      });
+      this.showTip(
+        'vortex:wall',
+        '旋灯 · 灯停在墙前',
+        '落点被墙截住：灯心停在墙前，吸力、标灯与卷弹都只算墙这一侧。'
+          + '收尾那一下仍是整圆，墙后也吃得到——墙挡住的是"往里拽"，不是最后那一下。',
+      );
+    }
+  }
+
+  /**
+   * 在指定坐标转起一盏「旋灯」。这是底层落点；玩家开火走 `placeVortexFrom`（先过墙）。
    * 剩下的都在这里：吸力、卷弹幕、收缩那一下。
    */
   placeVortex(x: number, y: number, damage: number, radius: number, burn: number, drag: number, source: string): void {
@@ -3094,22 +3321,43 @@ export class Game {
     //   （"拢得多狠"和"收尾多疼"是同一件事），这一件只是把那个数放大，没有拆开它。
     const spread = 1 + this.player.flags.vortexSpread;
     const life = VORTEX.life + this.player.flags.vortexTime;
+    const radiusOnField = radius * spread;
     this.vortexes.push({
       x,
       y,
       life,
       maxLife: life,
-      radius: radius * spread,
+      radius: radiusOnField,
       damage,
       burn,
       drag,
       phase: this.rng.next() * 6.283,
       source,
+      clip: this.vortexClip(x, y, radiusOnField),
     });
     this.vortexCount += 1;
     this.codex.discover('mechanic', 'vortex');
     this.particles.burst(x, y, 10, '#8fb8ff', { speed: 120, size: 3, life: 0.5 });
     this.audio.play('ui');
+  }
+
+  /**
+   * 旋灯画面上那道吸力圈的可见轮廓。
+   *
+   * 规则已经只吸墙这一侧（v116），圈却还画成整圆的话，玩家会以为墙后也在范围内。
+   * 这里在**施放时**算一次可见多边形：墙在旋灯 1.2 秒寿命里不会动，逐帧重算只是白烧手机。
+   * 坐标换到以灯心为中心的局部方框里交给 `visibilityPolygon`，再换回世界坐标。
+   */
+  private vortexClip(x: number, y: number, radius: number): VisibilityPoint[] {
+    if (!this.level.walls.length) return [];
+    const pad = 2;
+    const half = radius + pad;
+    const near = this.level.walls.filter((w) => distanceToRect(x, y, w) <= half);
+    if (!near.length) return [];
+    const size = half * 2;
+    const localWalls = near.map((w) => ({ x: w.x - x + half, y: w.y - y + half, w: w.w, h: w.h }));
+    return visibilityPolygon(half, half, localWalls, size, size)
+      .map((p) => ({ x: p.x + x - half, y: p.y + y - half }));
   }
 
   /**
@@ -3127,7 +3375,7 @@ export class Game {
       this.light.addLight(v.x, v.y, VORTEX.lightRadius, VORTEX.lightIntensity);
       this.light.addGlow(v.x, v.y, v.radius * 0.55, 0.2);
       // 同时拽住几只：首领不算（它站在那儿不是被卷进来的）
-      const held = this.countHeld(v.x, v.y, v.radius);
+      const held = this.countHeld(v.x, v.y, v.radius, true);
       if (held > 0) {
         this.vortexBest = Math.max(this.vortexBest, held);
         if (held >= VORTEX.crowd) this.achievements.unlock('vortex_crowd');
@@ -3203,10 +3451,11 @@ export class Game {
    * 圈里站着几只（首领不算：它站在那儿不是被卷进来的，也不该为"收网"的伤害加成出力）。
    * 吸入圈和收尾圈共用这一个判据，所以"拽住几只"和"这一下打到几只"不会两套口径。
    */
-  private countHeld(x: number, y: number, radius: number): number {
+  private countHeld(x: number, y: number, radius: number, sameSide = false): number {
     let n = 0;
     this.enemies.forEach((e) => {
       if (e.boss) return;
+      if (sameSide && wallBetween(x, y, e.x, e.y, this.level.walls)) return;
       if ((e.x - x) ** 2 + (e.y - y) ** 2 <= radius * radius) n += 1;
     });
     return n;
@@ -3220,6 +3469,7 @@ export class Game {
     const core = v.radius * VORTEX.swallow;
     for (const p of this.projectiles.all) {
       if (!p.active || p.fromPlayer) continue;
+      if (wallBetween(v.x, v.y, p.x, p.y, this.level.walls)) continue;
       const dx = v.x - p.x;
       const dy = v.y - p.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -3260,6 +3510,7 @@ export class Game {
       const dy = v.y - e.y;
       const d = Math.hypot(dx, dy);
       if (d > v.radius || d < 0.5) continue;
+      if (wallBetween(v.x, v.y, e.x, e.y, this.level.walls)) continue;
       const resist = e.boss ? VORTEX.bossPull : e.def.elite ? VORTEX.elitePull : 1;
       const force = VORTEX.pull * (1 - d / v.radius) ** VORTEX.pullShape * resist;
       e.vx += (dx / d) * force;
@@ -3510,6 +3761,7 @@ export class Game {
     }
     const vig = Math.min(1.6, speed / GRAZE.speedRef);
     const dashing = p.dashTimer > 0;
+    const walls = this.level.walls;
     // 热度是**按这一帧离危险多近**一点点累起来的，不是"擦到就发一笔"：
     // 判定发生在刚进带子的那一瞬，而那一瞬的距离永远正好等于带子宽度——
     // 按事件发钱的话，"贴着判定边掠过"和"从带子最外沿溜过"给的一样多，
@@ -3522,6 +3774,12 @@ export class Game {
       const d = segDist(e.x, e.y, fx, fy, px, py);
       if (d <= rr || d > rr + GRAZE.rangeEnemy) {
         // 出了带子就快速回味（比攒快三倍）：绕出去再绕回来，才算新的一次"掠过"
+        e.grazeHold = Math.max(0, e.grazeHold - dt * GRAZE.holdBack);
+        return;
+      }
+      // v109：掠影是擦着危险走过去，不是隔着墙跟危险对圆心。墙后的那只既不该记数、
+      // 也不该加热度；按"出了带子"同一条路快速回味，玩家绕过去仍是新的一次掠过。
+      if (walls.length > 0 && wallBetween(px, py, e.x, e.y, walls)) {
         e.grazeHold = Math.max(0, e.grazeHold - dt * GRAZE.holdBack);
         return;
       }
@@ -3541,6 +3799,8 @@ export class Game {
       const rr = proj.radius + p.radius;
       const d = segDist(proj.x, proj.y, fx, fy, px, py);
       if (d <= rr || d > rr + GRAZE.rangeShot) continue;
+      // 弹幕也在墙这一侧才算擦到：同一句视线，免得墙角另一侧飞过的子弹白送一笔。
+      if (walls.length > 0 && wallBetween(px, py, proj.x, proj.y, walls)) continue;
       rate += GRAZE.rateShot * (0.25 + 0.75 * (1 - (d - rr) / GRAZE.rangeShot));
       if (!proj.grazed) {
         proj.grazed = true;
@@ -3926,12 +4186,17 @@ export class Game {
     }
   }
 
-  /** 这一点附近有没有**亮着的**灯台（灯焰被吹灭的灯台不算：它自己都保不住）。 */
+  /**
+   * 这一点有没有落在某座**亮着的**灯台的光里（灯焰被吹灭的灯台不算：它自己都保不住）。
+   *
+   * v105：这里是"灯台的光"，不是"离火堆有多近"。灯台的 250px 光照从 v94 起就按
+   * `Visibility` 停在墙面上，庇护若只问 160px 半径，墙后的玩家会站在灯影里白拿免疫。
+   * 半径先判，再和灯火 / 引灯光环走同一句 `isLitAt`；同一侧与无墙逐帧不变。
+   */
   private litPyreWithin(x: number, y: number, r: number): boolean {
-    const rr = r * r;
     for (const py of this.level.pyres) {
       if (!py.lit) continue;
-      if ((py.x - x) ** 2 + (py.y - y) ** 2 <= rr) return true;
+      if (isLitAt(py.x, py.y, r, x, y, this.level.walls)) return true;
     }
     return false;
   }
@@ -4099,6 +4364,8 @@ export class Game {
         ? ` 它只在灯火 ≥ ${Math.round(POUR.minOil * 100)}% 时才倒——不满就整发不出手，所以它响不响看的是你补油快不快（擦身、击杀掉落、灯台都算）。倒下的地方会留一片火，往同一片上再倒一瓢，火会一层层叠上去。${aimRule}`
         : def.kind === 'aura'
           ? ` 它没有枪管：**它的射程就是你自己的灯火半径**——灯照到哪儿就烤到哪儿，灯外面一点都够不着（吊在你光圈外的远程怪，这一件帮不上忙）。反过来，灯火越亮它打得越狠，拨了芯它跟着一起小下去；「燎灯」和拨芯那四件遗物是两条相反的路。`
+        : def.kind === 'vortex'
+          ? ' 它的落点会被墙截住：灯心停在墙前，吸力、标灯与卷弹都只算墙这一侧；收尾那一下仍是整圆，墙后也吃得到——墙挡住的是"往里拽"，不是最后那一下。'
         : '';
     this.showTip(`weapon:${id}`, `武器 · ${def.name}`, `${def.blurb}${rule}${evo}`);
   }
@@ -4482,6 +4749,7 @@ export class Game {
     this.drawWorld(ctx, w, h);
     this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
     this.light.setScale(r.dpr, this.profile.lightScale);
+    this.light.setOccluders(this.level.walls);
     this.light.render(ctx, this.camera, w, h, this.time);
     this.drawPyreGlow(ctx, w, h);
     this.drawEmberGlow(ctx, w, h);
@@ -4977,7 +5245,7 @@ export class Game {
     this.drawVortexes(ctx);
     this.pickups.draw(ctx, this.time);
     this.projectiles.draw(ctx);
-    this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView());
+    this.enemies.draw(ctx, this.time, this.player.x, this.player.y, this.worldView(), this.level.walls);
     // 倾灯倒出来的火舌画在敌人**上面**、玩家**下面**：一瓢落点永远是人群里，
     // 火苗本来就该从他们身上窜起来（不然最该被看见的一团火只露出一圈边）；
     // 而玩家得始终看得见自己站在哪儿，所以人还在火苗之上。
@@ -5295,6 +5563,15 @@ export class Game {
       // 所以"它要炸在哪儿"在收尾那几帧是看得出来的——不用另画一个预警圈，
       // 玩家看见旋臂缩到多小，那就是这一炸会碰到多远。
       const r = v.radius * (1 - t * (1 - VORTEX.burst));
+      const clipped = v.clip.length > 2;
+      if (clipped) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(v.clip[0].x, v.clip[0].y);
+        for (let i = 1; i < v.clip.length; i += 1) ctx.lineTo(v.clip[i].x, v.clip[i].y);
+        ctx.closePath();
+        ctx.clip();
+      }
       ctx.globalCompositeOperation = 'lighter';
       // 底：一圈往里暗下去的光（越靠中心越亮，方向感就在这里）
       const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, r);
@@ -5359,6 +5636,7 @@ export class Game {
       ctx.arc(v.x, v.y, core, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
+      if (clipped) ctx.restore();
     }
     ctx.restore();
   }

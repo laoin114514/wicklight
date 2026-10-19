@@ -56,6 +56,7 @@ test('新内容（敌人 / 词缀 / 遗物 / 燃爆流派）', async (t) => {
 
   // ── 引灯：为范围内的敌人提供速度光环 ──
   game.enemies.clear();
+  game.level.walls.length = 0;
   const near = game.enemies.spawn('shade', game.player.x + 120, game.player.y, 1, 1);
   const far = game.enemies.spawn('shade', game.player.x + 900, game.player.y, 1, 1);
   game.enemies.spawn('beacon', game.player.x + 100, game.player.y, 1, 1);
@@ -65,6 +66,7 @@ test('新内容（敌人 / 词缀 / 遗物 / 燃爆流派）', async (t) => {
 
   // ── 疾风词缀：同样是速度光环 ──
   game.enemies.clear();
+  game.level.walls.length = 0;
   const hasted = game.enemies.spawn('shade', game.player.x + 60, game.player.y, 1, 1);
   game.applyAffix(hasted, 'haste');
   const bystander = game.enemies.spawn('shade', game.player.x + 100, game.player.y, 1, 1);
