@@ -1073,14 +1073,59 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       // 逐层散开的回音环：它追的是"过去的你"，所以轮廓本身就带着时间差
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      const speed = Math.hypot(e.vx, e.vy);
+      if (speed > 1) {
+        const backX = -e.vx / speed;
+        const backY = -e.vy / speed;
+        for (let ghost = 1; ghost <= 2; ghost += 1) {
+          const cx = e.x + backX * r * (0.5 + ghost * 0.44);
+          const cy = e.y + backY * r * (0.5 + ghost * 0.44);
+          const scale = 1 - ghost * 0.09;
+          ctx.fillStyle = `rgba(159,216,255,${0.095 - ghost * 0.033})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r * scale, 0, TAU);
+          ctx.arc(
+            cx + Math.cos(e.angle) * r * 0.44 * scale,
+            cy + Math.sin(e.angle) * r * 0.44 * scale,
+            r * 0.7 * scale,
+            0,
+            TAU,
+            true,
+          );
+          ctx.fill();
+        }
+      }
+
       ctx.strokeStyle = '#9fd8ff';
       ctx.lineWidth = 2;
       for (let i = 1; i <= 3; i += 1) {
         ctx.globalAlpha = (0.26 - i * 0.06) * (0.7 + Math.sin(time * 3 + w - i) * 0.3);
+        ctx.setLineDash(i > 1 ? [3 + i * 1.5, 6 + i * 2] : []);
         ctx.beginPath();
         ctx.arc(e.x, e.y, r * (1 + i * 0.42), 0, TAU);
         ctx.stroke();
       }
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = 'rgba(190,230,255,0.2)';
+      ctx.lineWidth = 0.8;
+      const tickRot = time * 0.16 + w * 0.04;
+      ctx.beginPath();
+      for (let tick = 0; tick < 12; tick += 1) {
+        const angle = tickRot + (tick / 12) * TAU;
+        const inner = r * 1.22;
+        const outer = inner + (tick % 3 === 0 ? r * 0.16 : r * 0.08);
+        ctx.moveTo(e.x + Math.cos(angle) * inner, e.y + Math.sin(angle) * inner);
+        ctx.lineTo(e.x + Math.cos(angle) * outer, e.y + Math.sin(angle) * outer);
+      }
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.36;
+      ctx.strokeStyle = 'rgba(226,246,255,0.72)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 0.9, e.angle + Math.PI * 0.64, e.angle + Math.PI * 1.56);
+      ctx.stroke();
       ctx.restore();
       break;
     }
