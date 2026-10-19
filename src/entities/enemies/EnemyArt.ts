@@ -3246,13 +3246,59 @@ export function drawEnemy(
 
   if (e.def.behavior === 'bomber' && e.stateTimer > 0) {
     const t = 1 - e.stateTimer / 1.1;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.45 + 0.45 * Math.abs(Math.sin(time * 22));
-    ctx.strokeStyle = '#ff6a2f';
-    ctx.lineWidth = 3;
+    const beat = Math.abs(Math.sin(time * 22));
+    const rr = 118 * (0.55 + 0.45 * t);
+
+    // 引信烧到哪儿，脚下的焦痕就先压到哪儿：一圈内暗外透的热土把爆炸半径坐实。
+    ctx.globalCompositeOperation = 'source-over';
+    const scorch = ctx.createRadialGradient(e.x, e.y, rr * 0.12, e.x, e.y, rr);
+    scorch.addColorStop(0, `rgba(49,11,5,${0.08 + t * 0.08})`);
+    scorch.addColorStop(0.72, `rgba(83,20,8,${0.05 + t * 0.07})`);
+    scorch.addColorStop(1, 'rgba(110,30,10,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = scorch;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, 118 * (0.55 + 0.45 * t), 0, TAU);
+    ctx.arc(e.x, e.y, rr, 0, TAU);
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.07 + t * 0.06;
+    ctx.strokeStyle = '#ff4d1f';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, rr, 0, TAU);
     ctx.stroke();
+    ctx.globalAlpha = 0.45 + 0.45 * beat;
+    ctx.strokeStyle = '#ff6a2f';
+    ctx.lineWidth = 2.2 + t * 1.1;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, rr, 0, TAU);
+    ctx.stroke();
+
+    // 内圈比外环走得更快，像引信在圈里一圈圈收紧。
+    ctx.globalAlpha = 0.18 + t * 0.32;
+    ctx.strokeStyle = '#ffc07a';
+    ctx.lineWidth = 0.9;
+    ctx.setLineDash([3 + t * 4, 8 - t * 3]);
+    ctx.lineDashOffset = -time * (18 + t * 26);
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, rr * 0.82, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+
+    // 十道向内扎的刻度：主环之外不再画第二条承诺，只让这一圈的“心跳”更硬。
+    ctx.strokeStyle = '#ff9a52';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 10; i += 1) {
+      const a = (i / 10) * TAU + time * 0.22;
+      ctx.globalAlpha = (0.18 + t * 0.36) * (0.66 + 0.34 * beat);
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr);
+      ctx.lineTo(e.x + Math.cos(a) * (rr - 4 - t * 3), e.y + Math.sin(a) * (rr - 4 - t * 3));
+      ctx.stroke();
+    }
+
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
