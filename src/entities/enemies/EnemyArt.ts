@@ -804,17 +804,82 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'skitter': {
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const speed = Math.hypot(e.vx, e.vy);
+
+      if (speed > 1) {
+        const backX = -e.vx / speed;
+        const backY = -e.vy / speed;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let ghost = 0; ghost < 2; ghost += 1) {
+          const distance = r * (0.82 + ghost * 0.72);
+          const scale = 1 - ghost * 0.16;
+          const cx = e.x + backX * distance;
+          const cy = e.y + backY * distance;
+          ctx.fillStyle = rgba('#7be0ff', 0.1 - ghost * 0.038);
+          ctx.beginPath();
+          ctx.moveTo(cx + facingX * r * 1.5 * scale, cy + facingY * r * 1.5 * scale);
+          ctx.lineTo(cx + sideX * r * 0.62 * scale, cy + sideY * r * 0.62 * scale);
+          ctx.lineTo(cx - facingX * r * 0.9 * scale, cy - facingY * r * 0.9 * scale);
+          ctx.lineTo(cx - sideX * r * 0.62 * scale, cy - sideY * r * 0.62 * scale);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const tipX = e.x + facingX * r * 1.42;
+      const tipY = e.y + facingY * r * 1.42;
+      const rearX = e.x - facingX * r * 0.82;
+      const rearY = e.y - facingY * r * 0.82;
+      ctx.fillStyle = 'rgba(205,249,255,0.16)';
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(e.x - sideX * r * 0.72, e.y - sideY * r * 0.72);
+      ctx.lineTo(rearX, rearY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(8,76,103,0.24)';
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(e.x + sideX * r * 0.72, e.y + sideY * r * 0.72);
+      ctx.lineTo(rearX, rearY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(191,247,255,0.42)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(rearX, rearY);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = rgba('#7be0ff', 0.45);
-      ctx.lineWidth = 2;
-      for (const k of [-1, 1]) {
+      ctx.lineCap = 'round';
+      for (let streak = 0; streak < 3; streak += 1) {
+        const side = (streak - 1) * r * 0.34;
+        const sway = Math.sin(time * 8 + w + streak * 1.9) * 2.2;
+        ctx.strokeStyle = rgba('#7be0ff', 0.42 - streak * 0.07);
+        ctx.lineWidth = 1.75 - streak * 0.28;
         ctx.beginPath();
-        ctx.moveTo(e.x - Math.cos(e.angle) * r * 1.1, e.y - Math.sin(e.angle) * r * 1.1);
+        ctx.moveTo(e.x - facingX * r * 0.9 + sideX * side, e.y - facingY * r * 0.9 + sideY * side);
         ctx.lineTo(
-          e.x - Math.cos(e.angle) * (r * 1.1 + 18) + Math.cos(e.angle + k * 1.4) * 8,
-          e.y - Math.sin(e.angle) * (r * 1.1 + 18) + Math.sin(e.angle + k * 1.4) * 8,
+          e.x - facingX * (r * 0.9 + 16 + streak * 5) + sideX * (side + sway),
+          e.y - facingY * (r * 0.9 + 16 + streak * 5) + sideY * (side + sway),
         );
         ctx.stroke();
       }
+      ctx.restore();
       break;
     }
     case 'echo': {
