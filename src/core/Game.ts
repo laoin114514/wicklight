@@ -5158,28 +5158,110 @@ export class Game {
   private drawPyres(ctx: CanvasRenderingContext2D): void {
     if (!this.level.pyres.length) return;
     ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const py of this.level.pyres) {
       const flicker = 1 + Math.sin(this.time * 8 + py.x * 0.03) * 0.12;
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      const flame = clamp(py.flame ?? 1, 0, 1);
+      const breathe = 0.5 + Math.sin(this.time * 2.4 + py.y * 0.04) * 0.5;
+      const sway = Math.sin(this.time * 3.7 + py.x * 0.021) * (0.8 + flame * 0.9);
+
+      // 接地影与两级石阶：先把灯台"种"在地上，再立柱身。
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.46;
+      ctx.fillStyle = '#020307';
       ctx.beginPath();
-      ctx.ellipse(py.x, py.y + 9, 30, 13, 0, 0, Math.PI * 2);
+      ctx.ellipse(py.x, py.y + 10, 31, 11, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = py.lit ? '#3a3145' : '#262238';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#17151d';
       ctx.beginPath();
-      ctx.moveTo(py.x - 10, py.y + 6);
-      ctx.lineTo(py.x + 10, py.y + 6);
-      ctx.lineTo(py.x + 6, py.y - 16);
-      ctx.lineTo(py.x - 6, py.y - 16);
+      ctx.moveTo(py.x - 17, py.y + 8);
+      ctx.lineTo(py.x + 17, py.y + 8);
+      ctx.lineTo(py.x + 14, py.y + 1);
+      ctx.lineTo(py.x - 14, py.y + 1);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = py.lit ? '#4c3f57' : '#332d49';
+      ctx.fillStyle = '#24202b';
       ctx.beginPath();
-      ctx.ellipse(py.x, py.y - 18, 14, 6, 0, 0, Math.PI * 2);
+      ctx.moveTo(py.x - 14, py.y + 1);
+      ctx.lineTo(py.x + 14, py.y + 1);
+      ctx.lineTo(py.x + 11, py.y - 2);
+      ctx.lineTo(py.x - 11, py.y - 2);
+      ctx.closePath();
       ctx.fill();
+
+      // 柱身：中间受光、两侧压暗，再刻两道不规则的细裂纹。
+      const stone = ctx.createLinearGradient(py.x - 11, 0, py.x + 11, 0);
+      stone.addColorStop(0, '#15131a');
+      stone.addColorStop(0.28, py.lit ? '#443b4b' : '#332f3d');
+      stone.addColorStop(0.58, py.lit ? '#534656' : '#3e3849');
+      stone.addColorStop(1, '#1b1821');
+      ctx.fillStyle = stone;
+      ctx.beginPath();
+      ctx.moveTo(py.x - 10, py.y + 2);
+      ctx.lineTo(py.x + 10, py.y + 2);
+      ctx.lineTo(py.x + 7, py.y - 17);
+      ctx.lineTo(py.x - 7, py.y - 17);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.34;
+      ctx.strokeStyle = '#0a090e';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(py.x - 6.5, py.y - 1);
+      ctx.lineTo(py.x - 3.8, py.y - 5.2);
+      ctx.lineTo(py.x - 5.1, py.y - 8.2);
+      ctx.moveTo(py.x + 7.2, py.y - 4.2);
+      ctx.lineTo(py.x + 4.1, py.y - 8.6);
+      ctx.stroke();
+
+      // 柱身刻纹：熄着是一道冷线，点着之后会接住火光。
+      ctx.globalAlpha = py.lit ? 0.58 + breathe * 0.26 : 0.2 + breathe * 0.08;
+      ctx.strokeStyle = py.lit ? '#ffd58c' : '#98a6c8';
+      ctx.lineWidth = py.lit ? 1.15 : 0.9;
+      ctx.beginPath();
+      ctx.moveTo(py.x, py.y - 13.4);
+      ctx.lineTo(py.x + 3.4, py.y - 9.5);
+      ctx.lineTo(py.x, py.y - 5.4);
+      ctx.lineTo(py.x - 3.4, py.y - 9.5);
+      ctx.closePath();
+      ctx.moveTo(py.x, py.y - 11.9);
+      ctx.lineTo(py.x, py.y - 6.9);
+      ctx.stroke();
+
+      // 火盆：外沿、盆口和内里的黑炭分成三层，远看也有一个清楚的"碗"。
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#201d27';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 17, 15, 5.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = py.lit ? '#514556' : '#393443';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 20, 14, 5.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.42;
+      ctx.strokeStyle = py.lit ? '#d8ad80' : '#81768b';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 20.5, 11.5, 4.4, 0, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#100e14';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 20.6, 9.8, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 火盆里那层炭：熄着时颜色最黑，点着时被火舌压成一圈暗红。
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = py.lit ? '#2d1410' : '#17141a';
+      ctx.beginPath();
+      ctx.ellipse(py.x, py.y - 20.8, 7.2, 2.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.globalCompositeOperation = 'lighter';
       if (py.lit) {
         // 灯焰越少，火越小：被吹灯客抽着的时候一眼就看得出来
-        const flame = clamp(py.flame ?? 1, 0, 1);
         const glowR = 58 * flicker * (0.45 + 0.55 * flame);
         const g = ctx.createRadialGradient(py.x, py.y - 28, 0, py.x, py.y - 28, glowR);
         g.addColorStop(0, `rgba(255,238,196,${0.35 + 0.6 * flame})`);
@@ -5189,21 +5271,108 @@ export class Game {
         ctx.beginPath();
         ctx.arc(py.x, py.y - 28, glowR, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = `rgba(255,246,214,${0.5 + 0.45 * flame})`;
+
+        // 一束很薄的上升光，让火苗不是浮在盆口，而是真的向上散开。
+        const shaftGlow = ctx.createLinearGradient(py.x, py.y - 24, py.x, py.y - 112);
+        shaftGlow.addColorStop(0, `rgba(255,176,82,${0.13 + 0.08 * flame})`);
+        shaftGlow.addColorStop(0.48, `rgba(255,146,54,${0.045 + 0.03 * flame})`);
+        shaftGlow.addColorStop(1, 'rgba(255,120,30,0)');
+        ctx.fillStyle = shaftGlow;
         ctx.beginPath();
-        ctx.ellipse(py.x, py.y - 32, 7 * flicker * (0.6 + 0.4 * flame), 12 * flicker * (0.5 + 0.5 * flame), 0, 0, Math.PI * 2);
+        ctx.moveTo(py.x - 6, py.y - 23);
+        ctx.lineTo(py.x - 17, py.y - 106);
+        ctx.lineTo(py.x + 17, py.y - 106);
+        ctx.lineTo(py.x + 6, py.y - 23);
+        ctx.closePath();
         ctx.fill();
+
+        const tip = py.y - 22 - (20 + 22 * flame * flicker);
+        ctx.globalAlpha = 0.62 + 0.18 * flame;
+        ctx.fillStyle = '#ff7a22';
+        ctx.beginPath();
+        ctx.moveTo(py.x + sway * 0.45, tip);
+        ctx.bezierCurveTo(py.x + 9.5, py.y - 38, py.x + 8.5, py.y - 27, py.x, py.y - 22.5);
+        ctx.bezierCurveTo(py.x - 8.5, py.y - 27, py.x - 7.2, py.y - 38, py.x + sway * 0.45, tip);
+        ctx.fill();
+
+        // 两片侧焰：高低错开，火才会跳，而不是一根静态的橙色水滴。
+        for (const side of [-1, 1]) {
+          const lift = 10 + 6 * flame + Math.sin(this.time * 9 + side * 1.7 + py.y) * 1.8;
+          ctx.globalAlpha = 0.42 + 0.12 * flame;
+          ctx.fillStyle = side < 0 ? '#ff9c34' : '#ffb148';
+          ctx.beginPath();
+          ctx.moveTo(py.x + side * 5.2 + sway * 0.25, py.y - 23 - lift);
+          ctx.quadraticCurveTo(py.x + side * 10, py.y - 29, py.x + side * 5.8, py.y - 21.5);
+          ctx.quadraticCurveTo(py.x + side * 3.6, py.y - 25, py.x + side * 5.2 + sway * 0.25, py.y - 23 - lift);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 0.84 + 0.12 * flame;
+        ctx.fillStyle = '#ffd887';
+        ctx.beginPath();
+        ctx.moveTo(py.x + sway * 0.28, tip + 9);
+        ctx.bezierCurveTo(py.x + 5.4, py.y - 35, py.x + 5.1, py.y - 27, py.x, py.y - 23);
+        ctx.bezierCurveTo(py.x - 5.1, py.y - 27, py.x - 4.2, py.y - 35, py.x + sway * 0.28, tip + 9);
+        ctx.fill();
+        ctx.globalAlpha = 0.92;
+        ctx.fillStyle = '#fff5d6';
+        ctx.beginPath();
+        ctx.ellipse(py.x + sway * 0.12, py.y - 29, 2.4 + flame * 1.3, 4.6 + flame * 2.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 盆沿接住火光，再往上飘几点余烬；只用时间算位置，不加新的粒子账。
+        ctx.globalAlpha = 0.32 + 0.16 * flame;
+        ctx.strokeStyle = '#ffd08a';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(py.x, py.y - 20.6, 10.8, 3.6, 0, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.stroke();
+        for (let i = 0; i < 4; i += 1) {
+          const cycle = (this.time * (0.28 + i * 0.035) + i * 0.23 + py.x * 0.0007) % 1;
+          const ex = py.x + Math.sin(this.time * 1.9 + i * 2.1) * (4 + i * 1.5);
+          const ey = py.y - 26 - cycle * (27 + i * 3);
+          ctx.globalAlpha = (1 - cycle) * (0.34 + 0.32 * flame);
+          ctx.fillStyle = i % 2 === 0 ? '#ffd88a' : '#ff9a3c';
+          ctx.beginPath();
+          ctx.arc(ex, ey, 0.7 + (1 - cycle) * 0.9, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else {
         // 只剩一撮将熄的余烬：既是没有点亮的提示，也是黑暗里的一点定位
-        const e = ctx.createRadialGradient(py.x, py.y - 22, 0, py.x, py.y - 22, 22 * flicker);
-        e.addColorStop(0, 'rgba(255,150,70,0.5)');
+        const e = ctx.createRadialGradient(py.x, py.y - 22, 0, py.x, py.y - 22, 24 * flicker);
+        e.addColorStop(0, `rgba(255,150,70,${0.34 + breathe * 0.18})`);
+        e.addColorStop(0.38, 'rgba(255,112,38,0.14)');
         e.addColorStop(1, 'rgba(255,110,20,0)');
         ctx.fillStyle = e;
         ctx.beginPath();
-        ctx.arc(py.x, py.y - 22, 22 * flicker, 0, Math.PI * 2);
+        ctx.arc(py.x, py.y - 22, 24 * flicker, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 0.32 + breathe * 0.28;
+        ctx.fillStyle = '#ff9d48';
+        ctx.beginPath();
+        ctx.arc(py.x + Math.sin(this.time * 2.8 + py.y) * 0.8, py.y - 21.5, 1.1 + breathe * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.16;
+        ctx.strokeStyle = '#9c94a8';
+        ctx.lineWidth = 0.8;
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(py.x + side * 2.8, py.y - 23);
+          ctx.bezierCurveTo(
+            py.x + side * 5.2 + sway * 0.5,
+            py.y - 34,
+            py.x + side * 1.8 - sway * 0.4,
+            py.y - 43,
+            py.x + side * 3.6 + sway * 0.7,
+            py.y - 51,
+          );
+          ctx.stroke();
+        }
       }
       ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
       // 点燃进度：只有站在旁边才画，读起来就像"按住不放"
       if (!py.lit && py.progress > 0.01) {
         ctx.lineWidth = 4;
@@ -5212,6 +5381,18 @@ export class Game {
         ctx.beginPath();
         ctx.arc(py.x, py.y - 20, 34, 0, Math.PI * 2);
         ctx.stroke();
+        // 环外四个短刻点，让进度环看起来像石座上的刻度，而不是通用的加载圈。
+        ctx.globalAlpha = 0.38;
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = py === this.pyreChannel ? '#ffe3b0' : '#8a6a48';
+        for (let i = 0; i < 4; i += 1) {
+          const a = -Math.PI / 2 + (i / 4) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(py.x + Math.cos(a) * 31, py.y - 20 + Math.sin(a) * 31);
+          ctx.lineTo(py.x + Math.cos(a) * 37, py.y - 20 + Math.sin(a) * 37);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
         // 正在点燃时是明亮的暖白；走开之后进度回落，环也跟着变暗——不必再画一行说明
         ctx.strokeStyle = py === this.pyreChannel ? '#ffe3b0' : '#8a6a48';
         ctx.beginPath();
