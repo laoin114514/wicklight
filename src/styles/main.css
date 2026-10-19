@@ -9045,3 +9045,88 @@ body.is-touch .lvl-actions__hint { display: none; }
   .meta-actions { margin-top: 2px; padding-top: 3px; }
   .meta-actions .btn { padding-top: 6px; padding-bottom: 6px; font-size: 10.5px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v170 · 窄横屏：让选灯、夜报与调校也走同一屏
+   667px 以下的横屏此前仍沿用竖屏的两列灯火与两列夜路，640px 以下设置还会
+   掉成单列。这里只把这三页恢复成横向四列 / 双列，并在更窄的屏幕上收掉
+   重复说明；灯火、难度、行程与开关本身一个不少。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 720px) {
+  .panel--select .lantern-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .panel--select .lantern {
+    grid-template-columns: 26px minmax(0, 1fr);
+    column-gap: 6px;
+    row-gap: 2px;
+    padding: 5px 6px 4px;
+  }
+  .panel--select .lantern__flame { width: 22px; height: 22px; margin-top: 1px; }
+  .lantern__copy { padding-right: 18px; }
+  .panel--select .lantern__name { font-size: 12.5px; letter-spacing: 0.5px; }
+  .panel--select .lantern__title { font-size: 7.5px; letter-spacing: 0.2px; }
+  .panel--select .lantern__blurb { font-size: 8px; line-height: 1.3; -webkit-line-clamp: 2; }
+  .panel--select .lantern__kit { display: none; }
+  .lantern__state { top: 4px; right: 5px; padding: 1px 3px 2px; font-size: 6.5px; letter-spacing: 0.5px; }
+
+  .panel--select .diff-row { gap: 5px; margin-top: 4px; }
+  .panel--select .diff { padding: 5px 7px 5px; }
+  .panel--select .diff__top { gap: 4px; }
+  .panel--select .diff__sigil { flex-basis: 19px; width: 19px; height: 19px; font-size: 10px; }
+  .panel--select .diff__top b { font-size: 11.5px; letter-spacing: 0.2px; }
+  .panel--select .diff__blurb { margin-top: 2px; font-size: 8px; line-height: 1.25; -webkit-line-clamp: 2; }
+  .panel--select .diff__foot { flex-direction: row; align-items: center; gap: 4px; margin-top: 3px; padding-top: 2px; }
+  .panel--select .diff__stats { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 2px 6px; font-size: 7.5px; }
+  .panel--select .diff__stats b { font-size: 8px; }
+  .panel--select .diff__meter i { width: 7px; }
+  .panel--select .pact-block { margin-top: 4px; }
+  .panel--select .pact { padding: 4px 5px; }
+  .panel--select .pact-note { margin-top: 3px; }
+
+  .daily-legs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .daily-leg { padding: 4px 5px 5px; }
+  .daily-leg__head { gap: 4px; padding-bottom: 3px; }
+  .daily-leg__no { font-size: 7.5px; }
+  .daily-leg__stage b { font-size: 10.5px; letter-spacing: 0.5px; }
+  .daily-leg__stage span { display: none; }
+  .daily-leg__pin { width: 5px; height: 5px; margin-top: 2px; }
+  .daily-leg__rows { gap: 2px; margin-top: 3px; }
+  .daily-leg__row { gap: 3px; padding: 2px 3px 2px 4px; }
+  .daily-leg__row span { flex-basis: 20px; font-size: 7px; letter-spacing: 0; }
+  .daily-leg__row b { font-size: 8.5px; line-height: 1.25; }
+  .daily-route__head { margin-bottom: 3px; }
+  .daily-route__head span { font-size: 7.5px; }
+
+  .set-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 640px) {
+  .panel--select .lantern__blurb { display: none; }
+  .panel--select .lantern { row-gap: 0; }
+  .panel--select .lantern__title { margin-top: 0; }
+
+  .daily-mast { gap: 7px; margin-bottom: 4px; }
+  .daily-mast__title { font-size: 15px; letter-spacing: 1.5px; }
+  .daily-mast__title b { font-size: 14.5px; }
+  .daily-seal { width: 38px; height: 38px; grid-template-rows: 5px 1fr 5px; padding: 3px; }
+  .daily-seal b { font-size: 14px; }
+  .daily-seal span, .daily-seal i { font-size: 5.5px; letter-spacing: 1px; }
+  .daily-brief { gap: 4px; margin-bottom: 4px; }
+  .daily-fact { padding: 4px 6px 5px 7px; }
+  .daily-fact__label { font-size: 7px; letter-spacing: 1.2px; }
+  .daily-fact__main { gap: 5px; margin-top: 1px; }
+  .daily-fact__glyph { flex-basis: 20px; width: 20px; height: 20px; font-size: 10px; }
+  .daily-fact__text b { font-size: 11.5px; letter-spacing: 0.7px; }
+  .daily-fact__text span { margin-top: 0; font-size: 8px; }
+  .daily-riskstats { gap: 1px 5px; margin-top: 2px; padding-top: 2px; }
+  .daily-riskstats span { font-size: 7.5px; letter-spacing: 0; }
+  .daily-riskstats b { font-size: 8.5px; }
+  .daily-tally { margin-top: 4px; padding: 3px 6px; }
+  .daily-tally__best span { font-size: 7px; letter-spacing: 1px; }
+  .daily-tally__best b { font-size: 15px; }
+  .daily-tally__best i { font-size: 8px; }
+  .daily-tally__stamp { width: 26px; height: 26px; font-size: 11px; }
+  .daily-actions { margin-top: 4px; }
+  .daily-actions .btn { padding-top: 6px; padding-bottom: 6px; }
+}
