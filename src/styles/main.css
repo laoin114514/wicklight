@@ -569,6 +569,7 @@ body {
   left: var(--pour-floor, 72%);
   top: 0;
   bottom: 0;
+  z-index: 4;
   width: 2px;
   background: rgba(255, 224, 160, 0.85);
   box-shadow: 0 0 4px rgba(255, 190, 90, 0.9);
@@ -2274,13 +2275,34 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   background-position: right bottom, right bottom;
 }
 .bar {
-  height: 15px;
-  border-radius: 5px;
-  background: linear-gradient(180deg, #05060a, #0d0f14);
-  border: 1px solid rgba(192, 138, 62, 0.34);
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(255, 220, 160, 0.06);
+  height: 16px;
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 42%),
+    linear-gradient(180deg, #030407, #0d0e13 55%, #06070a);
+  border: 1px solid rgba(192, 138, 62, 0.48);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.9),
+    inset 0 -1px 0 rgba(255, 216, 138, 0.05),
+    0 1px 0 rgba(255, 220, 160, 0.07),
+    0 4px 12px rgba(0, 0, 0, 0.22);
 }
-.bar i { position: relative; }
+/* 仪表内胆：两端各一枚黄铜铆钉，侧壁留一道极细的受光边。 */
+.bar::before {
+  content: '';
+  position: absolute;
+  inset: 1px 2px;
+  z-index: 2;
+  border-radius: 1px;
+  border-left: 1px solid rgba(255, 216, 138, 0.2);
+  border-right: 1px solid rgba(255, 216, 138, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 180, 0.08);
+  background:
+    radial-gradient(circle at 1px 50%, rgba(255, 226, 168, 0.62) 0 1px, rgba(93, 64, 24, 0.55) 1.2px, transparent 1.8px),
+    radial-gradient(circle at calc(100% - 1px) 50%, rgba(255, 226, 168, 0.5) 0 1px, rgba(93, 64, 24, 0.5) 1.2px, transparent 1.8px);
+  pointer-events: none;
+}
+.bar i { position: relative; z-index: 1; }
 .bar i::after { /* 燃到哪儿，哪儿就是最亮的一点 */
   content: '';
   position: absolute;
@@ -2297,26 +2319,55 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   70% { opacity: 1; }
 }
 .bar--hp i {
-  background: linear-gradient(180deg, #ff9aa8, #e8304f 45%, #a01030);
+  background:
+    linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.08) 45%, transparent 78%),
+    linear-gradient(180deg, #ff9aa8, #e8304f 45%, #a01030);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 14px rgba(255, 60, 90, 0.4);
 }
 .bar--oil i {
-  background: linear-gradient(180deg, #ffe6a8, #ffab3d 45%, #d9600f);
+  background:
+    linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.11) 45%, transparent 78%),
+    linear-gradient(180deg, #ffe6a8, #ffab3d 45%, #d9600f);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 16px rgba(255, 150, 40, 0.45);
 }
 .bar--xp i {
-  background: linear-gradient(180deg, #c9ffe4, #3cf0a0 45%, #107a52);
+  background:
+    linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.08) 45%, transparent 78%),
+    linear-gradient(180deg, #c9ffe4, #3cf0a0 45%, #107a52);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 12px rgba(60, 240, 160, 0.35);
 }
 .bar__label {
-  color: rgba(28, 16, 4, 0.72);
-  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.18);
-  letter-spacing: 2px;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  height: 100%;
+  padding: 0 8px 0 7px;
+  line-height: 14px;
+  color: #f0d7a8;
+  background: linear-gradient(90deg, rgba(5, 6, 9, 0.94), rgba(15, 12, 9, 0.86) 76%, rgba(15, 12, 9, 0.16));
+  border-right: 1px solid rgba(192, 138, 62, 0.34);
+  box-shadow: 1px 0 7px rgba(0, 0, 0, 0.36);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+  text-shadow: 0 1px 2px #000, 0 0 7px rgba(255, 190, 100, 0.18);
+  letter-spacing: 1.5px;
 }
 .hud__level {
-  letter-spacing: 2px;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 7px;
+  padding: 1px 8px 1px 7px;
+  border-left: 2px solid rgba(192, 138, 62, 0.52);
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0.13), transparent 74%);
+  letter-spacing: 2.5px;
   color: #ffd88a;
   font-variant-numeric: tabular-nums;
+}
+.hud__level::before {
+  content: '';
+  width: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 216, 138, 0.82), rgba(192, 138, 62, 0));
 }
 .hud__level b { font-size: 16px; text-shadow: 0 0 14px rgba(255, 170, 60, 0.5); }
 /* 「拨芯」：灯芯拨小之后，油条上挂一枚冷色牌子，油条自己（连同它右端那点火星）也冷下来。
@@ -2325,13 +2376,18 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
    牌子用冷色：这个游戏里所有暖色都在讲"火在烧"，拨芯是唯一一件**把火压住**的事。 */
 .bar__wick {
   position: absolute;
-  right: 7px;
+  right: 6px;
   top: 0;
-  line-height: 13px;
+  z-index: 4;
+  height: 100%;
+  padding: 0 4px;
+  line-height: 14px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 1.5px;
   color: #cddcff;
+  background: linear-gradient(90deg, rgba(7, 9, 14, 0.12), rgba(7, 9, 14, 0.86) 28%);
+  border-radius: 1px;
   text-shadow: 0 0 6px rgba(120, 160, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.5);
   opacity: 0;
   transition: opacity 0.2s ease;
