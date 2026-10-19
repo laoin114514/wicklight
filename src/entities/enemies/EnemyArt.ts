@@ -66,33 +66,79 @@ function litFill(ctx: CanvasRenderingContext2D, e: Enemy, px: number, py: number
   const d = Math.hypot(dx, dy) || 1;
   const lx = e.x + (dx / d) * r * 0.55;
   const ly = e.y + (dy / d) * r * 0.55;
-  const g = ctx.createRadialGradient(lx, ly, r * 0.08, e.x, e.y, r * 1.25);
-  g.addColorStop(0, shade(body, 0.3));
-  g.addColorStop(0.55, body);
-  g.addColorStop(1, shade(body, -0.5));
+  const g = ctx.createRadialGradient(lx, ly, r * 0.04, e.x, e.y, r * 1.3);
+  g.addColorStop(0, shade(body, 0.52));
+  g.addColorStop(0.2, shade(body, 0.24));
+  g.addColorStop(0.58, body);
+  g.addColorStop(0.86, shade(body, -0.38));
+  g.addColorStop(1, shade(body, -0.7));
   ctx.fillStyle = g;
   ctx.fill();
+
+  // 身体不是一张平涂色块：底部压一圈暗面、迎光侧再补一层很薄的暖色反射，
+  // 让圆形/多边形轮廓在近景里也能读出厚度。
+  ctx.save();
+  ctx.clip();
+  const shadeG = ctx.createLinearGradient(e.x, e.y - r, e.x, e.y + r);
+  shadeG.addColorStop(0, 'rgba(255,255,255,0)');
+  shadeG.addColorStop(0.58, 'rgba(0,0,0,0)');
+  shadeG.addColorStop(1, `rgba(1,3,8,${e.boss ? 0.42 : 0.32})`);
+  ctx.fillStyle = shadeG;
+  ctx.fillRect(e.x - r * 1.4, e.y - r * 1.4, r * 2.8, r * 2.8);
+
+  const reach = Math.max(180, Math.hypot(dx, dy) + r);
+  const bounce = ctx.createRadialGradient(px, py, 0, px, py, reach);
+  bounce.addColorStop(0, 'rgba(255,214,158,0.15)');
+  bounce.addColorStop(0.34, 'rgba(255,174,94,0.07)');
+  bounce.addColorStop(1, 'rgba(255,145,60,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = bounce;
+  ctx.fillRect(e.x - r * 1.5, e.y - r * 1.5, r * 3, r * 3);
+  ctx.restore();
 }
 
-function rimStroke(ctx: CanvasRenderingContext2D, e: Enemy, w: number): void {
-  ctx.lineWidth = w;
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+function rimStroke(ctx: CanvasRenderingContext2D, e: Enemy, w: number, px: number, py: number): void {
+  const dx = px - e.x;
+  const dy = py - e.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const ux = dx / d;
+  const uy = dy / d;
+  const r = e.radius;
+
+  // 外轮廓先压一道近黑，避免亮色怪物在暗幕里"漏光"。
+  ctx.lineWidth = w + 0.8;
+  ctx.strokeStyle = 'rgba(2,3,8,0.72)';
   ctx.stroke();
-  ctx.lineWidth = Math.max(1, w * 0.5);
-  ctx.strokeStyle = rgba('#ffffff', e.hitFlash > 0 ? 0.9 : 0.16);
+
+  // 轮廓光沿"玩家 → 怪物"的方向渐变：背光侧冷、暗，迎光侧有很薄的一线暖金。
+  const glow = ctx.createLinearGradient(e.x - ux * r, e.y - uy * r, e.x + ux * r, e.y + uy * r);
+  glow.addColorStop(0, 'rgba(92,111,158,0.12)');
+  glow.addColorStop(0.58, 'rgba(210,222,255,0.17)');
+  glow.addColorStop(0.9, 'rgba(255,205,142,0.46)');
+  glow.addColorStop(1, 'rgba(255,239,201,0.68)');
+  ctx.lineWidth = Math.max(1, w * 0.56);
+  ctx.strokeStyle = e.hitFlash > 0 ? 'rgba(255,255,255,0.95)' : glow;
   ctx.stroke();
 }
 
 function eye(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, angle: number, color: string, pupil: string): void {
   const ex = x + Math.cos(angle) * r * 0.38;
   const ey = y + Math.sin(angle) * r * 0.38;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(ex, ey, Math.max(3, r * 0.3), Math.max(2, r * 0.23), angle, 0, TAU);
+  ctx.fill();
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(ex, ey, Math.max(2, r * 0.2), 0, TAU);
+  ctx.ellipse(ex, ey, Math.max(2, r * 0.18), Math.max(1.8, r * 0.15), angle, 0, TAU);
   ctx.fill();
   ctx.fillStyle = pupil;
   ctx.beginPath();
-  ctx.arc(ex + Math.cos(angle) * r * 0.06, ey + Math.sin(angle) * r * 0.06, Math.max(1, r * 0.09), 0, TAU);
+  ctx.ellipse(ex + Math.cos(angle) * r * 0.045, ey + Math.sin(angle) * r * 0.045, Math.max(1, r * 0.075), Math.max(1.2, r * 0.105), angle, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.beginPath();
+  ctx.arc(ex - Math.sin(angle) * r * 0.05, ey + Math.cos(angle) * r * 0.05, Math.max(0.65, r * 0.028), 0, TAU);
   ctx.fill();
 }
 
@@ -122,10 +168,55 @@ function bossAura(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
 }
 
 function shadow(ctx: CanvasRenderingContext2D, e: Enemy): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  const r = e.radius;
+  ctx.save();
+  ctx.translate(e.x + r * 0.04, e.y + r * 0.82);
+  ctx.scale(1, 0.4);
+  const soft = ctx.createRadialGradient(0, 0, r * 0.12, 0, 0, r * 1.34);
+  soft.addColorStop(0, 'rgba(1,2,6,0.56)');
+  soft.addColorStop(0.48, 'rgba(1,2,6,0.38)');
+  soft.addColorStop(0.82, 'rgba(1,2,6,0.12)');
+  soft.addColorStop(1, 'rgba(1,2,6,0)');
+  ctx.fillStyle = soft;
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + e.radius * 0.78, e.radius * 0.95, e.radius * 0.4, 0, 0, TAU);
+  ctx.arc(0, 0, r * 1.34, 0, TAU);
   ctx.fill();
+  ctx.fillStyle = 'rgba(0,1,4,0.46)';
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.03, r * 0.68, r * 0.36, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** 朝向灯火的湿润高光与细碎材质反光。只裁在身体里，不改剪影。 */
+function bodySheen(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: number, body: string): void {
+  const r = e.radius;
+  ctx.save();
+  bodyPath(ctx, e, id, time);
+  ctx.clip();
+  const sx = e.x - r * 0.3 + Math.cos(e.wobble) * r * 0.08;
+  const sy = e.y - r * 0.34;
+  const sheen = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.95);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.2)');
+  sheen.addColorStop(0.24, 'rgba(255,246,224,0.1)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = sheen;
+  ctx.fillRect(e.x - r * 1.4, e.y - r * 1.4, r * 2.8, r * 2.8);
+
+  const flecks = e.boss ? 7 : e.elite ? 5 : 2;
+  for (let i = 0; i < flecks; i += 1) {
+    const a = e.wobble * 0.32 + i * 2.399;
+    const rr = r * (0.26 + ((i * 37) % 23) / 52);
+    const px = e.x + Math.cos(a) * rr;
+    const py = e.y + Math.sin(a) * rr * 0.78;
+    const glint = 0.08 + 0.1 * (0.5 + Math.sin(time * 2.2 + i * 1.7) * 0.5);
+    ctx.fillStyle = i % 3 === 0 ? rgba(body, glint * 1.6) : `rgba(255,244,217,${glint})`;
+    ctx.beginPath();
+    ctx.ellipse(px, py, Math.max(0.7, r * 0.035), Math.max(1, r * 0.07), a, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** 各族群的身体剪影。 */
@@ -220,6 +311,20 @@ function bodyPath(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: num
       // 六棱提灯：和「引灯」的梯形区分开，是"吊着你灯火"的那类东西
       poly(ctx, e.x, e.y, r, 6, Math.PI / 6 + wob * 0.05, 1.06);
       break;
+    case 'snuffer': {
+      // 兜帽 + 向后拖的破布：不是又一个圆，而是"专程来掐灯"的瘦长剪影。
+      const ca = Math.cos(e.angle);
+      const sa = Math.sin(e.angle);
+      const nx = -sa;
+      const ny = ca;
+      ctx.beginPath();
+      ctx.moveTo(e.x - ca * r * 1.08 + nx * r * 0.12, e.y - sa * r * 1.08 + ny * r * 0.12);
+      ctx.quadraticCurveTo(e.x + nx * r * 0.92, e.y + ny * r * 0.92, e.x + ca * r * 0.72, e.y + sa * r * 0.72);
+      ctx.quadraticCurveTo(e.x + ca * r * 0.92, e.y + sa * r * 0.92, e.x + ca * r * 0.9 - nx * r * 0.3, e.y + sa * r * 0.9 - ny * r * 0.3);
+      ctx.quadraticCurveTo(e.x - nx * r * 0.82 - ca * r * 0.34, e.y - ny * r * 0.82 - sa * r * 0.34, e.x - ca * r * 1.08 + nx * r * 0.12, e.y - sa * r * 1.08 + ny * r * 0.12);
+      ctx.closePath();
+      break;
+    }
     case 'wickmother':
       blob(ctx, e.x, e.y, r, 12, 0.09, wob * 0.7);
       break;
@@ -424,6 +529,12 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
         ctx.closePath();
         ctx.fill();
       }
+      ctx.strokeStyle = rgba('#ffe7ba', 0.18);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(e.angle) * r * 0.68, e.y + Math.sin(e.angle) * r * 0.68);
+      ctx.lineTo(e.x - Math.cos(e.angle) * r * 0.7, e.y - Math.sin(e.angle) * r * 0.7);
+      ctx.stroke();
       break;
     }
     case 'spitter': {
@@ -444,6 +555,21 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       ctx.lineTo(e.x, e.y + r * 0.1);
       ctx.lineTo(e.x + r * 0.5, e.y - r * 0.3);
       ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.58, e.y - r * 0.46);
+      ctx.lineTo(e.x - r * 0.05, e.y - r * 0.66);
+      ctx.lineTo(e.x + r * 0.12, e.y - r * 0.18);
+      ctx.lineTo(e.x - r * 0.34, e.y + r * 0.02);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.beginPath();
+      ctx.moveTo(e.x + r * 0.1, e.y + r * 0.16);
+      ctx.lineTo(e.x + r * 0.62, e.y - r * 0.08);
+      ctx.lineTo(e.x + r * 0.5, e.y + r * 0.5);
+      ctx.closePath();
+      ctx.fill();
       break;
     }
     case 'oilsapper': {
@@ -458,6 +584,19 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       ctx.arc(e.x, e.y - r * 1.15, r * 0.8 * f, 0, TAU);
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(255,214,124,0.22)';
+      for (let i = 0; i < 3; i += 1) {
+        const a = w * 0.3 + (i / 3) * TAU;
+        ctx.beginPath();
+        ctx.ellipse(e.x + Math.cos(a) * r * 0.52, e.y + Math.sin(a) * r * 0.78, r * 0.07, r * 0.18, a, 0, TAU);
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(255,234,185,0.24)';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.5, e.y - r * 0.58);
+      ctx.quadraticCurveTo(e.x, e.y - r * 0.88, e.x + r * 0.5, e.y - r * 0.58);
+      ctx.stroke();
       break;
     }
     case 'bomber': {
@@ -467,6 +606,15 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
         ctx.beginPath();
         ctx.arc(e.x + Math.cos(a) * r * 0.5, e.y + Math.sin(a) * r * 0.55, r * 0.16, 0, TAU);
         ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(84,30,18,0.55)';
+      ctx.lineWidth = 1.1;
+      for (let i = 0; i < 5; i += 1) {
+        const x = e.x - r * 0.58 + (i / 4) * r * 1.16;
+        ctx.beginPath();
+        ctx.moveTo(x, e.y + r * 0.2);
+        ctx.quadraticCurveTo(x + r * 0.04, e.y + r * 0.48, x - r * 0.02, e.y + r * 0.72);
+        ctx.stroke();
       }
       break;
     }
@@ -512,6 +660,54 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       ctx.arc(e.x, e.y, r * 1.12, w, w + Math.PI * 1.25);
       ctx.stroke();
       ctx.globalCompositeOperation = 'source-over';
+      break;
+    }
+    case 'shade': {
+      // 影蛭的烟尾：身体停下来时仍有一点点"被拖在后面"的黑雾。
+      const trail = Math.atan2(-e.vy, -e.vx);
+      const moving = Math.hypot(e.vx, e.vy) > 8;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = rgba(body, moving ? 0.26 : 0.16);
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i += 1) {
+        const off = (i - 1) * 0.34;
+        const len = r * (0.82 + i * 0.16) * (moving ? 1 : 0.55);
+        ctx.lineWidth = 2.6 - i * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(trail + off) * r * 0.45, e.y + Math.sin(trail + off) * r * 0.45);
+        ctx.quadraticCurveTo(
+          e.x + Math.cos(trail + off + 0.3) * len,
+          e.y + Math.sin(trail + off + 0.3) * len,
+          e.x + Math.cos(trail + off + 0.1) * len * 1.35,
+          e.y + Math.sin(trail + off + 0.1) * len * 1.35,
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
+    case 'snuffer': {
+      const faceX = e.x + Math.cos(e.angle) * r * 0.34;
+      const faceY = e.y + Math.sin(e.angle) * r * 0.34;
+      ctx.fillStyle = 'rgba(8,6,18,0.9)';
+      ctx.beginPath();
+      ctx.ellipse(faceX, faceY, r * 0.34, r * 0.3, e.angle, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(156,136,220,0.35)';
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 3; i += 1) {
+        const a = e.angle + Math.PI + (i - 1) * 0.42;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * r * 0.4, e.y + Math.sin(a) * r * 0.4);
+        ctx.quadraticCurveTo(
+          e.x + Math.cos(a + 0.15) * r * 1.05,
+          e.y + Math.sin(a + 0.15) * r * 1.05,
+          e.x + Math.cos(a + 0.3 + Math.sin(time * 2 + i) * 0.18) * r * 1.5,
+          e.y + Math.sin(a + 0.3 + Math.sin(time * 2 + i) * 0.18) * r * 1.5,
+        );
+        ctx.stroke();
+      }
       break;
     }
     case 'thornlord': {
@@ -610,7 +806,8 @@ export function drawEnemy(
   shadow(ctx, e);
   bodyPath(ctx, e, id, time);
   litFill(ctx, e, px, py, body, r);
-  rimStroke(ctx, e, e.boss ? 4 : 2);
+  bodySheen(ctx, e, id, time, body);
+  rimStroke(ctx, e, e.boss ? 4 : 2, px, py);
   details(ctx, e, id, time, body);
   if (e.boss) {
     // 深色轮廓：在泛光里把首领的剪影重新"切"出来

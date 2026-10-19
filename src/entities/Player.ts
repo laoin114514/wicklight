@@ -1696,20 +1696,31 @@ export class Player {
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
 
-    // ── 地面投影 ──
+    // ── 地面投影：一层柔和的轮廓 + 一层贴脚的接触阴影 ──
     ctx.save();
-    ctx.globalAlpha = 0.42;
-    ctx.fillStyle = '#04060d';
+    ctx.translate(R * 0.08, R * 1.03);
+    ctx.scale(1, 0.43);
+    const dropShadow = ctx.createRadialGradient(0, 0, R * 0.1, 0, 0, R * 1.55);
+    dropShadow.addColorStop(0, 'rgba(2,3,8,0.58)');
+    dropShadow.addColorStop(0.5, 'rgba(2,3,8,0.35)');
+    dropShadow.addColorStop(0.82, 'rgba(2,3,8,0.1)');
+    dropShadow.addColorStop(1, 'rgba(2,3,8,0)');
+    ctx.fillStyle = dropShadow;
     ctx.beginPath();
-    ctx.ellipse(2, R * 1.02, R * 1.06, R * 0.46, 0, 0, TAU);
+    ctx.arc(0, 0, R * 1.55, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(1,2,6,0.42)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, R * 0.74, R * 0.38, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
 
     // ── 斗篷身形：上圆下摆 ──
     const cloak = this.hitFlash > 0 ? '#ff6b6b' : blink ? '#ffffff' : '#2b3357';
-    const cloth = ctx.createRadialGradient(-R * 0.34, -R * 0.56, R * 0.12, 0, R * 0.1, R * 1.7);
-    cloth.addColorStop(0, this.hitFlash > 0 || blink ? cloak : '#5d6b9d');
-    cloth.addColorStop(0.55, this.hitFlash > 0 || blink ? cloak : '#3a4368');
+    const cloth = ctx.createRadialGradient(-R * 0.34, -R * 0.56, R * 0.08, 0, R * 0.1, R * 1.72);
+    cloth.addColorStop(0, this.hitFlash > 0 || blink ? cloak : '#7482ba');
+    cloth.addColorStop(0.32, this.hitFlash > 0 || blink ? cloak : '#566392');
+    cloth.addColorStop(0.68, this.hitFlash > 0 || blink ? cloak : '#343d68');
     cloth.addColorStop(1, cloak);
     ctx.fillStyle = cloth;
     ctx.beginPath();
@@ -1723,6 +1734,25 @@ export class Player {
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(6,9,18,0.65)';
     ctx.stroke();
+    // 布料被灯火扫到的一侧有暖色漫反射，背侧则沉进冷影里——同一块剪影因此有了体积。
+    ctx.save();
+    ctx.clip();
+    const clothWarm = ctx.createRadialGradient(R * 0.66, R * 0.16, 0, R * 0.66, R * 0.16, R * 1.75);
+    clothWarm.addColorStop(0, 'rgba(255,196,126,0.19)');
+    clothWarm.addColorStop(0.44, 'rgba(255,150,74,0.07)');
+    clothWarm.addColorStop(1, 'rgba(255,130,50,0)');
+    ctx.fillStyle = clothWarm;
+    ctx.fillRect(-R * 1.2, -R * 1.2, R * 2.4, R * 2.4);
+    const clothDepth = ctx.createLinearGradient(0, -R, 0, R * 1.25);
+    clothDepth.addColorStop(0, 'rgba(255,255,255,0.06)');
+    clothDepth.addColorStop(0.5, 'rgba(0,0,0,0)');
+    clothDepth.addColorStop(1, 'rgba(1,3,10,0.3)');
+    ctx.fillStyle = clothDepth;
+    ctx.fillRect(-R * 1.2, -R * 1.2, R * 2.4, R * 2.4);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,196,128,0.16)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
     // 披风褶皱
     ctx.save();
     ctx.strokeStyle = 'rgba(8,11,22,0.5)';
@@ -1731,6 +1761,15 @@ export class Player {
       ctx.beginPath();
       ctx.moveTo(R * k * 0.9, R * 0.15);
       ctx.quadraticCurveTo(R * k, R * 0.65, R * k * 0.55, R * 1.05);
+      ctx.stroke();
+    }
+    // 织纹：只在近处看得见的一层斜向细线，避免斗篷变成一块纯色渐变。
+    ctx.strokeStyle = 'rgba(183,197,235,0.07)';
+    ctx.lineWidth = 0.8;
+    for (let i = -2; i <= 2; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(-R * 0.72 + i * R * 0.26, R * 0.26);
+      ctx.quadraticCurveTo(i * R * 0.19, R * 0.72, R * 0.36 + i * R * 0.14, R * 1.04);
       ctx.stroke();
     }
     ctx.restore();
@@ -1772,12 +1811,21 @@ export class Player {
 
     // ── 兜帽（前端）+ 帽檐下的暗面 ──
     ctx.rotate(this.angle);
-    ctx.fillStyle = this.hitFlash > 0 ? '#ffd8d8' : blink ? '#ffffff' : '#4d5990';
+    const hoodFill = ctx.createRadialGradient(R * 0.58, -R * 0.2, R * 0.04, R * 0.38, 0, R * 0.72);
+    hoodFill.addColorStop(0, this.hitFlash > 0 ? '#ffeaea' : blink ? '#ffffff' : '#7181b9');
+    hoodFill.addColorStop(0.58, this.hitFlash > 0 ? '#ffbcbc' : blink ? '#ffffff' : '#4d5990');
+    hoodFill.addColorStop(1, this.hitFlash > 0 ? '#c85a5a' : blink ? '#e8ecff' : '#2d355e');
+    ctx.fillStyle = hoodFill;
     ctx.beginPath();
     ctx.ellipse(R * 0.42, 0, R * 0.5, R * 0.46, 0, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = 'rgba(6,9,18,0.6)';
     ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,207,146,0.34)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(R * 0.42, 0, R * 0.47, -1.05, 1.18);
     ctx.stroke();
     ctx.fillStyle = 'rgba(8,11,22,0.92)';
     ctx.beginPath();
@@ -1812,26 +1860,91 @@ export class Player {
     ctx.moveTo(R * 0.5, R * 0.16);
     ctx.lineTo(lx - 4, -1);
     ctx.stroke();
-    ctx.fillStyle = '#3a3122';
+    // 提梁、黄铜顶盖与底座
+    ctx.strokeStyle = 'rgba(180,142,82,0.9)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(lx - 7, -8);
-    ctx.lineTo(lx + 7, -8);
-    ctx.lineTo(lx + 5, -6);
-    ctx.lineTo(lx - 5, -6);
+    ctx.arc(lx, -8, 4.4, Math.PI, TAU);
+    ctx.stroke();
+    ctx.fillStyle = '#493a24';
+    ctx.beginPath();
+    ctx.moveTo(lx - 7.5, -8.5);
+    ctx.lineTo(lx + 7.5, -8.5);
+    ctx.lineTo(lx + 5.2, -5.5);
+    ctx.lineTo(lx - 5.2, -5.5);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#2b2418';
-    ctx.fillRect(lx - 6, 6, 12, 3);
-    ctx.fillStyle = `rgba(255,214,140,${0.5 + 0.3 * flick})`;
+    ctx.strokeStyle = 'rgba(196,154,86,0.62)';
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+
+    // 灯罩玻璃：先压一层暗玻璃，再让火芯从里面透出来
+    ctx.fillStyle = 'rgba(27,31,43,0.78)';
     ctx.beginPath();
-    ctx.ellipse(lx, 0, 5.5, 7, 0, 0, TAU);
+    ctx.moveTo(lx - 5.4, -5.5);
+    ctx.quadraticCurveTo(lx - 7, 0, lx - 5.2, 5.8);
+    ctx.lineTo(lx + 5.2, 5.8);
+    ctx.quadraticCurveTo(lx + 7, 0, lx + 5.4, -5.5);
+    ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(184,144,80,0.68)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = '#fff6d8';
+    const lanternGlow = ctx.createRadialGradient(lx, 0, 0, lx, 0, 13);
+    lanternGlow.addColorStop(0, `rgba(255,246,204,${0.36 + 0.38 * flick})`);
+    lanternGlow.addColorStop(0.4, `rgba(255,171,72,${0.16 + 0.16 * flick})`);
+    lanternGlow.addColorStop(1, 'rgba(255,120,28,0)');
+    ctx.fillStyle = lanternGlow;
     ctx.beginPath();
-    ctx.ellipse(lx, -0.5, 2.6, 3.6, 0, 0, TAU);
+    ctx.arc(lx, 0, 13, 0, TAU);
+    ctx.fill();
+
+    // 火舌不是一颗椭圆：下面圆、上面收尖，随呼吸荡一下
+    const flameLean = Math.sin(time * 7.5) * 0.8;
+    ctx.fillStyle = `rgba(255,164,62,${0.7 + 0.2 * flick})`;
+    ctx.beginPath();
+    ctx.moveTo(lx, 6.2);
+    ctx.bezierCurveTo(lx - 4.7, 4.1, lx - 3.1, -1.4, lx + flameLean, -6.7 - flick * 1.1);
+    ctx.bezierCurveTo(lx + 3.2, -1.1, lx + 4.8, 3.5, lx, 6.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff7d7';
+    ctx.beginPath();
+    ctx.moveTo(lx, 4.4);
+    ctx.bezierCurveTo(lx - 2.1, 2.6, lx - 1.4, -0.5, lx + flameLean * 0.55, -3.3);
+    ctx.bezierCurveTo(lx + 1.6, -0.2, lx + 2.2, 2.5, lx, 4.4);
+    ctx.closePath();
+    ctx.fill();
+
+    // 玻璃罩上的两道反光，证明它是"罩子"而不是一团色块
+    ctx.strokeStyle = 'rgba(255,248,222,0.5)';
+    ctx.lineWidth = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(lx - 3.2, -4.1);
+    ctx.quadraticCurveTo(lx - 4.3, -0.2, lx - 3.4, 3.6);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,252,237,0.72)';
+    ctx.beginPath();
+    ctx.arc(lx + 2.9, -2.7, 0.8, 0, TAU);
     ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
+
+    ctx.fillStyle = '#3c301d';
+    ctx.beginPath();
+    ctx.moveTo(lx - 6.2, 6.8);
+    ctx.quadraticCurveTo(lx - 6.2, 5.6, lx - 5, 5.6);
+    ctx.lineTo(lx + 5, 5.6);
+    ctx.quadraticCurveTo(lx + 6.2, 5.6, lx + 6.2, 6.8);
+    ctx.quadraticCurveTo(lx + 6.2, 8.6, lx + 5, 8.6);
+    ctx.lineTo(lx - 5, 8.6);
+    ctx.quadraticCurveTo(lx - 6.2, 8.6, lx - 6.2, 6.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(206,164,92,0.45)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
 
     ctx.restore();
   }
