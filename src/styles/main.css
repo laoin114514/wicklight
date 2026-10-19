@@ -2509,6 +2509,52 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   border: 1px solid rgba(192, 138, 62, 0.16);
   border-right: 0;
 }
+.hud__topright::before,
+.hud__topright::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  pointer-events: none;
+}
+.hud__topright::before {
+  left: 3px;
+  top: 3px;
+  border-top: 1px solid rgba(255, 216, 138, 0.3);
+  border-left: 1px solid rgba(255, 216, 138, 0.22);
+}
+.hud__topright::after {
+  right: 3px;
+  bottom: 3px;
+  border-right: 1px solid rgba(192, 138, 62, 0.26);
+  border-bottom: 1px solid rgba(192, 138, 62, 0.2);
+}
+.hud__stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-bottom: 2px;
+}
+.hud__stat + .hud__stat {
+  padding-top: 3px;
+  border-top: 1px solid rgba(192, 138, 62, 0.1);
+}
+.hud__stat span { opacity: 0.76; }
+.hud__stat b {
+  position: relative;
+  padding-left: 9px;
+  text-align: right;
+}
+.hud__stat b::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(255, 216, 138, 0.08), rgba(192, 138, 62, 0.42), rgba(255, 216, 138, 0.06));
+}
 .hud__stat { letter-spacing: 2px; }
 .hud__stat b { font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
 
