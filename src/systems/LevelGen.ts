@@ -66,7 +66,7 @@ export function scatterDecor(
       x: rng.range(-halfW, halfW),
       y: rng.range(-halfH, halfH),
       r: 20 + rng.next() * 90,
-      kind: Math.floor(rng.next() * 3),
+      kind: Math.floor(rng.next() * 4),
     };
     // 别挡住出生点
     if (Math.hypot(d.x, d.y) < 150) continue;
