@@ -7727,11 +7727,92 @@ export class Game {
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 17 + hz.x * 0.03 + hz.y * 0.02);
 
       ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 0.09 + t * 0.16;
-      ctx.fillStyle = meteor ? '#180b05' : thorn ? '#0d1608' : '#090c17';
+      ctx.globalAlpha = 1;
+      // 圆里不再只是一块平涂的暗色：先铺一层由中心向外衰减的焦土/冻土，
+      // 再按险境种类压上裂纹或根须，预警圈因此像"地上正在发生的事"，而不是 UI 圆规。
+      const ground = ctx.createRadialGradient(hz.x, hz.y, hz.r * 0.04, hz.x, hz.y, hz.r);
+      if (meteor) {
+        ground.addColorStop(0, `rgba(66,22,7,${0.27 + t * 0.2})`);
+        ground.addColorStop(0.55, `rgba(31,14,8,${0.22 + t * 0.14})`);
+        ground.addColorStop(1, 'rgba(18,9,6,0)');
+      } else if (thorn) {
+        ground.addColorStop(0, `rgba(17,34,8,${0.25 + t * 0.17})`);
+        ground.addColorStop(0.6, `rgba(11,21,7,${0.2 + t * 0.12})`);
+        ground.addColorStop(1, 'rgba(8,13,5,0)');
+      } else {
+        ground.addColorStop(0, `rgba(16,19,38,${0.28 + t * 0.18})`);
+        ground.addColorStop(0.6, `rgba(10,12,25,${0.22 + t * 0.13})`);
+        ground.addColorStop(1, 'rgba(7,9,17,0)');
+      }
+      ctx.fillStyle = ground;
       ctx.beginPath();
       ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
       ctx.fill();
+
+      const soilPhase = hz.x * 0.013 + hz.y * 0.017;
+      ctx.lineCap = 'round';
+      if (meteor) {
+        ctx.globalAlpha = 0.3 + t * 0.22;
+        ctx.strokeStyle = '#3b1707';
+        ctx.lineWidth = 1.1 + t * 0.8;
+        for (let i = 0; i < 7; i += 1) {
+          const a = soilPhase + i * 0.896 + Math.sin(i * 5.1) * 0.16;
+          const mid = hz.r * (0.24 + (i % 3) * 0.12);
+          const end = hz.r * (0.58 + ((i * 3) % 4) * 0.08);
+          const bend = Math.sin(soilPhase + i * 2.3) * 0.18;
+          ctx.beginPath();
+          ctx.moveTo(hz.x + Math.cos(a) * hz.r * 0.05, hz.y + Math.sin(a) * hz.r * 0.05);
+          ctx.lineTo(hz.x + Math.cos(a + bend) * mid, hz.y + Math.sin(a + bend) * mid);
+          ctx.lineTo(hz.x + Math.cos(a - bend * 0.7) * end, hz.y + Math.sin(a - bend * 0.7) * end);
+          ctx.stroke();
+        }
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 5; i += 1) {
+          const a = soilPhase * 1.7 + i * 1.257;
+          const rr = hz.r * (0.28 + (i % 3) * 0.15);
+          ctx.globalAlpha = (0.13 + pulse * 0.1) * (0.35 + t * 0.65);
+          ctx.fillStyle = '#ff7a2f';
+          ctx.beginPath();
+          ctx.arc(hz.x + Math.cos(a) * rr, hz.y + Math.sin(a) * rr, 0.9 + (i % 2) * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (thorn) {
+        ctx.globalAlpha = 0.32 + t * 0.24;
+        ctx.strokeStyle = '#20380d';
+        ctx.lineWidth = 1.15 + t * 0.85;
+        for (let i = 0; i < 6; i += 1) {
+          const a = soilPhase * 1.3 + i * 1.047 + 0.3;
+          const reach = hz.r * (0.48 + (i % 3) * 0.11);
+          const curl = 0.2 + (i % 2) * 0.08;
+          const mx = hz.x + Math.cos(a + curl) * reach * 0.55;
+          const my = hz.y + Math.sin(a + curl) * reach * 0.55;
+          ctx.beginPath();
+          ctx.moveTo(hz.x, hz.y);
+          ctx.quadraticCurveTo(mx, my, hz.x + Math.cos(a) * reach, hz.y + Math.sin(a) * reach);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(mx + Math.cos(a + 0.8) * 5, my + Math.sin(a + 0.8) * 5);
+          ctx.stroke();
+        }
+      } else {
+        ctx.globalAlpha = 0.32 + t * 0.22;
+        ctx.strokeStyle = '#080b16';
+        ctx.lineWidth = 1.2 + t * 0.8;
+        for (let i = 0; i < 8; i += 1) {
+          const a = soilPhase * 0.8 + i * 0.785;
+          const jag = Math.sin(soilPhase + i * 3.7) * 0.24;
+          const mid = hz.r * (0.22 + (i % 3) * 0.1);
+          const end = hz.r * (0.54 + ((i * 5) % 3) * 0.1);
+          ctx.beginPath();
+          ctx.moveTo(hz.x + Math.cos(a) * hz.r * 0.06, hz.y + Math.sin(a) * hz.r * 0.06);
+          ctx.lineTo(hz.x + Math.cos(a + jag) * mid, hz.y + Math.sin(a + jag) * mid);
+          ctx.lineTo(hz.x + Math.cos(a - jag * 0.6) * end, hz.y + Math.sin(a - jag * 0.6) * end);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
 
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.36 + t * 0.46;
