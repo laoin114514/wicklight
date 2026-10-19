@@ -236,6 +236,10 @@ export class HUD implements HUDHost {
       if (!slot) return;
       this.text(slot.name, b.name);
       this.width(slot.fill, b.frac);
+      // 血条自己就能读出相位：66% / 33% 两条门槛与逐级升温的烛色，
+      // 不用再等首领进入下一相位才从招式里猜。
+      const phase = b.frac > 2 / 3 ? '1' : b.frac > 1 / 3 ? '2' : '3';
+      if (slot.row.dataset.phase !== phase) slot.row.dataset.phase = phase;
     });
   }
 
