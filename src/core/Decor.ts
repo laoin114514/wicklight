@@ -1536,29 +1536,98 @@ function puddle(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
 
 function candleStub(ctx: CanvasRenderingContext2D, d: Decor, time: number, themeId: string): void {
   const night = themeId === 'nightcity';
-  const flick = 0.74 + Math.sin(time * 9 + d.x * 0.05) * 0.26;
+  const phase = time * 7.6 + d.x * 0.05 + d.y * 0.017;
+  const flick = 0.8 + Math.sin(phase) * 0.2;
+  const wax = night ? '#6b577e' : '#776d58';
+  const waxLit = night ? '#9c82b8' : '#aa9c7d';
+  const waxDark = night ? '#443650' : '#4d463a';
+  const metal = night ? '#8066a8' : '#59617d';
+
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath();
-  ctx.ellipse(d.x + 1, d.y + d.r * 0.28, d.r * 0.26, d.r * 0.1, 0, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.03, d.y + d.r * 0.31, d.r * 0.25, d.r * 0.085, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = night ? '#5d4b70' : '#746b59';
-  ctx.fillRect(d.x - d.r * 0.12, d.y - d.r * 0.22, d.r * 0.24, d.r * 0.5);
-  ctx.fillStyle = night ? '#8b6eaa' : '#a69a7b';
+
+  ctx.fillStyle = waxDark;
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y - d.r * 0.22, d.r * 0.12, d.r * 0.045, 0, 0, TAU);
+  ctx.ellipse(d.x, d.y + d.r * 0.28, d.r * 0.2, d.r * 0.055, 0, 0, TAU);
   ctx.fill();
+  ctx.strokeStyle = metal;
+  ctx.lineWidth = Math.max(0.55, d.r * 0.035);
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.28, d.r * 0.2, d.r * 0.055, 0, 0, TAU);
+  ctx.stroke();
+
+  ctx.fillStyle = wax;
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.1, d.y - d.r * 0.22);
+  ctx.quadraticCurveTo(d.x - d.r * 0.12, d.y + d.r * 0.05, d.x - d.r * 0.12, d.y + d.r * 0.26);
+  ctx.quadraticCurveTo(d.x, d.y + d.r * 0.32, d.x + d.r * 0.12, d.y + d.r * 0.26);
+  ctx.quadraticCurveTo(d.x + d.r * 0.11, d.y + d.r * 0.03, d.x + d.r * 0.1, d.y - d.r * 0.22);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(d.x + d.r * 0.035, d.y - d.r * 0.21);
+  ctx.quadraticCurveTo(d.x + d.r * 0.075, d.y + d.r * 0.05, d.x + d.r * 0.075, d.y + d.r * 0.25);
+  ctx.quadraticCurveTo(d.x + d.r * 0.1, d.y + d.r * 0.27, d.x + d.r * 0.12, d.y + d.r * 0.26);
+  ctx.quadraticCurveTo(d.x + d.r * 0.11, d.y + d.r * 0.03, d.x + d.r * 0.1, d.y - d.r * 0.22);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = waxLit;
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.01, d.y - d.r * 0.22, d.r * 0.105, d.r * 0.035, -0.04, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = waxDark;
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y - d.r * 0.215, d.r * 0.062, d.r * 0.019, 0, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = waxLit;
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.1, d.y + d.r * 0.08, d.r * 0.028, d.r * 0.085, 0.04, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = wax;
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.105, d.y - d.r * 0.02, d.r * 0.025, d.r * 0.065, -0.06, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = night ? 'rgba(196,154,235,0.34)' : 'rgba(201,185,145,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.055, d.y + d.r * 0.02, d.r * 0.018, d.r * 0.085, 0.08, 0, TAU);
+  ctx.fill();
+
+  ctx.strokeStyle = '#241c17';
+  ctx.lineWidth = Math.max(0.55, d.r * 0.028);
+  ctx.beginPath();
+  ctx.moveTo(d.x, d.y - d.r * 0.225);
+  ctx.quadraticCurveTo(d.x - d.r * 0.01, d.y - d.r * 0.29, d.x + d.r * 0.008, d.y - d.r * 0.32);
+  ctx.stroke();
+
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.24 * flick;
-  ctx.fillStyle = night ? '#b77cff' : '#8bbfff';
+  ctx.fillStyle = night ? `rgba(143,92,230,${0.055 * flick})` : `rgba(101,149,255,${0.05 * flick})`;
   ctx.beginPath();
-  ctx.arc(d.x, d.y - d.r * 0.38, d.r * 0.7, 0, TAU);
+  ctx.ellipse(d.x, d.y - d.r * 0.32, d.r * 0.52, d.r * 0.44, 0, 0, TAU);
   ctx.fill();
-  ctx.globalAlpha = 0.88;
-  ctx.fillStyle = night ? '#f2dcff' : '#e8f4ff';
+  ctx.fillStyle = night ? `rgba(188,135,255,${0.11 * flick})` : `rgba(153,191,255,${0.1 * flick})`;
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y - d.r * 0.4, d.r * 0.07, d.r * 0.18 * flick, 0, 0, TAU);
+  ctx.ellipse(d.x, d.y - d.r * 0.33, d.r * 0.27, d.r * 0.23, 0, 0, TAU);
   ctx.fill();
+
+  ctx.fillStyle = night ? 'rgba(207,166,255,0.56)' : 'rgba(168,200,255,0.54)';
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.045, d.y - d.r * 0.31);
+  ctx.bezierCurveTo(d.x - d.r * 0.085, d.y - d.r * 0.39, d.x - d.r * 0.04, d.y - d.r * 0.47 * flick, d.x + d.r * 0.008, d.y - d.r * 0.5 * flick);
+  ctx.bezierCurveTo(d.x + d.r * 0.06, d.y - d.r * 0.42 * flick, d.x + d.r * 0.075, d.y - d.r * 0.35, d.x + d.r * 0.045, d.y - d.r * 0.31);
+  ctx.fill();
+  ctx.fillStyle = night ? 'rgba(250,238,255,0.88)' : 'rgba(238,247,255,0.86)';
+  ctx.beginPath();
+  ctx.moveTo(d.x, d.y - d.r * 0.31);
+  ctx.quadraticCurveTo(d.x - d.r * 0.03, d.y - d.r * 0.38, d.x, d.y - d.r * 0.43 * flick);
+  ctx.quadraticCurveTo(d.x + d.r * 0.03, d.y - d.r * 0.37, d.x, d.y - d.r * 0.31);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
 }
 
