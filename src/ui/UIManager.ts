@@ -1621,8 +1621,13 @@ export class UIManager implements UIHost {
       const items = ACHIEVEMENTS.filter((a) => a.group === group);
       if (!items.length) return '';
       const got = items.filter((a) => this.game.save.achievements.includes(a.id)).length;
+      const progress = (got / items.length) * 100;
       return `<div class="ach-group">
-        <div class="ach-group__title">${group} <b>${got}/${items.length}</b></div>
+        <div class="ach-group__title">
+          <span>${group}</span>
+          <i class="ach-group__rule" style="--ach-progress:${progress.toFixed(1)}%" aria-hidden="true"><span></span></i>
+          <b>${got}/${items.length}</b>
+        </div>
         <div class="ach-list">${items.map(row).join('')}</div>
       </div>`;
     }).join('');
