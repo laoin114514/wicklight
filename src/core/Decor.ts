@@ -716,49 +716,171 @@ function rubble(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void 
 
 function brazier(ctx: CanvasRenderingContext2D, d: Decor, time: number, themeId: string): void {
   const night = themeId === 'nightcity';
-  const flick = 0.75 + Math.sin(time * 8 + d.x * 0.05) * 0.25;
+  const phase = time * 7.4 + d.x * 0.047 + d.y * 0.019;
+  const flick = 0.86 + Math.sin(phase) * 0.14;
+  const drift = Math.sin(time * 1.4 + d.x * 0.02) * d.r * 0.025;
+  const body = night ? '#2b213f' : '#2b2e42';
+  const rim = night ? '#8066a8' : '#59617d';
+  const sheen = night ? 'rgba(190,158,242,0.32)' : 'rgba(151,167,205,0.28)';
+
   ctx.fillStyle = 'rgba(0,0,0,0.34)';
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + d.r * 0.3, d.r * 0.38, d.r * 0.13, 0, 0, TAU);
+  ctx.ellipse(d.x, d.y + d.r * 0.33, d.r * 0.42, d.r * 0.13, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = night ? '#2b213f' : '#2b2e42';
-  ctx.fillRect(d.x - d.r * 0.1, d.y + d.r * 0.05, d.r * 0.2, d.r * 0.24);
+
+  ctx.fillStyle = body;
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.3, d.y + d.r * 0.06);
-  ctx.lineTo(d.x + d.r * 0.3, d.y + d.r * 0.06);
-  ctx.lineTo(d.x + d.r * 0.2, d.y + d.r * 0.28);
-  ctx.lineTo(d.x - d.r * 0.2, d.y + d.r * 0.28);
+  ctx.moveTo(d.x - d.r * 0.2, d.y + d.r * 0.27);
+  ctx.lineTo(d.x - d.r * 0.17, d.y + d.r * 0.34);
+  ctx.lineTo(d.x - d.r * 0.08, d.y + d.r * 0.36);
+  ctx.lineTo(d.x + d.r * 0.08, d.y + d.r * 0.36);
+  ctx.lineTo(d.x + d.r * 0.17, d.y + d.r * 0.34);
+  ctx.lineTo(d.x + d.r * 0.2, d.y + d.r * 0.27);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = night ? '#8066a8' : '#59617d';
-  ctx.lineWidth = 1.2;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + d.r * 0.06, d.r * 0.31, d.r * 0.11, 0, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.03, d.y + d.r * 0.315, d.r * 0.12, d.r * 0.026, 0, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.07, d.y + d.r * 0.1);
+  ctx.lineTo(d.x - d.r * 0.095, d.y + d.r * 0.28);
+  ctx.lineTo(d.x + d.r * 0.095, d.y + d.r * 0.28);
+  ctx.lineTo(d.x + d.r * 0.07, d.y + d.r * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = sheen;
+  ctx.lineWidth = Math.max(0.7, d.r * 0.011);
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.052, d.y + d.r * 0.12);
+  ctx.lineTo(d.x - d.r * 0.07, d.y + d.r * 0.265);
   ctx.stroke();
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = Math.max(0.8, d.r * 0.015);
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.255, d.r * 0.115, d.r * 0.031, 0, 0, TAU);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.175, d.r * 0.064, d.r * 0.018, 0, 0, TAU);
+  ctx.stroke();
+
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.3, d.y + d.r * 0.055);
+  ctx.bezierCurveTo(d.x - d.r * 0.285, d.y + d.r * 0.14, d.x - d.r * 0.245, d.y + d.r * 0.22, d.x - d.r * 0.175, d.y + d.r * 0.25);
+  ctx.lineTo(d.x + d.r * 0.175, d.y + d.r * 0.25);
+  ctx.bezierCurveTo(d.x + d.r * 0.245, d.y + d.r * 0.22, d.x + d.r * 0.285, d.y + d.r * 0.14, d.x + d.r * 0.3, d.y + d.r * 0.055);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.moveTo(d.x + d.r * 0.055, d.y + d.r * 0.07);
+  ctx.bezierCurveTo(d.x + d.r * 0.1, d.y + d.r * 0.14, d.x + d.r * 0.13, d.y + d.r * 0.2, d.x + d.r * 0.15, d.y + d.r * 0.245);
+  ctx.lineTo(d.x + d.r * 0.175, d.y + d.r * 0.25);
+  ctx.bezierCurveTo(d.x + d.r * 0.245, d.y + d.r * 0.22, d.x + d.r * 0.285, d.y + d.r * 0.14, d.x + d.r * 0.3, d.y + d.r * 0.055);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = sheen;
+  ctx.lineWidth = Math.max(0.6, d.r * 0.009);
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.265, d.y + d.r * 0.08);
+  ctx.quadraticCurveTo(d.x - d.r * 0.235, d.y + d.r * 0.19, d.x - d.r * 0.17, d.y + d.r * 0.235);
+  ctx.stroke();
+  ctx.strokeStyle = night ? 'rgba(122,96,165,0.38)' : 'rgba(88,96,123,0.36)';
+  ctx.lineWidth = Math.max(0.7, d.r * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.255, d.y + d.r * 0.16);
+  ctx.quadraticCurveTo(d.x, d.y + d.r * 0.195, d.x + d.r * 0.255, d.y + d.r * 0.15);
+  ctx.stroke();
+
+  ctx.fillStyle = night ? '#3a2d55' : '#373b51';
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.055, d.r * 0.32, d.r * 0.105, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = night ? '#171226' : '#151723';
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.05, d.r * 0.255, d.r * 0.072, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = Math.max(0.9, d.r * 0.016);
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.055, d.r * 0.32, d.r * 0.105, 0, 0, TAU);
+  ctx.stroke();
+  ctx.strokeStyle = sheen;
+  ctx.lineWidth = Math.max(0.6, d.r * 0.009);
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.005, d.y + d.r * 0.052, d.r * 0.285, d.r * 0.087, 0, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.stroke();
+  ctx.fillStyle = night ? 'rgba(216,190,255,0.3)' : 'rgba(167,184,224,0.26)';
+  for (const at of [-0.2, 0, 0.2]) {
+    ctx.beginPath();
+    ctx.arc(d.x + d.r * at, d.y + d.r * 0.065, Math.max(0.65, d.r * 0.014), 0, TAU);
+    ctx.fill();
+  }
+
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(d.x, d.y - d.r * 0.25, 0, d.x, d.y - d.r * 0.25, d.r * 1.15);
-  g.addColorStop(0, night ? `rgba(235,215,255,${0.5 * flick})` : `rgba(200,225,255,${0.48 * flick})`);
-  g.addColorStop(0.38, night ? `rgba(170,120,255,${0.2 * flick})` : `rgba(130,160,255,${0.18 * flick})`);
-  g.addColorStop(1, night ? 'rgba(110,60,200,0)' : 'rgba(60,80,200,0)');
+  const g = ctx.createRadialGradient(d.x + drift * 0.2, d.y - d.r * 0.18, 0, d.x + drift * 0.2, d.y - d.r * 0.18, d.r * 1.02);
+  g.addColorStop(0, night ? `rgba(234,207,255,${0.4 * flick})` : `rgba(197,222,255,${0.38 * flick})`);
+  g.addColorStop(0.34, night ? `rgba(170,107,255,${0.16 * flick})` : `rgba(115,153,255,${0.14 * flick})`);
+  g.addColorStop(1, night ? 'rgba(98,48,190,0)' : 'rgba(50,72,190,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.arc(d.x, d.y - d.r * 0.25, d.r * 1.15, 0, TAU);
+  ctx.arc(d.x + drift * 0.2, d.y - d.r * 0.18, d.r * 1.02, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = night ? 'rgba(225,195,255,0.72)' : 'rgba(205,225,255,0.7)';
+
+  ctx.fillStyle = night ? 'rgba(201,151,255,0.5)' : 'rgba(139,174,255,0.46)';
   ctx.beginPath();
-  ctx.moveTo(d.x, d.y + d.r * 0.04);
-  ctx.bezierCurveTo(d.x - d.r * 0.16, d.y - d.r * 0.1, d.x - d.r * 0.11, d.y - d.r * 0.34 * flick, d.x, d.y - d.r * 0.44 * flick);
-  ctx.bezierCurveTo(d.x + d.r * 0.11, d.y - d.r * 0.32 * flick, d.x + d.r * 0.16, d.y - d.r * 0.08, d.x, d.y + d.r * 0.04);
+  ctx.ellipse(d.x - d.r * 0.11, d.y + d.r * 0.02, d.r * 0.075, d.r * 0.03, -0.2, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.09, d.y + d.r * 0.025, d.r * 0.065, d.r * 0.026, 0.14, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.01, d.y + d.r * 0.042, d.r * 0.05, d.r * 0.02, 0, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = night ? 'rgba(214,165,255,0.35)' : 'rgba(151,184,255,0.32)';
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.09, d.y + d.r * 0.02);
+  ctx.bezierCurveTo(d.x - d.r * 0.22, d.y - d.r * 0.08, d.x - d.r * 0.22, d.y - d.r * 0.2, d.x - d.r * 0.15, d.y - d.r * 0.29);
+  ctx.bezierCurveTo(d.x - d.r * 0.11, d.y - d.r * 0.19, d.x - d.r * 0.08, d.y - d.r * 0.09, d.x - d.r * 0.05, d.y + d.r * 0.01);
+  ctx.moveTo(d.x + d.r * 0.08, d.y + d.r * 0.015);
+  ctx.bezierCurveTo(d.x + d.r * 0.23, d.y - d.r * 0.07, d.x + d.r * 0.23, d.y - d.r * 0.2, d.x + d.r * 0.16, d.y - d.r * 0.31);
+  ctx.bezierCurveTo(d.x + d.r * 0.12, d.y - d.r * 0.2, d.x + d.r * 0.08, d.y - d.r * 0.09, d.x + d.r * 0.05, d.y + d.r * 0.005);
+  ctx.fill();
+
+  ctx.fillStyle = night ? 'rgba(229,190,255,0.66)' : 'rgba(179,207,255,0.62)';
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.11 + drift, d.y + d.r * 0.035);
+  ctx.bezierCurveTo(d.x - d.r * 0.19, d.y - d.r * 0.12, d.x - d.r * 0.14, d.y - d.r * 0.36 * flick, d.x + d.r * 0.015, d.y - d.r * 0.51 * flick);
+  ctx.bezierCurveTo(d.x + d.r * 0.14, d.y - d.r * 0.33 * flick, d.x + d.r * 0.17, d.y - d.r * 0.1, d.x + d.r * 0.11 + drift, d.y + d.r * 0.035);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = night ? 'rgba(250,242,255,0.82)' : 'rgba(240,248,255,0.8)';
+  ctx.fillStyle = night ? 'rgba(250,240,255,0.84)' : 'rgba(238,247,255,0.82)';
   ctx.beginPath();
-  ctx.moveTo(d.x, d.y);
-  ctx.quadraticCurveTo(d.x - d.r * 0.05, d.y - d.r * 0.16, d.x, d.y - d.r * 0.27 * flick);
-  ctx.quadraticCurveTo(d.x + d.r * 0.06, d.y - d.r * 0.14, d.x, d.y);
+  ctx.moveTo(d.x + drift * 0.7, d.y + d.r * 0.02);
+  ctx.quadraticCurveTo(d.x - d.r * 0.06 + drift, d.y - d.r * 0.16, d.x + d.r * 0.005 + drift, d.y - d.r * 0.32 * flick);
+  ctx.quadraticCurveTo(d.x + d.r * 0.075 + drift, d.y - d.r * 0.15, d.x + drift * 0.7, d.y + d.r * 0.02);
   ctx.closePath();
   ctx.fill();
+
+  for (const [at, lift, size] of [
+    [-0.15, 0.5, 0.017],
+    [0.02, 0.65, 0.02],
+    [0.14, 0.44, 0.014],
+  ] as const) {
+    const rise = (Math.sin(phase * 0.55 + at * 19) + 1) * 0.08;
+    ctx.fillStyle = night ? `rgba(235,205,255,${0.24 + rise})` : `rgba(205,226,255,${0.22 + rise})`;
+    ctx.beginPath();
+    ctx.arc(d.x + d.r * at + drift, d.y - d.r * lift - d.r * rise, Math.max(0.6, d.r * size), 0, TAU);
+    ctx.fill();
+  }
   ctx.globalCompositeOperation = 'source-over';
+
+  ctx.strokeStyle = night ? 'rgba(190,160,230,0.055)' : 'rgba(166,180,214,0.055)';
+  ctx.lineWidth = Math.max(0.8, d.r * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(d.x + d.r * 0.02, d.y - d.r * 0.46);
+  ctx.bezierCurveTo(d.x - d.r * 0.06, d.y - d.r * 0.6, d.x + d.r * 0.08, d.y - d.r * 0.7, d.x + d.r * 0.02, d.y - d.r * 0.82);
+  ctx.stroke();
 }
 
 function shard(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
