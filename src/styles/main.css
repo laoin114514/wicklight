@@ -1923,6 +1923,25 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
     linear-gradient(180deg, #1a1d24 0%, #101218 48%, #0a0b10 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 26px rgba(0, 0, 0, 0.45);
 }
+/* 玻璃内胆：离铜框留出一点空气，四角用极短的受光刻线收口。 */
+.lantern::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 6px 6px 10px 10px;
+  border: 1px solid rgba(192, 138, 62, 0.13);
+  background:
+    linear-gradient(90deg, rgba(255, 216, 138, 0.26) 0 9px, transparent 9px) left top / 9px 1px no-repeat,
+    linear-gradient(180deg, rgba(255, 216, 138, 0.2) 0 7px, transparent 7px) left top / 1px 7px no-repeat,
+    linear-gradient(270deg, rgba(192, 138, 62, 0.2) 0 9px, transparent 9px) right top / 9px 1px no-repeat,
+    linear-gradient(180deg, rgba(192, 138, 62, 0.16) 0 7px, transparent 7px) right top / 1px 7px no-repeat,
+    linear-gradient(90deg, rgba(192, 138, 62, 0.16) 0 7px, transparent 7px) left bottom / 7px 1px no-repeat,
+    linear-gradient(0deg, rgba(192, 138, 62, 0.13) 0 5px, transparent 5px) left bottom / 1px 5px no-repeat,
+    linear-gradient(270deg, rgba(192, 138, 62, 0.14) 0 7px, transparent 7px) right bottom / 7px 1px no-repeat,
+    linear-gradient(0deg, rgba(192, 138, 62, 0.12) 0 5px, transparent 5px) right bottom / 1px 5px no-repeat;
+  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+}
 .lantern::before {
   content: '';
   position: absolute;
@@ -1936,6 +1955,10 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   border-bottom-color: transparent;
   opacity: 0.8;
 }
+.lantern.is-selected::after {
+  border-color: color-mix(in srgb, var(--accent) 22%, rgba(192, 138, 62, 0.12));
+  box-shadow: inset 0 0 30px color-mix(in srgb, var(--accent) 7%, transparent);
+}
 .lantern.is-selected {
   border-color: var(--accent);
   box-shadow:
@@ -1945,8 +1968,43 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
     0 14px 30px rgba(0, 0, 0, 0.5);
 }
 .lantern__flame {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  margin: 1px 0 9px 1px;
   border-radius: 50%;
-  box-shadow: 0 0 26px 6px color-mix(in srgb, var(--accent) 45%, transparent);
+  border: 2px solid rgba(192, 138, 62, 0.42);
+  box-shadow:
+    inset 0 0 10px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(0, 0, 0, 0.42),
+    0 0 26px 6px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* 灯圈外再套一道细铜箍和一小截吊线，圆形光球就有了"装在灯里"的尺度。 */
+.lantern__flame::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 1px solid rgba(192, 138, 62, 0.22);
+  border-top-color: rgba(255, 216, 138, 0.54);
+  border-right-color: rgba(192, 138, 62, 0.34);
+  transform: rotate(-18deg);
+}
+.lantern__flame::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -13px;
+  width: 1px;
+  height: 7px;
+  background: linear-gradient(180deg, rgba(192, 138, 62, 0.08), rgba(255, 216, 138, 0.48));
+}
+.lantern.is-selected .lantern__flame {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--brass));
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(0, 0, 0, 0.38),
+    0 0 32px 8px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .lantern__name { letter-spacing: 2px; }
 .lantern__title { letter-spacing: 2px; }
