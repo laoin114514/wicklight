@@ -382,6 +382,41 @@ function bossAura(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
     ctx.arc(e.x, e.y, r * 1.5, time * 0.7 * dir, time * 0.7 * dir + Math.PI * 0.6);
     ctx.stroke();
   }
+
+  // 相位越高，外圈越"碎"：第二相位多一圈迟到半拍的断轨与四枚刻片，
+  // 第三相位把刻片加到七枚并反向缓旋。它们只提供轮廓层次，不抬亮身体。
+  if (e.phase > 1) {
+    const orbit = r * (1.68 + (e.phase - 2) * 0.2);
+    const orbitSpin = -time * (0.34 + e.phase * 0.04) + e.wobble * 0.25;
+    ctx.strokeStyle = rgba(e.color, 0.22 + e.phase * 0.025);
+    ctx.lineWidth = 1.05;
+    ctx.globalAlpha = 0.55;
+    ctx.setLineDash([1.5, 9]);
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, orbit, orbitSpin, orbitSpin + Math.PI * 1.72);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const chips = e.phase >= 3 ? 7 : 4;
+    for (let i = 0; i < chips; i += 1) {
+      const a = orbitSpin * 1.35 + (i / chips) * TAU;
+      const rr = orbit * (0.98 + (i % 2) * 0.055);
+      const cx = e.x + Math.cos(a) * rr;
+      const cy = e.y + Math.sin(a) * rr;
+      const tx = -Math.sin(a);
+      const ty = Math.cos(a);
+      const size = e.phase >= 3 ? 2.5 : 2.1;
+      ctx.globalAlpha = 0.16 + (i % 3) * 0.04;
+      ctx.fillStyle = i % 4 === 0 ? '#ffe8c2' : rgba(e.color, 0.9);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * size, cy + Math.sin(a) * size);
+      ctx.lineTo(cx + tx * size * 0.52, cy + ty * size * 0.52);
+      ctx.lineTo(cx - Math.cos(a) * size * 0.62, cy - Math.sin(a) * size * 0.62);
+      ctx.lineTo(cx - tx * size * 0.52, cy - ty * size * 0.52);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
