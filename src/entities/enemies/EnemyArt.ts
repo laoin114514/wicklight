@@ -1673,15 +1673,222 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'wickmother': {
-      ctx.fillStyle = rgba('#ffd24e', 0.85);
-      for (let i = 0; i < 4; i += 1) {
-        const a = (i / 4) * TAU + w * 0.35;
-        const cx = e.x + Math.cos(a) * r * 0.62;
-        const cy = e.y + Math.sin(a) * r * 0.62;
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const backX = -facingX;
+      const backY = -facingY;
+      const sideX = -facingY;
+      const sideY = facingX;
+      const breath = 0.5 + Math.sin(time * 2.1 + w) * 0.5;
+
+      // 蜡体不是一整块平色：靠灯的一侧透出暖芯，背光侧沉成旧蜡。
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const wax = ctx.createRadialGradient(
+        e.x + facingX * r * 0.28,
+        e.y + facingY * r * 0.28,
+        r * 0.08,
+        e.x,
+        e.y,
+        r * 1.04,
+      );
+      wax.addColorStop(0, 'rgba(255,229,173,0.18)');
+      wax.addColorStop(0.56, 'rgba(216,127,59,0.04)');
+      wax.addColorStop(1, 'rgba(54,16,9,0.34)');
+      ctx.fillStyle = wax;
+      ctx.fillRect(e.x - r * 1.4, e.y - r * 1.4, r * 2.8, r * 2.8);
+
+      // 三层向后叠的凝固蜡纹，让圆身体有“蜡堆起来”的厚度。
+      ctx.lineCap = 'round';
+      for (let layer = 0; layer < 3; layer += 1) {
+        const back = r * (0.04 + layer * 0.2);
+        const half = r * (0.72 - layer * 0.1);
+        const cx = e.x + backX * back;
+        const cy = e.y + backY * back;
+        const sag = Math.sin(w * 0.7 + layer * 1.4) * r * 0.045;
         ctx.beginPath();
-        ctx.ellipse(cx, cy, r * 0.12, r * 0.3, a, 0, TAU);
+        ctx.moveTo(cx + sideX * half, cy + sideY * half);
+        ctx.quadraticCurveTo(
+          cx + backX * r * 0.1 + sideX * sag,
+          cy + backY * r * 0.1 + sideY * sag,
+          cx - sideX * half,
+          cy - sideY * half,
+        );
+        ctx.strokeStyle = layer === 1 ? 'rgba(255,218,157,0.18)' : 'rgba(73,23,11,0.25)';
+        ctx.lineWidth = layer === 1 ? 0.95 : 1.45;
+        ctx.stroke();
+      }
+
+      // 细裂纹沿着身体边缘散开，避免中央出现第二只“眼睛”。
+      ctx.strokeStyle = 'rgba(72,22,12,0.3)';
+      ctx.lineWidth = 0.8;
+      for (let crack = 0; crack < 3; crack += 1) {
+        const a = w * 0.16 + crack * 2.1 + 0.35;
+        const start = r * 0.3;
+        const end = r * (0.62 + crack * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * start, e.y + Math.sin(a) * start);
+        ctx.quadraticCurveTo(
+          e.x + Math.cos(a + 0.2) * r * 0.47,
+          e.y + Math.sin(a + 0.2) * r * 0.47,
+          e.x + Math.cos(a - 0.05) * end,
+          e.y + Math.sin(a - 0.05) * end,
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 边缘垂下的蜡滴：只多出一点点剪影，远近都能读出“融化的烛母”。
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(69,21,11,0.24)';
+      ctx.lineWidth = 1.35;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 0.92, 0.16, Math.PI - 0.16);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,204,141,0.18)';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+      const drips: Array<[number, number, number]> = [
+        [0.64, 0.09, 0.075],
+        [1.16, 0.14, 0.065],
+        [2.02, 0.11, 0.06],
+        [2.58, 0.17, 0.075],
+        [3.64, 0.1, 0.065],
+      ];
+      for (let i = 0; i < drips.length; i += 1) {
+        const [a, length, width] = drips[i];
+        const baseX = e.x + Math.cos(a) * r * 0.9;
+        const baseY = e.y + Math.sin(a) * r * 0.9;
+        const drip = r * (length + Math.sin(time * 1.4 + i) * 0.012);
+        const sway = Math.sin(w * 0.8 + i * 1.7) * r * 0.035;
+        const tipX = baseX + sway;
+        const tipY = baseY + drip;
+        ctx.strokeStyle = 'rgba(71,21,11,0.5)';
+        ctx.lineWidth = Math.max(1.1, r * width * 1.8);
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.quadraticCurveTo(baseX + sway * 0.45, baseY + drip * 0.55, tipX, tipY);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(232,153,82,0.42)';
+        ctx.lineWidth = Math.max(0.55, r * width * 0.72);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(239,171,100,0.54)';
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, Math.max(0.8, r * width * 0.95), 0, TAU);
         ctx.fill();
       }
+      ctx.restore();
+
+      // 侧上方的烛芯与余烬：避开血条，烛母的身份在第一眼就能读出来。
+      ctx.save();
+      const wickOutX = -sideX;
+      const wickOutY = -sideY;
+      const wickX = e.x + wickOutX * r * 0.55 + backX * r * 0.72;
+      const wickY = e.y + wickOutY * r * 0.55 + backY * r * 0.72;
+      const emberX = wickX + wickOutX * r * 0.16 + backX * r * 0.23;
+      const emberY = wickY + wickOutY * r * 0.16 + backY * r * 0.23;
+      ctx.fillStyle = 'rgba(59,17,10,0.36)';
+      ctx.beginPath();
+      ctx.ellipse(wickX, wickY, r * 0.25, r * 0.12, e.angle + Math.PI / 2, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,206,142,0.28)';
+      ctx.beginPath();
+      ctx.ellipse(
+        wickX - wickOutX * r * 0.035,
+        wickY - wickOutY * r * 0.035,
+        r * 0.21,
+        r * 0.075,
+        e.angle + Math.PI / 2,
+        0,
+        TAU,
+      );
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(38,12,9,0.88)';
+      ctx.lineWidth = Math.max(1.4, r * 0.055);
+      ctx.beginPath();
+      ctx.moveTo(wickX + backX * r * 0.03, wickY + backY * r * 0.03);
+      ctx.quadraticCurveTo(
+        wickX + wickOutX * r * 0.06 + backX * r * 0.17,
+        wickY + wickOutY * r * 0.06 + backY * r * 0.17,
+        emberX,
+        emberY,
+      );
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,197,116,0.26)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.globalCompositeOperation = 'source-over';
+      const flameX = wickOutX * 0.5 + backX * 0.86;
+      const flameY = wickOutY * 0.5 + backY * 0.86;
+      const flameLength = r * (0.64 + breath * 0.09);
+      const flameGlow = ctx.createRadialGradient(emberX, emberY, 0, emberX, emberY, r * 0.55);
+      flameGlow.addColorStop(0, `rgba(255,184,79,${0.32 + breath * 0.16})`);
+      flameGlow.addColorStop(1, 'rgba(255,116,35,0)');
+      ctx.fillStyle = flameGlow;
+      ctx.beginPath();
+      ctx.arc(emberX, emberY, r * 0.55, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255,174,65,${0.56 + breath * 0.2})`;
+      ctx.beginPath();
+      ctx.moveTo(emberX - wickOutX * r * 0.18, emberY - wickOutY * r * 0.18);
+      ctx.quadraticCurveTo(
+        emberX + flameX * flameLength * 0.48,
+        emberY + flameY * flameLength * 0.48,
+        emberX + flameX * flameLength,
+        emberY + flameY * flameLength,
+      );
+      ctx.quadraticCurveTo(
+        emberX + flameX * flameLength * 0.4 + wickOutX * r * 0.13,
+        emberY + flameY * flameLength * 0.4 + wickOutY * r * 0.13,
+        emberX + wickOutX * r * 0.18,
+        emberY + wickOutY * r * 0.18,
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,249,220,${0.72 + breath * 0.16})`;
+      ctx.beginPath();
+      ctx.moveTo(emberX - wickOutX * r * 0.05, emberY - wickOutY * r * 0.05);
+      ctx.quadraticCurveTo(
+        emberX + flameX * flameLength * 0.28,
+        emberY + flameY * flameLength * 0.28,
+        emberX + flameX * flameLength * 0.48,
+        emberY + flameY * flameLength * 0.48,
+      );
+      ctx.quadraticCurveTo(
+        emberX + flameX * flameLength * 0.2 + wickOutX * r * 0.055,
+        emberY + flameY * flameLength * 0.2 + wickOutY * r * 0.055,
+        emberX + wickOutX * r * 0.05,
+        emberY + wickOutY * r * 0.05,
+      );
+      ctx.closePath();
+      ctx.fill();
+      const emberGlow = ctx.createRadialGradient(emberX, emberY, 0, emberX, emberY, r * 0.32);
+      emberGlow.addColorStop(0, `rgba(255,240,185,${0.4 + breath * 0.18})`);
+      emberGlow.addColorStop(1, 'rgba(255,129,45,0)');
+      ctx.fillStyle = emberGlow;
+      ctx.beginPath();
+      ctx.arc(emberX, emberY, r * 0.32, 0, TAU);
+      ctx.fill();
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(247,225,194,0.16)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(emberX + flameX * r * 0.2, emberY + flameY * r * 0.2);
+      ctx.bezierCurveTo(
+        emberX + flameX * r * 0.42 - wickOutX * r * 0.09,
+        emberY + flameY * r * 0.42 - wickOutY * r * 0.09,
+        emberX + flameX * r * 0.58 + wickOutX * r * 0.1,
+        emberY + flameY * r * 0.58 + wickOutY * r * 0.1,
+        emberX + flameX * r * 0.86 - wickOutX * r * 0.1,
+        emberY + flameY * r * 0.86 - wickOutY * r * 0.1,
+      );
+      ctx.stroke();
+      ctx.restore();
       break;
     }
     case 'splinter': {
