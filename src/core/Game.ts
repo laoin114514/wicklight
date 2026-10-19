@@ -2788,36 +2788,125 @@ export class Game {
     }
   }
 
-  private drawArcs(ctx: CanvasRenderingContext2D): void {
+  private drawArcs(ctx: CanvasRenderingContext2D, time: number): void {
     if (!this.arcs.length) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const a of this.arcs) {
-      const t = a.life / a.maxLife;
-      for (let pass = 0; pass < 2; pass += 1) {
-        ctx.strokeStyle = pass === 0 ? a.color : '#ffffff';
-        ctx.lineWidth = pass === 0 ? 8 : 2.4;
-        ctx.globalAlpha = (pass === 0 ? 0.3 : 0.92) * t;
-        ctx.beginPath();
-        ctx.moveTo(a.pts[0], a.pts[1]);
-        for (let i = 2; i < a.pts.length; i += 2) {
-          const x0 = a.pts[i - 2];
-          const y0 = a.pts[i - 1];
-          const x1 = a.pts[i];
-          const y1 = a.pts[i + 1];
-          const dx = x1 - x0;
-          const dy = y1 - y0;
-          const len = Math.hypot(dx, dy) || 1;
-          const nx = -dy / len;
-          const ny = dx / len;
-          const segs = 5;
-          for (let s = 1; s <= segs; s += 1) {
-            const u = s / segs;
-            const jitter = s === segs ? 0 : Math.sin(a.seed + i * 3.1 + s * 1.7) * 10;
-            ctx.lineTo(x0 + dx * u + nx * jitter, y0 + dy * u + ny * jitter);
+      const t = clamp(a.life / a.maxLife, 0, 1);
+      // 电弧每帧轻微抖动：只由 seed 与 time 推导，不增加任何状态。
+      const flicker = 0.82 + 0.18 * Math.sin(time * 43 + a.seed * 0.37);
+
+      // 主路径不是平滑折线：每一个小段都朝法线两侧交替尖折，端点仍严格落在命中点上。
+      const bolt: number[] = [a.pts[0], a.pts[1]];
+      for (let i = 2; i < a.pts.length; i += 2) {
+        const x0 = a.pts[i - 2];
+        const y0 = a.pts[i - 1];
+        const x1 = a.pts[i];
+        const y1 = a.pts[i + 1];
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const segs = 9;
+        for (let s = 1; s <= segs; s += 1) {
+          if (s === segs) {
+            bolt.push(x1, y1);
+            continue;
           }
+          const u = s / segs;
+          const envelope = Math.sin(u * Math.PI);
+          const coarse = Math.sin(a.seed * 0.37 + i * 1.91 + s * 0.83) * 10;
+          const fine = (s % 2 ? 1 : -1) * Math.abs(Math.sin(a.seed * 0.71 + i * 3.1 + s * 2.17)) * 5;
+          const jag = (coarse + fine) * envelope;
+          bolt.push(x0 + dx * u + nx * jag, y0 + dy * u + ny * jag);
         }
-        ctx.stroke();
+      }
+
+      const traceBolt = (): void => {
+        ctx.beginPath();
+        ctx.moveTo(bolt[0], bolt[1]);
+        for (let i = 2; i < bolt.length; i += 2) ctx.lineTo(bolt[i], bolt[i + 1]);
+      };
+
+      // 三层由宽到窄：冷色电离雾、可见电弧、白热芯。
+      traceBolt();
+      ctx.strokeStyle = a.color;
+      ctx.globalAlpha = 0.11 * t * flicker;
+      ctx.lineWidth = 13;
+      ctx.stroke();
+      traceBolt();
+      ctx.globalAlpha = 0.34 * t * flicker;
+      ctx.lineWidth = 4.2;
+      ctx.stroke();
+      traceBolt();
+      ctx.strokeStyle = '#f2ffff';
+      ctx.globalAlpha = 0.96 * t;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+
+      // 每一跳再分出两截短叉：只参与画面，不改变 `pts` 与命中数量。
+      for (let i = 2; i < a.pts.length; i += 2) {
+        const x0 = a.pts[i - 2];
+        const y0 = a.pts[i - 1];
+        const x1 = a.pts[i];
+        const y1 = a.pts[i + 1];
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const nx = -uy;
+        const ny = ux;
+        for (let k = 0; k < 2; k += 1) {
+          const along = 0.28 + k * 0.36 + Math.abs(Math.sin(a.seed + i + k * 2.3)) * 0.12;
+          const side = Math.sin(a.seed * 0.29 + i * 1.7 + k * 3.1) >= 0 ? 1 : -1;
+          const branchLen = 11 + Math.abs(Math.sin(a.seed * 0.41 + i + k)) * 17;
+          const bx = x0 + dx * along;
+          const by = y0 + dy * along;
+          const mx = bx + ux * branchLen * 0.58 + nx * side * branchLen * 0.72;
+          const my = by + uy * branchLen * 0.58 + ny * side * branchLen * 0.72;
+          const ex = mx + ux * branchLen * 0.34 - nx * side * branchLen * 0.28;
+          const ey = my + uy * branchLen * 0.34 - ny * side * branchLen * 0.28;
+
+          ctx.strokeStyle = a.color;
+          ctx.globalAlpha = 0.28 * t * flicker;
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(mx, my);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+          ctx.strokeStyle = '#f2ffff';
+          ctx.globalAlpha = 0.68 * t;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(mx, my);
+          ctx.stroke();
+        }
+      }
+
+      // 落点节点：每个命中点是一小团电光，最后才亮白点。
+      for (let i = 0; i < a.pts.length; i += 2) {
+        const x = a.pts[i];
+        const y = a.pts[i + 1];
+        const node = ctx.createRadialGradient(x, y, 0, x, y, 9);
+        node.addColorStop(0, a.color);
+        node.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.3 * t * flicker;
+        ctx.fillStyle = node;
+        ctx.beginPath();
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.86 * t;
+        ctx.fillStyle = '#f2ffff';
+        ctx.beginPath();
+        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
     ctx.restore();
@@ -6177,7 +6266,7 @@ export class Game {
     // 而玩家得始终看得见自己站在哪儿，所以人还在火苗之上。
     this.drawGroundTops(ctx);
     this.player.draw(ctx, this.time);
-    this.drawArcs(ctx);
+    this.drawArcs(ctx, this.time);
     this.drawBeams(ctx);
     this.particles.draw(ctx, this.worldView());
     this.floaters.draw(ctx);
