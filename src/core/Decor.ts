@@ -1148,20 +1148,135 @@ function shard(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
 }
 
 function crack(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const pulse = 0.65 + Math.sin(time * 1.8 + d.x * 0.02) * 0.35;
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(255,110,40,${0.5 * pulse})`;
-  ctx.lineWidth = 5;
+  const phase = d.x * 0.021 + d.y * 0.017;
+  const variant = Math.sin(phase);
+  const mirror = variant < 0 ? -1 : 1;
+  const pulse = 0.58 + Math.sin(time * 1.8 + phase) * 0.24;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+  const main: readonly (readonly [number, number])[] = [
+    [-0.78, -0.17],
+    [-0.55, -0.22],
+    [-0.39, -0.06],
+    [-0.22, -0.11],
+    [-0.02, 0.02],
+    [0.16, -0.09],
+    [0.34, 0.05],
+    [0.52, 0.02],
+    [0.73, 0.21],
+  ];
+  const trace = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(px(x), py(y));
+      else ctx.lineTo(px(x), py(y));
+    });
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.24)';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.7, d.y - d.r * 0.2);
-  ctx.lineTo(d.x - d.r * 0.2, d.y + d.r * 0.05);
-  ctx.lineTo(d.x + d.r * 0.25, d.y - d.r * 0.18);
-  ctx.lineTo(d.x + d.r * 0.75, d.y + d.r * 0.22);
+  ctx.ellipse(d.x, d.y + d.r * 0.08, d.r * 0.69, d.r * 0.18, -0.03 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(18,8,5,0.55)';
+  for (const [x, y, rx, ry, rot] of [
+    [-0.49, -0.12, 0.2, 0.07, -0.12],
+    [-0.08, 0.01, 0.24, 0.08, 0.04],
+    [0.36, 0.05, 0.2, 0.065, -0.1],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
+    ctx.fill();
+  }
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  trace(main);
+  ctx.strokeStyle = 'rgba(83,38,22,0.16)';
+  ctx.lineWidth = d.r * 0.3;
   ctx.stroke();
-  ctx.strokeStyle = `rgba(255,220,150,${0.55 * pulse})`;
-  ctx.lineWidth = 1.6;
+  trace(main);
+  ctx.strokeStyle = 'rgba(12,5,3,0.72)';
+  ctx.lineWidth = d.r * 0.17;
   ctx.stroke();
+
+  ctx.globalCompositeOperation = 'lighter';
+  trace(main);
+  ctx.strokeStyle = `rgba(255,96,28,${0.16 + pulse * 0.12})`;
+  ctx.lineWidth = d.r * 0.062;
+  ctx.stroke();
+  trace(main);
+  ctx.strokeStyle = `rgba(255,128,43,${0.38 + pulse * 0.24})`;
+  ctx.lineWidth = d.r * 0.025;
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,226,154,${0.27 + pulse * 0.22})`;
+  ctx.lineWidth = Math.max(0.65, d.r * 0.008);
+  trace(main);
+  ctx.stroke();
+
+  for (const [points, width] of [
+    [[[-0.22, -0.11], [-0.32, 0.14], [-0.21, 0.29]] as const, 0.017],
+    [[[0.16, -0.09], [0.22, -0.3], [0.35, -0.37]] as const, 0.015],
+    [[[0.34, 0.05], [0.43, 0.27], [0.59, 0.33]] as const, 0.014],
+  ] as const) {
+    trace(points);
+    ctx.strokeStyle = `rgba(255,120,39,${0.28 + pulse * 0.2})`;
+    ctx.lineWidth = Math.max(0.7, d.r * width);
+    ctx.stroke();
+  }
+
+  for (const [x, y, rx, ry, rot] of [
+    [-0.39, -0.06, 0.032, 0.016, -0.2],
+    [-0.02, 0.02, 0.04, 0.019, 0.1],
+    [0.34, 0.05, 0.03, 0.016, -0.25],
+    [0.52, 0.02, 0.023, 0.012, 0.2],
+  ] as const) {
+    ctx.fillStyle = `rgba(255,150,54,${0.36 + pulse * 0.25})`;
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,238,178,${0.22 + pulse * 0.2})`;
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx * 0.45, d.r * ry * 0.48, rot * mirror, 0, TAU);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    const rise = (time * 0.14 + i * 0.33 + phase * 0.07) % 1;
+    const ex = px(-0.34 + i * 0.35) + Math.sin(phase + rise * 5 + i) * d.r * 0.03;
+    const ey = py(0.02) - rise * d.r * 0.62;
+    ctx.fillStyle = `rgba(255,164,82,${(1 - rise) * 0.28})`;
+    ctx.beginPath();
+    ctx.arc(ex, ey, Math.max(0.5, d.r * (0.012 - rise * 0.004)), 0, TAU);
+    ctx.fill();
+  }
   ctx.globalCompositeOperation = 'source-over';
+
+  const chip = (x: number, y: number, w: number, h: number, rot: number): void => {
+    ctx.save();
+    ctx.translate(px(x), py(y));
+    ctx.rotate(rot * mirror);
+    ctx.fillStyle = '#21110d';
+    ctx.beginPath();
+    ctx.moveTo(-w * d.r * 0.5, h * d.r * 0.18);
+    ctx.lineTo(-w * d.r * 0.2, -h * d.r * 0.5);
+    ctx.lineTo(w * d.r * 0.45, -h * d.r * 0.25);
+    ctx.lineTo(w * d.r * 0.36, h * d.r * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,118,47,0.13)';
+    ctx.lineWidth = Math.max(0.5, d.r * 0.007);
+    ctx.beginPath();
+    ctx.moveTo(-w * d.r * 0.17, -h * d.r * 0.42);
+    ctx.lineTo(w * d.r * 0.36, -h * d.r * 0.2);
+    ctx.stroke();
+    ctx.restore();
+  };
+  chip(-0.55, 0.08, 0.1, 0.08, -0.2);
+  chip(-0.18, 0.19, 0.08, 0.07, 0.18);
+  chip(0.24, 0.18, 0.09, 0.065, -0.26);
+  chip(0.56, 0.17, 0.07, 0.06, 0.12);
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
 }
 
 function bones(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void {
