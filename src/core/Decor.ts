@@ -1557,15 +1557,56 @@ function mushroomDot(ctx: CanvasRenderingContext2D, d: Decor): void {
 }
 
 function leafLitter(ctx: CanvasRenderingContext2D, d: Decor): void {
-  for (let i = 0; i < 3; i += 1) {
-    const a = d.x * 0.01 + i * 2.1;
-    const ox = d.x + Math.cos(a) * d.r * 0.58;
-    const oy = d.y + Math.sin(a) * d.r * 0.34;
-    ctx.fillStyle = i === 1 ? 'rgba(128,110,62,0.42)' : 'rgba(82,112,68,0.42)';
+  const phase = d.x * 0.019 + d.y * 0.027;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const spin = Math.sin(phase * 1.7) * 0.22;
+  ctx.fillStyle = 'rgba(2,6,4,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.05 * mirror, d.y + d.r * 0.16, d.r * 0.7, d.r * 0.26, 0.06 * mirror, 0, TAU);
+  ctx.fill();
+
+  const leaves: readonly (readonly [number, number, number, number, number, string])[] = [
+    [-0.42, 0.11, -2.45 + spin, 0.64, 0.21, 'rgba(66,102,66,0.42)'],
+    [-0.03, -0.16, 0.55 - spin, 0.72, 0.24, 'rgba(119,98,58,0.4)'],
+    [0.43, 0.13, 2.35 + spin, 0.57, 0.2, 'rgba(79,119,78,0.42)'],
+    [-0.05, 0.27, 1.92 - spin, 0.48, 0.17, 'rgba(104,88,54,0.36)'],
+    [0.24, -0.23, -0.84 + spin, 0.38, 0.14, 'rgba(56,91,61,0.34)'],
+  ];
+  leaves.forEach(([x, y, angle, length, width, tint], index) => {
+    const a = angle * mirror;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const cx = d.x + x * d.r * mirror;
+    const cy = d.y + y * d.r;
+    const half = d.r * length * 0.5;
+    const halfW = d.r * width;
+    const px = -sin * halfW;
+    const py = cos * halfW;
+    const tipX = cx + cos * half;
+    const tipY = cy + sin * half;
+    const baseX = cx - cos * half;
+    const baseY = cy - sin * half;
+    ctx.fillStyle = tint;
     ctx.beginPath();
-    ctx.ellipse(ox, oy, d.r * 0.24, d.r * 0.09, a, 0, TAU);
+    ctx.moveTo(baseX, baseY);
+    ctx.quadraticCurveTo(cx + cos * half * 0.12 + px, cy + sin * half * 0.12 + py, tipX, tipY);
+    ctx.quadraticCurveTo(cx - cos * half * 0.18 - px, cy - sin * half * 0.18 - py, baseX, baseY);
+    ctx.closePath();
     ctx.fill();
-  }
+    ctx.strokeStyle = index === 1 ? 'rgba(156,126,73,0.2)' : 'rgba(111,151,92,0.17)';
+    ctx.lineWidth = Math.max(0.35, d.r * 0.018);
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY);
+    ctx.lineTo(tipX - cos * half * 0.12, tipY - sin * half * 0.12);
+    ctx.stroke();
+    if (index < 4) {
+      ctx.strokeStyle = 'rgba(30,45,27,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(baseX - cos * d.r * 0.09, baseY - sin * d.r * 0.09);
+      ctx.stroke();
+    }
+  });
 }
 
 function puddle(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
