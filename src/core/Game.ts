@@ -6496,6 +6496,7 @@ export class Game {
     // "地上放了一盏灯"。它是这一版的招牌，得读成"地上真有一摊正在烧的油"（见 drawOilFire）。
     for (const g of this.grounds) {
       if (g.ignites) this.drawOilFire(ctx, g);
+      else if (g.kind === 'poison') this.drawPoisonGround(ctx, g);
     }
     for (const g of this.grounds) {
       if (g.kind !== 'mud' && g.kind !== 'frost') continue;
@@ -6530,15 +6531,12 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
     for (const g of this.grounds) {
-      if (g.kind === 'mud' || g.ignites) continue;
+      if (g.kind === 'mud' || g.kind === 'poison' || g.ignites) continue;
       const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
       if (g.kind === 'frost') {
         // 给霜冻一点冷光：它藏在黑暗里的话，玩家根本没机会躲
         g2.addColorStop(0, 'rgba(150,215,255,0.2)');
         g2.addColorStop(1, 'rgba(90,150,200,0)');
-      } else if (g.kind === 'poison') {
-        g2.addColorStop(0, 'rgba(140,235,110,0.42)');
-        g2.addColorStop(1, 'rgba(70,170,60,0)');
       } else {
         g2.addColorStop(0, 'rgba(255,120,40,0.5)');
         g2.addColorStop(1, 'rgba(255,60,20,0)');
@@ -6548,6 +6546,96 @@ export class Game {
       ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
+  }
+
+  /** 毒地：一摊吸光的暗绿沼液，上面浮着泡泡、孢子和一圈将熄的绿边。 */
+  private drawPoisonGround(ctx: CanvasRenderingContext2D, g: Ground): void {
+    const fade = clamp(g.life / 1.2, 0, 1);
+    const ph = g.phase ?? (g.x * 0.013 + g.y * 0.017);
+    const breath = 0.5 + 0.5 * Math.sin(this.time * 2.3 + ph);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 沼液先压暗地面：边缘由八团圆斑摊开，中心再叠一层更深的液面。
+    const blobs = 8;
+    for (let i = 0; i < blobs; i += 1) {
+      const a = ph + i * 0.8976;
+      const d = g.r * (0.16 + 0.14 * ((i * 3) % 4));
+      const rr = g.r * (0.48 + 0.09 * ((i * 5) % 3));
+      ctx.globalAlpha = (0.15 + 0.055 * ((i * 7) % 4)) * fade;
+      ctx.fillStyle = '#0d160b';
+      ctx.beginPath();
+      ctx.arc(g.x + Math.cos(a) * d, g.y + Math.sin(a) * d, rr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const pool = ctx.createRadialGradient(g.x - g.r * 0.08, g.y - g.r * 0.12, 0, g.x, g.y, g.r * 0.96);
+    pool.addColorStop(0, `rgba(54,88,33,${0.84 * fade})`);
+    pool.addColorStop(0.32, `rgba(35,66,29,${0.78 * fade})`);
+    pool.addColorStop(0.72, `rgba(23,45,24,${0.55 * fade})`);
+    pool.addColorStop(1, 'rgba(16,30,18,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = pool;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.94, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 液面上那层病态绿光只占中央，边缘留给暗沼液，整片才不像一盏绿灯。
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r * 0.78);
+    glow.addColorStop(0, `rgba(154,244,103,${(0.22 + 0.08 * breath) * fade})`);
+    glow.addColorStop(0.48, `rgba(91,196,61,${(0.13 + 0.05 * breath) * fade})`);
+    glow.addColorStop(1, 'rgba(50,140,40,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 气泡：每个周期鼓起、亮起、破掉；只画环与一点反光，不用粒子池。
+    for (let i = 0; i < 9; i += 1) {
+      const a = ph + i * 2.39996;
+      const d = g.r * 0.62 * Math.sqrt((i + 0.5) / 9);
+      const cycle = (this.time * 0.48 + i * 0.173 + ph * 0.31) % 1;
+      const bx = g.x + Math.cos(a) * d + Math.sin(this.time * 0.8 + i) * 1.5;
+      const by = g.y + Math.sin(a) * d * 0.72;
+      const br = 1.3 + cycle * 2.4;
+      const alpha = Math.sin(Math.PI * cycle) * (0.28 + 0.24 * breath) * fade;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#b7ff8d';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = '#e6ffc9';
+      ctx.beginPath();
+      ctx.arc(bx - br * 0.24, by - br * 0.24, Math.max(0.35, br * 0.2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 孢子：从液面慢慢浮起，越往上越淡。
+    for (let i = 0; i < 4; i += 1) {
+      const cycle = (this.time * 0.25 + i * 0.27 + ph * 0.17) % 1;
+      const sx = g.x + Math.sin(ph + i * 2.1 + this.time * 1.1) * g.r * (0.24 + i * 0.07);
+      const sy = g.y - cycle * g.r * 0.64;
+      ctx.globalAlpha = (1 - cycle) * (0.18 + 0.22 * breath) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#c8ff9e' : '#7edc67';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 0.75 + (1 - cycle) * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 边界仍然是可躲的范围：留一圈低亮度的酸绿虚线，不把毒池画成一团无边雾气。
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = fade * (0.3 + 0.12 * Math.sin(this.time * 3 + ph));
+    ctx.strokeStyle = '#9ada75';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([7, 12]);
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
