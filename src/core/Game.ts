@@ -6966,21 +6966,85 @@ export class Game {
         const blow = 1 - clamp(m.fuse / MINE.chainFuse, 0, 1);
         const hx = m.fuseX + (m.x - m.fuseX) * blow;
         const hy = m.fuseY + (m.y - m.fuseY) * blow;
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = 'rgba(255,110,40,0.45)';
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(m.fuseX, m.fuseY);
-        ctx.lineTo(hx, hy);
+        const fdx = hx - m.fuseX;
+        const fdy = hy - m.fuseY;
+        const flen = Math.max(1, Math.hypot(fdx, fdy));
+        const fnx = -fdy / flen;
+        const fny = fdx / flen;
+        const fusePath = (wobble: number): void => {
+          ctx.beginPath();
+          for (let s = 0; s <= 9; s += 1) {
+            const k = s / 9;
+            const bend = Math.sin(k * 12 + m.phase * 2.3 + this.time * 16) * wobble * Math.sin(k * Math.PI);
+            const px = m.fuseX + fdx * k + fnx * bend;
+            const py = m.fuseY + fdy * k + fny * bend;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+        };
+        // 先留一道压在地上的烧蚀痕：引信不是凭空亮着的一根线，
+        // 它得先像一根被火啃黑的绳子，亮芯才有地方可烧。
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.72;
+        ctx.strokeStyle = 'rgba(22,11,8,0.88)';
+        ctx.lineWidth = 4.2;
+        fusePath(1.4);
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255,196,90,0.3)';
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'lighter';
+        // 宽热晕：给黑暗里的引信一层真正照得亮地面的暖光。
+        const heat = ctx.createLinearGradient(m.fuseX, m.fuseY, hx, hy);
+        heat.addColorStop(0, 'rgba(112,34,10,0.08)');
+        heat.addColorStop(0.62, 'rgba(255,104,28,0.18)');
+        heat.addColorStop(1, 'rgba(255,186,84,0.46)');
+        ctx.strokeStyle = heat;
+        ctx.lineWidth = 7;
+        fusePath(2.1);
+        ctx.stroke();
+        // 白热芯走到哪里，焦痕就被点亮到哪里。
+        const core = ctx.createLinearGradient(m.fuseX, m.fuseY, hx, hy);
+        core.addColorStop(0, 'rgba(255,92,24,0.16)');
+        core.addColorStop(0.7, 'rgba(255,174,70,0.72)');
+        core.addColorStop(1, 'rgba(255,248,214,0.98)');
+        ctx.strokeStyle = core;
+        ctx.lineWidth = 1.35;
+        fusePath(2.4);
+        ctx.stroke();
+        // 被甩在火头后面的碎火星：越靠火头越亮，尾部只剩两点暗红。
+        for (let i = 0; i < 7; i += 1) {
+          const k = clamp(blow - 0.055 - i * 0.075, 0, 1);
+          const sway = Math.sin(this.time * 26 + m.phase * 3 + i * 2.07) * (1.2 + i * 0.32);
+          const px = m.fuseX + fdx * k + fnx * sway;
+          const py = m.fuseY + fdy * k + fny * sway;
+          const hot = 1 - i / 8;
+          ctx.fillStyle = `rgba(255,${150 + Math.round(hot * 92)},${64 + Math.round(hot * 128)},${0.2 + hot * 0.62})`;
+          ctx.beginPath();
+          ctx.arc(px, py, Math.max(0.55, 1.8 - i * 0.17), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // 火头：大热团压住线尾，再放一点白芯和四根短芒，和一般的光点区分开。
+        const flare = 1 + Math.sin(this.time * 31 + m.phase) * 0.12;
+        ctx.fillStyle = 'rgba(255,142,42,0.28)';
         ctx.beginPath();
-        ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+        ctx.arc(hx, hy, 11.5 * flare, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,246,214,0.95)';
+        ctx.fillStyle = 'rgba(255,229,152,0.45)';
         ctx.beginPath();
-        ctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
+        ctx.arc(hx, hy, 5.2 * flare, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = 'rgba(255,252,232,0.98)';
+        ctx.beginPath();
+        ctx.arc(hx, hy, 2.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,210,122,0.58)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(hx - fnx * 8, hy - fny * 8);
+        ctx.lineTo(hx + fnx * 8, hy + fny * 8);
+        ctx.moveTo(hx - fdx / flen * 4, hy - fdy / flen * 4);
+        ctx.lineTo(hx + fdx / flen * 8, hy + fdy / flen * 8);
+        ctx.stroke();
         ctx.globalCompositeOperation = 'source-over';
       }
       // 灯身：矮胖的灯笼。先画壳，再把光叠在壳上——
