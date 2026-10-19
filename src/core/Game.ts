@@ -5310,6 +5310,7 @@ export class Game {
     this.light.setScale(r.dpr, this.profile.lightScale);
     this.light.setOccluders(this.level.walls);
     this.light.render(ctx, this.camera, w, h, this.time);
+    this.drawWallAmbient(ctx, theme);
     this.drawWallBounce(ctx);
     this.drawPyreGlow(ctx, w, h);
     this.drawEmberGlow(ctx, w, h);
@@ -6338,6 +6339,30 @@ export class Game {
       return;
     }
     for (const s of sprites) ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h);
+  }
+
+  /**
+   * 暗幕之后的极弱月光：墙本身挡住玩家灯火，于是墙内一整块只剩纯黑剪影。
+   * 这里把已经烘好的墙精灵再用一次加法混合，只让原本就亮的石棱、扶壁与砌缝
+   * 留下几个灰度级——不照亮墙后，也不改变任何可见性判定。
+   */
+  private drawWallAmbient(ctx: CanvasRenderingContext2D, theme: import('../types').StageTheme): void {
+    const sprites = this.wallLayer(theme);
+    if (!sprites) return;
+    const view = this.worldView();
+    const cam = this.camera;
+    ctx.save();
+    ctx.translate(this.renderer.width / 2 + cam.shakeX, this.renderer.height / 2 + cam.shakeY);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-cam.x, -cam.y);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = this.profile.handheld ? 0.13 : 0.16;
+    for (const s of sprites) {
+      if (s.x > view.x + view.halfW || s.x + s.w < view.x - view.halfW) continue;
+      if (s.y > view.y + view.halfH || s.y + s.h < view.y - view.halfH) continue;
+      ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h);
+    }
+    ctx.restore();
   }
 
   /** 烘焙好的静态地面层（渐变 + 贴图 + 网格），按主题/尺寸缓存。 */
