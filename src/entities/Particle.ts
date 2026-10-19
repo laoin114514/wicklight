@@ -161,6 +161,35 @@ export class ParticleSystem {
   }
 
   /**
+   * 爆炸中心的短促亮核。
+   *
+   * 它**不碰 `rng`**：位置、速度、寿命全由调用方给定，只借现有粒子池的收束与加法混合。
+   * 这样补一层火光不会改变玩法随机序列，也不会让同一颗种子下的战局漂移。
+   */
+  flare(x: number, y: number, color: string, size: number, life = 0.2): void {
+    const p = this.pool.acquire();
+    p.x = x;
+    p.y = y;
+    p.vx = 0;
+    p.vy = 0;
+    p.maxLife = life;
+    p.life = life;
+    p.size = size;
+    p.color = color;
+    p.drag = 0;
+    p.glow = true;
+    p.ring = false;
+    p.arcStart = 0;
+    p.arcEnd = Math.PI * 2;
+    p.gravity = 0;
+    p.shape = 'dot';
+    p.angle = 0;
+    p.spin = 0;
+    p.stretch = 1;
+    p.grow = 0;
+  }
+
+  /**
    * 只画一段圆弧的冲击波（v104）。
    *
    * 燃爆 / 伏灯 / 旋灯那些"炸出去的一下"故意不看墙，继续用整圆的 `shockwave`；

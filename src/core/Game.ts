@@ -3796,6 +3796,12 @@ export class Game {
   ): number {
     const ring = opts.ring ?? '#ff7a2f';
     this.particles.shockwave(x, y, ring, radius, 0.45);
+    // 内层白环稍小、收得更快：一圈压力波会先亮后暗，单环看起来像贴纸。
+    // 只多一次确定性的 shockwave，不摸 rng，不改变爆炸范围与伤害。
+    this.particles.shockwave(x, y, '#fff0c9', radius * 0.56, 0.24);
+    // 中心亮核只补视觉：暖色外团 + 白色内芯，二者都不消费 rng。
+    this.particles.flare(x, y, 'rgba(255,172,84,0.58)', radius * 0.3, 0.2);
+    this.particles.flare(x, y, '#fff7dc', radius * 0.14, 0.15);
     this.particles.burst(x, y, opts.sparkCount ?? 14, opts.spark ?? '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
     this.particles.sparks(x, y, Math.max(5, Math.round((opts.sparkCount ?? 14) * 0.55)), opts.spark ?? '#ff9d2e', {
       speed: 265,
