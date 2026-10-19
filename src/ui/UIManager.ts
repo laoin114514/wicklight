@@ -1672,12 +1672,20 @@ export class UIManager implements UIHost {
       </div>
     `);
     this.screen.querySelectorAll('input[type="range"]').forEach((el) => {
-      el.addEventListener('input', () => {
-        const input = el as HTMLInputElement;
+      const input = el as HTMLInputElement;
+      const paintFill = (): void => {
+        const min = Number(input.min || 0);
+        const max = Number(input.max || 1);
+        const ratio = max > min ? (Number(input.value) - min) / (max - min) : 0;
+        input.style.setProperty('--fill', `${(ratio * 100).toFixed(1)}%`);
+      };
+      paintFill();
+      input.addEventListener('input', () => {
         const key = input.dataset.key as 'master' | 'music' | 'sfx' | 'shake';
         this.game.settings.set(key, Number(input.value));
         const b = input.nextElementSibling as HTMLElement;
         b.textContent = `${Math.round(Number(input.value) * 100)}%`;
+        paintFill();
       });
     });
     this.on('[data-toggle="vibrate"]', (el) => {
