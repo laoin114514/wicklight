@@ -6105,29 +6105,69 @@ export class Game {
       ctx.globalAlpha = 1;
       // 点燃进度：只有站在旁边才画，读起来就像"按住不放"
       if (!py.lit && py.progress > 0.01) {
-        ctx.lineWidth = 4;
+        const channeling = py === this.pyreChannel;
+        const base = -Math.PI / 2;
+        const radius = 33;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+
+        // 先压一道暗槽：刻盘是长在石座上的，不是浮在空中的加载圈。
+        ctx.globalAlpha = 0.58;
+        ctx.lineWidth = 4.2;
+        ctx.strokeStyle = 'rgba(8,7,11,0.72)';
         ctx.beginPath();
-        ctx.arc(py.x, py.y - 20, 34, 0, Math.PI * 2);
+        ctx.arc(py.x, py.y - 20, radius, 0, Math.PI * 2);
         ctx.stroke();
-        // 环外四个短刻点，让进度环看起来像石座上的刻度，而不是通用的加载圈。
-        ctx.globalAlpha = 0.38;
-        ctx.lineWidth = 1.2;
-        ctx.strokeStyle = py === this.pyreChannel ? '#ffe3b0' : '#8a6a48';
-        for (let i = 0; i < 4; i += 1) {
-          const a = -Math.PI / 2 + (i / 4) * Math.PI * 2;
+
+        // 十二道短刻痕逐格亮起：一眼看出烧到哪一格，也还是一条环形读数。
+        for (let i = 0; i < 12; i += 1) {
+          const a = base + (i / 12) * Math.PI * 2;
+          const lit = i / 12 <= py.progress;
+          ctx.globalAlpha = lit ? (channeling ? 0.62 : 0.36) : 0.15;
+          ctx.strokeStyle = lit ? (channeling ? '#ffe3b0' : '#b48755') : '#77666c';
+          ctx.lineWidth = lit ? 1.45 : 1;
           ctx.beginPath();
-          ctx.moveTo(py.x + Math.cos(a) * 31, py.y - 20 + Math.sin(a) * 31);
-          ctx.lineTo(py.x + Math.cos(a) * 37, py.y - 20 + Math.sin(a) * 37);
+          ctx.moveTo(py.x + Math.cos(a) * (radius - 5), py.y - 20 + Math.sin(a) * (radius - 5));
+          ctx.lineTo(py.x + Math.cos(a) * (radius + 2.5), py.y - 20 + Math.sin(a) * (radius + 2.5));
           ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+
         // 正在点燃时是明亮的暖白；走开之后进度回落，环也跟着变暗——不必再画一行说明
-        ctx.strokeStyle = py === this.pyreChannel ? '#ffe3b0' : '#8a6a48';
+        ctx.globalAlpha = channeling ? 0.8 : 0.48;
+        ctx.strokeStyle = channeling ? '#ffe3b0' : '#9b7650';
+        ctx.lineWidth = 1.9;
         ctx.beginPath();
-        ctx.arc(py.x, py.y - 20, 34, -Math.PI / 2, -Math.PI / 2 + py.progress * Math.PI * 2);
+        ctx.arc(py.x, py.y - 20, radius, base, base + py.progress * Math.PI * 2);
         ctx.stroke();
+
+        if (channeling) {
+          ctx.globalCompositeOperation = 'lighter';
+          const lead = base + py.progress * Math.PI * 2;
+          const tipX = py.x + Math.cos(lead) * radius;
+          const tipY = py.y - 20 + Math.sin(lead) * radius;
+          ctx.globalAlpha = 0.48 + breathe * 0.2;
+          ctx.fillStyle = '#fff1c7';
+          ctx.beginPath();
+          ctx.arc(tipX, tipY, 1.35 + breathe * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 四粒余烬沿刻盘向内收：只有玩家在引导时才有，读作"火正在被接进来"。
+          for (let i = 0; i < 4; i += 1) {
+            const cycle = (this.time * 0.68 + i * 0.25 + py.x * 0.0007) % 1;
+            const a = this.time * 0.52 + i * 1.5708;
+            const rr = radius * (0.92 - cycle * 0.72);
+            ctx.globalAlpha = (1 - cycle) * 0.4;
+            ctx.fillStyle = i % 2 === 0 ? '#ffe0a3' : '#ff9d48';
+            ctx.beginPath();
+            ctx.arc(
+              py.x + Math.cos(a) * rr,
+              py.y - 20 + Math.sin(a) * rr * 0.42 - cycle * 15,
+              0.55 + (1 - cycle) * 0.65,
+              0,
+              Math.PI * 2,
+            );
+            ctx.fill();
+          }
+        }
       }
     }
     ctx.restore();
