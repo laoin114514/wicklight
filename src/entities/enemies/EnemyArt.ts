@@ -884,22 +884,110 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
     }
     case 'beacon': {
       const bob = Math.sin(e.wobble * 0.9) * r * 0.06;
+      const flicker = 0.72 + Math.sin(time * 7 + w) * 0.28;
       ctx.globalCompositeOperation = 'lighter';
-      const f = 0.72 + Math.sin(time * 7 + w) * 0.28;
-      const g = ctx.createRadialGradient(e.x, e.y + bob, 0, e.x, e.y + bob, r * 1.55 * f);
+      const g = ctx.createRadialGradient(e.x, e.y + bob, 0, e.x, e.y + bob, r * 1.55 * flicker);
       g.addColorStop(0, 'rgba(255,247,216,0.95)');
       g.addColorStop(0.42, rgba('#ffd77a', 0.5));
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(e.x, e.y + bob, r * 1.55 * f, 0, TAU);
+      ctx.arc(e.x, e.y + bob, r * 1.55 * flicker, 0, TAU);
       ctx.fill();
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
       ctx.globalCompositeOperation = 'source-over';
+      const glass = ctx.createLinearGradient(e.x - r * 0.4, e.y - r * 0.5, e.x + r * 0.36, e.y + r * 0.62);
+      glass.addColorStop(0, 'rgba(255,250,221,0.2)');
+      glass.addColorStop(0.46, 'rgba(255,211,112,0.06)');
+      glass.addColorStop(1, 'rgba(72,42,8,0.17)');
+      ctx.fillStyle = glass;
+      ctx.fillRect(e.x - r, e.y - r, r * 2, r * 2);
+      ctx.fillStyle = 'rgba(27,18,8,0.34)';
+      ctx.fillRect(e.x - r * 0.78, e.y - r * 0.46 + bob, r * 1.56, r * 1.16);
+
+      ctx.globalCompositeOperation = 'lighter';
+      const flameGlow = ctx.createRadialGradient(e.x, e.y - r * 0.06 + bob, 0, e.x, e.y - r * 0.06 + bob, r * 0.58);
+      flameGlow.addColorStop(0, `rgba(255,255,232,${0.34 + flicker * 0.26})`);
+      flameGlow.addColorStop(0.45, `rgba(255,205,92,${0.16 + flicker * 0.22})`);
+      flameGlow.addColorStop(1, 'rgba(255,168,54,0)');
+      ctx.fillStyle = flameGlow;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y - r * 0.06 + bob, r * 0.58, 0, TAU);
+      ctx.fill();
+
+      const flameTipY = e.y - r * (0.3 + flicker * 0.13) + bob;
+      const flameBaseY = e.y + r * 0.18 + bob;
+      ctx.fillStyle = 'rgba(255,143,40,0.66)';
+      ctx.beginPath();
+      ctx.moveTo(e.x, flameBaseY);
+      ctx.bezierCurveTo(e.x - r * 0.32, e.y + r * 0.04 + bob, e.x - r * 0.22, e.y - r * 0.2 + bob, e.x, flameTipY);
+      ctx.bezierCurveTo(e.x + r * 0.22, e.y - r * 0.2 + bob, e.x + r * 0.32, e.y + r * 0.04 + bob, e.x, flameBaseY);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,249,205,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(e.x, flameBaseY - r * 0.14);
+      ctx.quadraticCurveTo(e.x - r * 0.13, e.y - r * 0.04 + bob, e.x, e.y - r * 0.24 + bob);
+      ctx.quadraticCurveTo(e.x + r * 0.13, e.y - r * 0.04 + bob, e.x, flameBaseY - r * 0.14);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,223,135,0.5)';
+      for (let mote = 0; mote < 3; mote += 1) {
+        const rise = (time * 0.9 + mote * 0.31 + w * 0.08) % 1;
+        const mx = e.x + Math.sin(time * 2.8 + mote * 2.4 + w) * r * 0.3;
+        const my = e.y + r * 0.14 - rise * r * 0.52 + bob;
+        ctx.beginPath();
+        ctx.arc(mx, my, Math.max(0.5, r * (0.028 + (1 - rise) * 0.025)), 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(44,33,13,0.82)';
+      ctx.lineWidth = 1.7;
+      for (const rail of [-0.55, 0.55]) {
+        ctx.beginPath();
+        ctx.moveTo(e.x + r * rail, e.y - r * 0.55 + bob);
+        ctx.lineTo(e.x + r * (rail * 0.87), e.y + r * 0.72 + bob);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(56,41,16,0.8)';
+      ctx.lineWidth = 1.9;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.79, e.y - r * 0.48 + bob);
+      ctx.lineTo(e.x + r * 0.79, e.y - r * 0.48 + bob);
+      ctx.moveTo(e.x - r * 0.64, e.y + r * 0.64 + bob);
+      ctx.lineTo(e.x + r * 0.64, e.y + r * 0.64 + bob);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,235,172,0.24)';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.75, e.y - r * 0.51 + bob);
+      ctx.lineTo(e.x + r * 0.75, e.y - r * 0.51 + bob);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,249,224,0.12)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.58, e.y + r * 0.42 + bob);
+      ctx.lineTo(e.x - r * 0.18, e.y - r * 0.34 + bob);
+      ctx.stroke();
+      ctx.restore();
+
       ctx.strokeStyle = 'rgba(38,30,14,0.85)';
       ctx.lineWidth = 2.6;
       ctx.beginPath();
       ctx.arc(e.x, e.y - r * 0.6 + bob, r * 0.44, Math.PI, TAU);
       ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,222,134,0.28)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y - r * 0.6 + bob, r * 0.44, Math.PI + 0.22, TAU - 0.22);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,222,134,0.32)';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y - r * 1.04 + bob, Math.max(0.8, r * 0.07), 0, TAU);
+      ctx.fill();
       break;
     }
     case 'skitter': {
