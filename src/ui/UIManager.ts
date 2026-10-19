@@ -584,9 +584,15 @@ export class UIManager implements UIHost {
         const into = WEAPON_MAP[def.evolve.into];
         const ready = lvl >= max && have >= need;
         return `<div class="lo-evo ${ready ? 'is-ready' : ''}" style="--c:${def.color}">
-          <div class="lo-evo__head"><b>${def.name}</b><span>→ ${into?.name ?? def.evolve.into}</span></div>
+          <div class="lo-evo__head">
+            <i class="lo-evo__seal" aria-hidden="true"></i>
+            <b>${def.name}</b>
+            <i class="lo-evo__route" aria-hidden="true"></i>
+            <em>${into?.name ?? def.evolve.into}</em>
+          </div>
           <div class="lo-evo__need">
-            武器 ${lvl}/${max} ${lvl >= max ? '✓' : ''} · ${passive?.name ?? def.evolve.passive} ${have}/${need} ${have >= need ? '✓' : ''}
+            <span class="lo-evo__req ${lvl >= max ? 'is-met' : ''}">武器 ${lvl}/${max}</span>
+            <span class="lo-evo__req ${have >= need ? 'is-met' : ''}">${passive?.name ?? def.evolve.passive} ${have}/${need}</span>
           </div>
         </div>`;
       })

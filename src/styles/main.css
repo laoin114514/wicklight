@@ -3885,3 +3885,140 @@ body.is-touch .key { display: none; }
   color: #fff3dd;
   box-shadow: 0 0 20px rgba(255, 178, 76, 0.5), inset 0 0 16px rgba(255, 150, 60, 0.28);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v140 · 构筑总览的进化路线：一条能被一眼读完的黄铜轨
+
+   旧版每一条进化都只是“起点 → 终点 + 一行小字”，和武器清单长得太像。
+   这里把三件事分开：起点是一颗带武器色的铆钉，中间是一条黄铜轨，
+   终点是一块刻着进化名的暗铜牌；下面两项条件各是一枚条件戳，满足时
+   才亮起并盖上一个勾。这样“我现在走到哪、还差什么”不用逐字读。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.lo-evo {
+  padding: 9px 11px 8px;
+  margin-bottom: 7px;
+  overflow: hidden;
+  border-radius: 7px;
+  border: 1px solid rgba(192, 138, 62, 0.2);
+  background:
+    radial-gradient(90% 120% at 0 50%, color-mix(in srgb, var(--c, #d9a85f) 10%, transparent), rgba(0, 0, 0, 0) 52%),
+    repeating-linear-gradient(90deg, rgba(255, 235, 196, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 5px),
+    linear-gradient(180deg, rgba(31, 27, 21, 0.82), rgba(12, 10, 8, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 230, 181, 0.07),
+    inset 0 -7px 15px rgba(0, 0, 0, 0.3);
+}
+.lo-evo__head {
+  display: grid;
+  grid-template-columns: 9px auto minmax(22px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.lo-evo__seal {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--c, #d9a85f) 72%, #ffe7b7);
+  background: radial-gradient(circle at 34% 28%, #fff8df 0 13%, var(--c, #d9a85f) 42%, rgba(37, 20, 5, 0.9) 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c, #d9a85f) 42%, transparent);
+}
+.lo-evo__head b {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--c, #d9a85f) 82%, #f8ead0);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lo-evo__route {
+  position: relative;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c, #d9a85f) 58%, transparent), rgba(192, 138, 62, 0.38));
+}
+.lo-evo__route::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-left: 5px solid rgba(218, 171, 96, 0.72);
+  transform: translateY(-50%);
+}
+.lo-evo__head em {
+  padding: 2px 7px 3px;
+  border: 1px solid rgba(192, 138, 62, 0.34);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(255, 226, 167, 0.09), rgba(0, 0, 0, 0.26));
+  color: #d9c49d;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 238, 198, 0.08);
+}
+.lo-evo__need {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  padding-left: 17px;
+}
+.lo-evo__req {
+  position: relative;
+  padding: 2px 7px 2px 6px;
+  border: 1px solid rgba(255, 236, 200, 0.075);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(219, 206, 183, 0.46);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+.lo-evo__req.is-met {
+  padding-right: 19px;
+  border-color: rgba(192, 138, 62, 0.4);
+  background: rgba(192, 138, 62, 0.1);
+  color: #e8d5ae;
+  box-shadow: inset 0 1px 0 rgba(255, 238, 198, 0.07);
+}
+.lo-evo__req.is-met::after {
+  content: '✓';
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  color: var(--amber-bright);
+  font-size: 9px;
+  transform: translateY(-52%);
+  text-shadow: 0 0 6px rgba(255, 176, 74, 0.5);
+}
+.lo-evo.is-ready {
+  border-color: rgba(255, 208, 120, 0.5);
+  background:
+    radial-gradient(90% 130% at 0 50%, color-mix(in srgb, var(--c, #ffd06a) 22%, transparent), rgba(0, 0, 0, 0) 58%),
+    linear-gradient(180deg, rgba(57, 40, 19, 0.86), rgba(19, 13, 8, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 214, 0.13),
+    inset 0 0 24px rgba(255, 174, 66, 0.1),
+    0 0 16px rgba(255, 166, 58, 0.09);
+}
+.lo-evo.is-ready .lo-evo__head em {
+  border-color: rgba(255, 216, 145, 0.56);
+  background: linear-gradient(180deg, rgba(255, 226, 167, 0.18), rgba(76, 42, 7, 0.26));
+  color: #fff0c8;
+  text-shadow: 0 0 10px rgba(255, 190, 92, 0.35);
+}
+.lo-evo.is-ready .lo-evo__req { color: #f4dfb7; }
+
+@media (max-width: 480px) {
+  .lo-evo__head { gap: 6px; }
+  .lo-evo__head b { font-size: 12.5px; }
+  .lo-evo__head em { padding-inline: 5px; font-size: 11.5px; }
+  .lo-evo__need { padding-left: 15px; }
+}
