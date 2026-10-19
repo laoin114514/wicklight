@@ -115,6 +115,92 @@ function bossTelegraph(ctx: CanvasRenderingContext2D, e: Enemy, time: number, t:
   ctx.restore();
 }
 
+function spitterCharge(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
+  if (e.boss || e.def.behavior !== 'ranged' || e.attackCd > 0.68) return;
+  const charge = Math.min(1, Math.max(0, 1 - Math.max(0, e.attackCd) / 0.68));
+  const pulse = 0.5 + 0.5 * Math.sin(time * (10 + 7 * charge) + e.wobble * 1.7);
+  const r = e.radius;
+  const dirX = Math.cos(e.angle);
+  const dirY = Math.sin(e.angle);
+  const backX = e.x - dirX * r * 0.58;
+  const backY = e.y - dirY * r * 0.58;
+  const frontX = e.x + dirX * r * 0.9;
+  const frontY = e.y + dirY * r * 0.9;
+  const sacRadius = r * (0.28 + 0.38 * charge) * (0.92 + 0.16 * pulse);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 0.2 + 0.24 * charge;
+  ctx.fillStyle = '#352046';
+  ctx.beginPath();
+  ctx.ellipse(backX, backY, sacRadius * 1.12, sacRadius * 0.82, e.angle, 0, TAU);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(backX, backY, 0, backX, backY, sacRadius * 2.1);
+  halo.addColorStop(0, `rgba(218,188,255,${0.14 + 0.22 * charge})`);
+  halo.addColorStop(0.46, `rgba(153,101,218,${0.06 + 0.13 * charge})`);
+  halo.addColorStop(1, 'rgba(91,52,149,0)');
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(backX, backY, sacRadius * 2.1, 0, TAU);
+  ctx.fill();
+
+  for (let i = 0; i < 4; i += 1) {
+    const angle = e.wobble + i * 1.9 + time * (1.05 + i * 0.13);
+    const distance = sacRadius * (0.26 + 0.14 * (i % 2));
+    ctx.globalAlpha = (0.18 + 0.3 * charge) * (0.58 + 0.42 * Math.sin(time * 3.7 + i * 1.6 + e.wobble));
+    ctx.fillStyle = i % 2 === 0 ? '#e2caff' : '#b88bef';
+    ctx.beginPath();
+    ctx.arc(
+      backX + Math.cos(angle) * distance,
+      backY + Math.sin(angle) * distance * 0.78,
+      0.7 + (0.4 + 0.55 * charge) * (i % 3) * 0.4,
+      0,
+      TAU,
+    );
+    ctx.fill();
+  }
+
+  const mouthRadius = r * (0.12 + 0.18 * charge) * (0.9 + 0.24 * pulse);
+  const mouthGlow = ctx.createRadialGradient(frontX, frontY, 0, frontX, frontY, mouthRadius * 2.4);
+  mouthGlow.addColorStop(0, `rgba(255,244,255,${0.24 + 0.42 * charge})`);
+  mouthGlow.addColorStop(0.32, `rgba(211,170,255,${0.18 + 0.32 * charge})`);
+  mouthGlow.addColorStop(1, 'rgba(120,64,190,0)');
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = mouthGlow;
+  ctx.beginPath();
+  ctx.arc(frontX, frontY, mouthRadius * 2.4, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 0.68 + 0.24 * charge;
+  ctx.fillStyle = '#f3e4ff';
+  ctx.beginPath();
+  ctx.arc(frontX, frontY, mouthRadius * 0.74, 0, TAU);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.2 + 0.36 * charge;
+  ctx.strokeStyle = '#d9bcff';
+  ctx.lineWidth = 1 + 0.55 * charge;
+  ctx.beginPath();
+  ctx.arc(frontX, frontY, mouthRadius * 2.2, e.angle + 0.58, e.angle + TAU - 0.58);
+  ctx.stroke();
+
+  const travelX = frontX - backX;
+  const travelY = frontY - backY;
+  for (let i = 0; i < 3; i += 1) {
+    const travel = (time * (1.15 + i * 0.09) + i * 0.31 + e.wobble * 0.13) % 1;
+    ctx.globalAlpha = (0.18 + 0.52 * charge) * Math.sin(Math.PI * travel);
+    ctx.fillStyle = i === 1 ? '#fff0ff' : '#d8b6ff';
+    ctx.beginPath();
+    ctx.arc(backX + travelX * travel, backY + travelY * travel, r * (0.04 + 0.04 * charge), 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function blob(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, points: number, amp: number, phase: number): void {
   ctx.beginPath();
   for (let i = 0; i <= points; i += 1) {
@@ -1005,6 +1091,7 @@ export function drawEnemy(
     ctx.ellipse(e.x + Math.cos(e.angle) * r * 0.3, e.y + Math.sin(e.angle) * r * 0.3, r * 0.34, r * 0.1, e.angle, 0, TAU);
     ctx.fill();
   } else {
+    spitterCharge(ctx, e, time);
     eye(ctx, e.x, e.y, r, e.angle, e.hitFlash > 0 ? '#000' : '#fff', e.hitFlash > 0 ? '#fff' : 'rgba(10,10,20,0.85)');
   }
 
