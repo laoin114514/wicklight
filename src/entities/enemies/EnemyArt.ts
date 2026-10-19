@@ -930,6 +930,90 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       // 影蛭的烟尾：身体停下来时仍有一点点"被拖在后面"的黑雾。
       const trail = Math.atan2(-e.vy, -e.vx);
       const moving = Math.hypot(e.vx, e.vy) > 8;
+      const dirX = Math.cos(e.angle);
+      const dirY = Math.sin(e.angle);
+      const sideX = -dirY;
+      const sideY = dirX;
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const core = ctx.createRadialGradient(
+        e.x - dirX * r * 0.12,
+        e.y - dirY * r * 0.12,
+        0,
+        e.x,
+        e.y,
+        r * 0.92,
+      );
+      core.addColorStop(0, 'rgba(127,158,238,0.24)');
+      core.addColorStop(0.55, 'rgba(64,88,164,0.1)');
+      core.addColorStop(1, 'rgba(18,26,58,0)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = core;
+      ctx.fillRect(e.x - r * 1.2, e.y - r * 1.2, r * 2.4, r * 2.4);
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      for (let segment = 0; segment < 3; segment += 1) {
+        const back = r * (0.12 + segment * 0.22);
+        const half = r * (0.68 - segment * 0.08);
+        const centerX = e.x - dirX * back;
+        const centerY = e.y - dirY * back;
+        const curl = Math.sin(time * 2.1 + segment * 1.4 + w) * r * 0.05;
+        ctx.moveTo(centerX + sideX * half, centerY + sideY * half);
+        ctx.quadraticCurveTo(
+          centerX - dirX * r * 0.12 + sideX * curl,
+          centerY - dirY * r * 0.12 + sideY * curl,
+          centerX - sideX * half,
+          centerY - sideY * half,
+        );
+      }
+      ctx.strokeStyle = 'rgba(4,8,18,0.52)';
+      ctx.lineWidth = 1.35;
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(136,164,236,0.18)';
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = rgba(body, moving ? 0.28 : 0.15);
+      ctx.lineWidth = 1.55;
+      ctx.beginPath();
+      for (const side of [-1, 1]) {
+        const sway = Math.sin(time * 2.3 + side * 1.7 + w) * r * 0.13;
+        const startX = e.x - dirX * r * 0.12 + sideX * side * r * 0.62;
+        const startY = e.y - dirY * r * 0.12 + sideY * side * r * 0.62;
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo(
+          startX - dirX * r * 0.45 + sideX * side * (r * 0.2 + sway * 0.4),
+          startY - dirY * r * 0.45 + sideY * side * (r * 0.2 + sway * 0.4),
+          startX - dirX * r * 0.78 + sideX * side * (r * 0.14 + sway),
+          startY - dirY * r * 0.78 + sideY * side * (r * 0.14 + sway),
+        );
+      }
+      ctx.stroke();
+      ctx.fillStyle = rgba(body, 0.4);
+      ctx.beginPath();
+      for (let mote = 0; mote < 3; mote += 1) {
+        const cycle = (time * 0.32 + mote * 0.29 + w * 0.11) % 1;
+        const drift = Math.sin(time * 1.7 + mote * 2.3 + w) * r * 0.34;
+        ctx.moveTo(e.x - dirX * r * (0.72 + cycle * 0.85) + sideX * drift, e.y - dirY * r * (0.72 + cycle * 0.85) + sideY * drift);
+        ctx.arc(
+          e.x - dirX * r * (0.72 + cycle * 0.85) + sideX * drift,
+          e.y - dirY * r * (0.72 + cycle * 0.85) + sideY * drift,
+          Math.max(0.55, r * (0.06 + (1 - cycle) * 0.055)),
+          0,
+          TAU,
+        );
+      }
+      ctx.fill();
+      ctx.restore();
+
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = rgba(body, moving ? 0.26 : 0.16);
