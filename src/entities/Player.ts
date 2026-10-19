@@ -1619,23 +1619,56 @@ export class Player {
 
     // ── 冲刺残影（在身体之下） ──
     if (this.dashTimer > 0) {
+      const fade = clamp(this.dashTimer / 0.18, 0, 1);
+      const back = Math.atan2(-this.dashDirY, -this.dashDirX);
       ctx.save();
-      ctx.globalAlpha = 0.28;
-      ctx.fillStyle = '#8fa7ff';
-      for (let i = 1; i <= 3; i += 1) {
-        const t = i / 3;
-        ctx.globalAlpha = 0.26 * (1 - t);
+      ctx.rotate(back);
+
+      // 贴地擦痕：冲刺不是在空气里平移，脚边应该有一道被踩开的冷光。
+      ctx.globalAlpha = 0.12 * fade;
+      ctx.strokeStyle = '#7f98d8';
+      ctx.lineWidth = R * 0.16;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(R * 1.15, R * 0.52);
+      ctx.lineTo(R * 3.55, R * 0.52);
+      ctx.stroke();
+
+      // 四层残影：越往后越窄、越暗，形状从圆球变成尾部收尖的披风。
+      for (let i = 1; i <= 4; i += 1) {
+        const t = i / 4;
+        const x = R * (1.08 + 2.25 * t);
+        const w = R * (1.02 - t * 0.14);
+        const h = R * (0.9 - t * 0.2);
+        const lean = Math.sin(time * 16 + i * 1.7) * R * 0.035;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.2 * (1 - t) * fade;
+        ctx.fillStyle = '#7890d0';
         ctx.beginPath();
-        ctx.ellipse(
-          -this.dashDirX * R * 2.4 * i,
-          -this.dashDirY * R * 2.4 * i,
-          R * (1.05 - t * 0.3),
-          R * (1.15 - t * 0.3),
-          0,
-          0,
-          TAU,
-        );
+        ctx.moveTo(x - w * 0.7, lean);
+        ctx.bezierCurveTo(x - w * 0.28, -h, x + w * 0.3, -h * 0.78, x + w * 0.9, -h * 0.06);
+        ctx.bezierCurveTo(x + w * 0.3, h * 0.66, x - w * 0.22, h * 0.96, x - w * 0.7, lean);
+        ctx.closePath();
         ctx.fill();
+
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.15 * (1 - t) * fade;
+        ctx.strokeStyle = '#b9d8ff';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+
+      // 两道更细的冷光平行落在残影里，让速度方向比轮廓本身更早被读到。
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = '#8fd8ff';
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < 2; i += 1) {
+        const side = (i === 0 ? -1 : 1) * R * (0.3 + i * 0.12);
+        ctx.globalAlpha = (0.1 - i * 0.025) * fade;
+        ctx.beginPath();
+        ctx.moveTo(R * 1.5, R * 0.5 + side);
+        ctx.lineTo(R * (3.1 + i * 0.35), R * 0.5 + side * 0.72);
+        ctx.stroke();
       }
       ctx.restore();
     }
