@@ -2599,17 +2599,137 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'emberwake': {
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,190,90,0.8)';
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 5; i += 1) {
-        const a = (i / 5) * TAU + w * 0.2;
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const breath = 0.5 + Math.sin(time * 3.1 + w) * 0.5;
+      const spin = time * 0.25;
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+
+      // 表面先压一层背光的焦壳，让红色只在裂缝与迎光侧透出来。
+      const char = ctx.createRadialGradient(
+        e.x + facingX * r * 0.24,
+        e.y + facingY * r * 0.24,
+        r * 0.06,
+        e.x,
+        e.y,
+        r * 1.04,
+      );
+      char.addColorStop(0, 'rgba(91,20,11,0.05)');
+      char.addColorStop(0.5, 'rgba(47,8,7,0.23)');
+      char.addColorStop(1, 'rgba(17,3,4,0.48)');
+      ctx.fillStyle = char;
+      ctx.fillRect(e.x - r * 1.4, e.y - r * 1.4, r * 2.8, r * 2.8);
+
+      // 三块彼此错开的焦黑壳片，边缘起伏但不破坏八边形剪影。
+      for (let plate = 0; plate < 3; plate += 1) {
+        const base = spin * 0.7 + plate * 2.15 + w * 0.08;
+        const plateX = e.x + Math.cos(base) * r * 0.33;
+        const plateY = e.y + Math.sin(base) * r * 0.33;
+        const plateRadius = r * (0.31 + plate * 0.045);
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(a) * r * 0.3, e.y + Math.sin(a) * r * 0.3);
-        ctx.lineTo(e.x + Math.cos(a + 0.5) * r * 0.85, e.y + Math.sin(a + 0.5) * r * 0.85);
+        for (let point = 0; point < 7; point += 1) {
+          const a = base + (point / 7) * TAU + Math.sin(w + point * 1.3 + plate) * 0.08;
+          const rr = plateRadius * (0.74 + Math.abs(Math.sin(point * 2.4 + plate + w)) * 0.32);
+          const px = plateX + Math.cos(a) * rr;
+          const py = plateY + Math.sin(a) * rr;
+          if (point === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(29,5,5,0.34)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,174,84,0.13)';
+        ctx.lineWidth = 0.8;
         ctx.stroke();
       }
-      ctx.globalCompositeOperation = 'source-over';
+
+      // 分叉熔岩：暗红底光、亮黄芯，裂缝随八边形一起慢转。
+      ctx.lineCap = 'round';
+      for (let crack = 0; crack < 5; crack += 1) {
+        const a = spin + crack * (TAU / 5) + w * 0.12 + 0.18;
+        const jitter = Math.sin(w * 0.8 + crack * 1.7) * 0.18;
+        const points = [
+          [e.x + Math.cos(a) * r * 0.12, e.y + Math.sin(a) * r * 0.12],
+          [e.x + Math.cos(a + jitter) * r * 0.38, e.y + Math.sin(a + jitter) * r * 0.38],
+          [e.x + Math.cos(a - jitter * 0.7) * r * 0.62, e.y + Math.sin(a - jitter * 0.7) * r * 0.62],
+          [e.x + Math.cos(a + jitter * 0.5) * r * 0.9, e.y + Math.sin(a + jitter * 0.5) * r * 0.9],
+        ];
+        ctx.strokeStyle = `rgba(255,103,35,${0.3 + breath * 0.08})`;
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let point = 1; point < points.length; point += 1) {
+          ctx.lineTo(points[point][0], points[point][1]);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,226,151,0.68)';
+        ctx.lineWidth = 1.05;
+        ctx.stroke();
+
+        if (crack % 2 === 0) {
+          const branchA = a - jitter - 0.26;
+          ctx.strokeStyle = 'rgba(255,123,44,0.34)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(points[2][0], points[2][1]);
+          ctx.lineTo(e.x + Math.cos(branchA) * r * 0.78, e.y + Math.sin(branchA) * r * 0.78);
+          ctx.stroke();
+        }
+      }
+
+      // 壳片之间的小熔孔，近景提供零星的亮点但不新增光源。
+      ctx.globalCompositeOperation = 'lighter';
+      for (let vent = 0; vent < 5; vent += 1) {
+        const a = spin * 1.2 + vent * (TAU / 5) + 0.8;
+        const rr = r * (0.42 + ((vent * 17) % 21) / 48);
+        const pulse = 0.45 + Math.sin(time * 4 + vent * 1.9 + w) * 0.3;
+        ctx.fillStyle = `rgba(255,190,88,${0.3 + pulse * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr, Math.max(0.6, r * 0.026), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 外围上升的余烬：越远越暗，像战场被它烤热后自己浮起来。
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let spark = 0; spark < 5; spark += 1) {
+        const cycle = (time * 0.24 + spark * 0.19 + w * 0.02) % 1;
+        const a = spin * 0.35 + spark * (TAU / 5) + 0.4;
+        const outward = r * (1.01 + cycle * 0.26);
+        const px = e.x + Math.cos(a) * outward + Math.sin(time * 2 + spark * 1.7) * r * 0.05;
+        const py = e.y + Math.sin(a) * outward - r * 0.24 * cycle;
+        ctx.fillStyle = `rgba(255,142,54,${(1 - cycle) * 0.44})`;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.55, r * (0.025 - cycle * 0.008)), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(132,67,46,0.14)';
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'round';
+      for (let plume = 0; plume < 2; plume += 1) {
+        const startX = e.x + (plume === 0 ? -1 : 1) * r * 0.22;
+        const startY = e.y - r * 0.74;
+        const sway = Math.sin(time * 1.5 + plume * 2.3 + w) * r * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.bezierCurveTo(
+          startX - r * 0.12 + sway,
+          startY - r * 0.24,
+          startX + r * 0.16 - sway,
+          startY - r * 0.46,
+          startX + sway * 1.4,
+          startY - r * 0.7,
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
       break;
     }
     default:
