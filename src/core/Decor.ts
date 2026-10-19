@@ -6,42 +6,212 @@ import type { Decor } from '../systems/LevelGen';
 
 const TAU = Math.PI * 2;
 
+interface TreeLobe {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  rot: number;
+}
+
+const TREE_OUTER: readonly TreeLobe[] = [
+  { x: 0, y: 0, rx: 0.46, ry: 0.39, rot: -0.06 },
+  { x: -0.31, y: -0.01, rx: 0.31, ry: 0.28, rot: 0.18 },
+  { x: 0.31, y: -0.01, rx: 0.3, ry: 0.28, rot: -0.2 },
+  { x: -0.23, y: -0.19, rx: 0.27, ry: 0.22, rot: -0.45 },
+  { x: 0.16, y: -0.22, rx: 0.26, ry: 0.2, rot: 0.38 },
+  { x: -0.07, y: -0.24, rx: 0.27, ry: 0.21, rot: -0.18 },
+  { x: -0.51, y: -0.08, rx: 0.16, ry: 0.22, rot: 0.42 },
+  { x: 0.5, y: -0.09, rx: 0.16, ry: 0.21, rot: -0.32 },
+  { x: -0.28, y: 0.09, rx: 0.18, ry: 0.13, rot: 0.2 },
+  { x: 0.27, y: 0.07, rx: 0.17, ry: 0.12, rot: -0.15 },
+];
+
+const TREE_MID: readonly TreeLobe[] = [
+  { x: 0, y: 0.01, rx: 0.37, ry: 0.32, rot: -0.08 },
+  { x: -0.24, y: 0, rx: 0.24, ry: 0.23, rot: 0.2 },
+  { x: 0.24, y: -0.01, rx: 0.23, ry: 0.23, rot: -0.22 },
+  { x: -0.13, y: -0.19, rx: 0.23, ry: 0.19, rot: -0.42 },
+  { x: 0.13, y: -0.18, rx: 0.22, ry: 0.18, rot: 0.34 },
+];
+
+const TREE_INNER: readonly TreeLobe[] = [
+  { x: -0.03, y: -0.01, rx: 0.28, ry: 0.25, rot: -0.12 },
+  { x: -0.18, y: -0.18, rx: 0.17, ry: 0.14, rot: -0.46 },
+  { x: 0.12, y: -0.16, rx: 0.16, ry: 0.13, rot: 0.32 },
+  { x: 0.18, y: 0.04, rx: 0.14, ry: 0.12, rot: -0.2 },
+];
+
+function addTreeLobes(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  lobes: readonly TreeLobe[],
+): void {
+  for (const lobe of lobes) {
+    ctx.ellipse(cx + lobe.x * r, cy + lobe.y * r, lobe.rx * r, lobe.ry * r, lobe.rot, 0, TAU);
+  }
+}
+
 function tree(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const sway = Math.sin(time * 0.6 + d.x * 0.01) * 2.5;
-  // 树干（带一点根部阴影，别让它像飘在空中）
+  const sway = Math.sin(time * 0.6 + d.x * 0.01) * (1.1 + d.r * 0.018);
+  const flip = Math.sin(d.x * 0.019 + d.y * 0.013);
+  const crownX = d.x + sway * 0.42 + flip * d.r * 0.012;
+  const crownY = d.y - d.r * 0.46;
+  const tipX = d.x + sway * 0.32;
+
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
   ctx.ellipse(d.x, d.y + d.r * 0.58, d.r * 0.34, d.r * 0.13, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = '#1b1710';
+
+  ctx.fillStyle = '#11190f';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.13, d.y + d.r * 0.58);
-  ctx.lineTo(d.x - d.r * 0.06, d.y - d.r * 0.15);
-  ctx.lineTo(d.x + d.r * 0.06, d.y - d.r * 0.15);
-  ctx.lineTo(d.x + d.r * 0.13, d.y + d.r * 0.58);
+  ctx.moveTo(d.x - d.r * 0.15, d.y + d.r * 0.36);
+  ctx.lineTo(d.x - d.r * 0.27, d.y + d.r * 0.63);
+  ctx.quadraticCurveTo(d.x - d.r * 0.16, d.y + d.r * 0.58, d.x - d.r * 0.05, d.y + d.r * 0.52);
+  ctx.lineTo(d.x + d.r * 0.07, d.y + d.r * 0.55);
+  ctx.quadraticCurveTo(d.x + d.r * 0.18, d.y + d.r * 0.59, d.x + d.r * 0.27, d.y + d.r * 0.62);
+  ctx.lineTo(d.x + d.r * 0.15, d.y + d.r * 0.36);
   ctx.closePath();
   ctx.fill();
-  // 三层树冠：外深内浅，边缘压深轮廓让它从雾里"切"出来
-  const crown = (ox: number, oy: number, rr: number, fill: string, outline: boolean): void => {
-    ctx.beginPath();
-    ctx.arc(ox, oy, rr, 0, TAU);
-    ctx.fillStyle = fill;
-    ctx.fill();
-    if (outline) {
-      ctx.strokeStyle = 'rgba(4,10,7,0.55)';
-      ctx.lineWidth = 2;
+
+  ctx.fillStyle = '#1b1d12';
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.15, d.y + d.r * 0.57);
+  ctx.quadraticCurveTo(d.x - d.r * 0.1, d.y + d.r * 0.25, tipX - d.r * 0.065, d.y - d.r * 0.02);
+  ctx.lineTo(tipX + d.r * 0.065, d.y - d.r * 0.02);
+  ctx.quadraticCurveTo(d.x + d.r * 0.1, d.y + d.r * 0.3, d.x + d.r * 0.15, d.y + d.r * 0.57);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(113,128,80,0.2)';
+  ctx.lineWidth = Math.max(0.8, d.r * 0.026);
+  ctx.beginPath();
+  ctx.moveTo(d.x - d.r * 0.105, d.y + d.r * 0.5);
+  ctx.quadraticCurveTo(d.x - d.r * 0.07, d.y + d.r * 0.22, tipX - d.r * 0.035, d.y - d.r * 0.005);
+  ctx.stroke();
+
+  if (d.r > 34) {
+    ctx.strokeStyle = 'rgba(4,9,5,0.46)';
+    ctx.lineWidth = Math.max(0.7, d.r * 0.014);
+    for (const [ox, oy, cxp, cyp] of [
+      [-0.025, 0.47, 0.015, 0.24],
+      [0.04, 0.42, 0.065, 0.2],
+      [0.082, 0.35, 0.085, 0.16],
+    ] as const) {
+      ctx.beginPath();
+      ctx.moveTo(d.x + d.r * ox, d.y + d.r * oy);
+      ctx.quadraticCurveTo(d.x + d.r * cxp, d.y + d.r * cyp, tipX + d.r * (ox + 0.025), d.y + d.r * 0.04);
       ctx.stroke();
     }
-  };
-  crown(d.x + sway * 0.4, d.y - d.r * 0.2, d.r * 0.6, '#16301f', true);
-  crown(d.x - d.r * 0.34 + sway * 0.5, d.y - d.r * 0.02, d.r * 0.44, '#1c3d26', true);
-  crown(d.x + d.r * 0.34 + sway * 0.5, d.y - d.r * 0.06, d.r * 0.4, '#1a3823', true);
-  crown(d.x + sway * 0.6, d.y - d.r * 0.52, d.r * 0.4, '#24492e', false);
-  // 顶部一点冷色天光/反向的叶隙高光
-  ctx.fillStyle = 'rgba(150,235,180,0.16)';
+    ctx.strokeStyle = 'rgba(7,10,6,0.52)';
+    ctx.lineWidth = Math.max(0.8, d.r * 0.018);
+    ctx.beginPath();
+    ctx.ellipse(d.x - d.r * 0.012, d.y + d.r * 0.24, d.r * 0.034, d.r * 0.062, 0.18, 0, TAU);
+    ctx.stroke();
+  }
+
   ctx.beginPath();
-  ctx.ellipse(d.x - d.r * 0.18 + sway * 0.6, d.y - d.r * 0.58, d.r * 0.24, d.r * 0.15, -0.5, 0, TAU);
+  addTreeLobes(ctx, crownX, crownY, d.r, TREE_OUTER);
+  ctx.strokeStyle = 'rgba(3,9,5,0.7)';
+  ctx.lineWidth = Math.max(1.2, d.r * 0.028);
+  ctx.stroke();
+  ctx.fillStyle = '#0e2216';
   ctx.fill();
+
+  ctx.beginPath();
+  addTreeLobes(ctx, crownX, crownY, d.r, TREE_MID);
+  ctx.fillStyle = '#173320';
+  ctx.fill();
+
+  ctx.beginPath();
+  addTreeLobes(ctx, crownX, crownY, d.r, TREE_INNER);
+  ctx.fillStyle = '#1d3e28';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(24,34,20,0.58)';
+  ctx.lineCap = 'round';
+  for (const [ax, ay, bx, by, width] of [
+    [0.03, 0.27, -0.02, 0.02, 0.04],
+    [-0.02, 0.02, -0.23, -0.18, 0.03],
+    [-0.23, -0.18, -0.34, -0.3, 0.019],
+    [0, 0.02, 0.24, -0.16, 0.028],
+    [0.24, -0.16, 0.33, -0.29, 0.017],
+    [0.23, -0.16, 0.14, -0.32, 0.014],
+  ] as const) {
+    ctx.lineWidth = Math.max(0.7, d.r * width);
+    ctx.beginPath();
+    ctx.moveTo(crownX + d.r * ax, crownY + d.r * ay);
+    ctx.lineTo(crownX + d.r * bx, crownY + d.r * by);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(101,106,65,0.16)';
+  ctx.lineWidth = Math.max(0.5, d.r * 0.007);
+  ctx.beginPath();
+  ctx.moveTo(crownX + d.r * 0.02, crownY + d.r * 0.24);
+  ctx.lineTo(crownX - d.r * 0.02, crownY + d.r * 0.03);
+  ctx.lineTo(crownX - d.r * 0.22, crownY - d.r * 0.17);
+  ctx.moveTo(crownX - d.r * 0.01, crownY + d.r * 0.01);
+  ctx.lineTo(crownX + d.r * 0.23, crownY - d.r * 0.17);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(2,9,5,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(crownX + d.r * 0.01, crownY + d.r * 0.22, d.r * 0.33, d.r * 0.11, 0.02, 0, TAU);
+  ctx.ellipse(crownX - d.r * 0.29, crownY + d.r * 0.15, d.r * 0.16, d.r * 0.075, -0.16, 0, TAU);
+  ctx.ellipse(crownX + d.r * 0.29, crownY + d.r * 0.14, d.r * 0.16, d.r * 0.07, 0.14, 0, TAU);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(3,11,6,0.42)';
+  ctx.lineWidth = Math.max(0.7, d.r * 0.018);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(crownX - d.r * 0.2, crownY - d.r * 0.14);
+  ctx.quadraticCurveTo(crownX - d.r * 0.08, crownY + d.r * 0.01, crownX - d.r * 0.17, crownY + d.r * 0.15);
+  ctx.moveTo(crownX + d.r * 0.02, crownY - d.r * 0.29);
+  ctx.quadraticCurveTo(crownX + d.r * 0.13, crownY - d.r * 0.13, crownX + d.r * 0.07, crownY + d.r * 0.03);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath();
+  addTreeLobes(ctx, crownX, crownY, d.r, TREE_OUTER);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(136,225,170,0.065)';
+  ctx.beginPath();
+  ctx.ellipse(crownX - d.r * 0.2, crownY - d.r * 0.25, d.r * 0.38, d.r * 0.18, -0.28, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(166,236,190,0.14)';
+  for (const [ox, oy, rot] of [
+    [-0.33, -0.29, -0.72],
+    [-0.2, -0.35, -0.5],
+    [-0.04, -0.37, -0.24],
+    [0.2, -0.3, 0.34],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(crownX + d.r * ox, crownY + d.r * oy, d.r * 0.075, d.r * 0.026, rot, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(76,125,83,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.1, d.y + d.r * 0.57, d.r * 0.085, d.r * 0.032, -0.1, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(87,125,92,0.34)';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.16, d.y + d.r * 0.6, d.r * 0.07, d.r * 0.025, 0.18, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#283021';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.25, d.y + d.r * 0.58, d.r * 0.07, d.r * 0.045, 0.22, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(143,177,112,0.13)';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.23, d.y + d.r * 0.555, d.r * 0.055, d.r * 0.018, 0.18, 0, TAU);
+  ctx.fill();
+  ctx.lineCap = 'butt';
 }
 
 function mushrooms(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
