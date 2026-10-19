@@ -6753,3 +6753,206 @@ body.is-touch .key { display: none; }
   .pause-act__key { font-size: 8px; padding: 0 4px; }
   .pause-act__mark { width: 18px; height: 18px; font-size: 8px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v155 · 结算：一页摊开的守夜战报
+   结局与余烬收在报头，左边是数字，右边是这一局攒出的构筑与伤害来源。
+   主按钮吸在面板底边，矮横屏不必滚到最底才点得到。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--result {
+  width: min(94vw, 880px);
+  padding: 18px 22px 12px;
+}
+
+.result-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(198, 158, 98, 0.24);
+  text-align: left;
+}
+.result-head .outcome-seal {
+  width: 52px;
+  height: 52px;
+  margin: 0;
+  font-size: 23px;
+}
+.result-head__copy { min-width: 0; }
+.result-head__kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(232, 207, 166, 0.42);
+  font-size: 8.5px;
+  letter-spacing: 2.6px;
+}
+.result-head__kicker::before {
+  content: '';
+  width: 17px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0.12), var(--brass-hi));
+}
+.result-head__title {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 2px 0 0;
+  font-size: 23px;
+  letter-spacing: 5px;
+}
+.result-head__title::before { display: none; }
+.result-head__title::after { flex: 0 0 62px; }
+.result-head__sub {
+  margin-top: 2px;
+  color: rgba(228, 210, 178, 0.52);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.5px;
+}
+.result-head .killer { margin: 2px 0 0; text-align: left; font-size: 10.5px; line-height: 1.4; }
+.result-head .tour { margin: 2px 0 0; text-align: left; font-size: 10px; line-height: 1.4; }
+.result-pay {
+  justify-self: end;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  min-width: 110px;
+  padding: 5px 0 5px 14px;
+  border-left: 1px solid rgba(198, 158, 98, 0.2);
+  text-align: right;
+}
+.result-pay span { color: rgba(232, 207, 166, 0.42); font-size: 8.5px; letter-spacing: 2px; }
+.result-pay b {
+  color: #ffd88e;
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 16px rgba(255, 180, 80, 0.24);
+}
+.result-pay i { color: rgba(228, 210, 178, 0.36); font-size: 8px; font-style: normal; letter-spacing: 1.2px; }
+
+.result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-bottom: 9px;
+}
+.result-meta .daily-score { margin: 0; padding: 4px 10px; font-size: 11px; }
+.result-meta .ember-gain--ach { margin: 0; font-size: 10.5px; }
+.result-meta .hl-row { margin: 0; gap: 5px; }
+.result-meta .hl { padding: 3px 8px; font-size: 10px; }
+
+.result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(280px, 0.86fr);
+  align-items: start;
+  gap: 12px;
+}
+.result-column { min-width: 0; }
+.result-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed rgba(198, 158, 98, 0.22);
+}
+.result-col-head b { color: #ffd28a; font-family: var(--font-display); font-size: 12px; letter-spacing: 2px; }
+.result-col-head span { color: rgba(228, 210, 178, 0.34); font-size: 8.5px; letter-spacing: 0.5px; }
+
+.result-column--stats .stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+  margin: 0;
+}
+.result-column--stats .stats > div { padding: 6px 2px; font-size: 11px; }
+.result-column--stats .stats span { font-size: 9.5px; letter-spacing: 0.4px; }
+.result-column--stats .stats b { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.3px; font-variant-numeric: tabular-nums; }
+
+.result-column--build .run-build { margin: 0; padding: 7px 10px 8px; }
+.result-column--build .run-build__title { margin-bottom: 4px; font-size: 10.5px; letter-spacing: 2.4px; }
+.result-column--build .run-build__row { gap: 7px; font-size: 10.5px; line-height: 1.45; }
+.result-column--build .run-build__row > span { flex-basis: 29px; font-size: 9px; }
+.result-column--build .rb-item { font-size: 10px; }
+.result-column--build .dmg-block { margin: 7px 0 0; padding: 7px 10px 8px; }
+.result-column--build .dmg-block__title { margin-bottom: 4px; font-size: 10.5px; letter-spacing: 2.4px; }
+.result-column--build .dmg-row { grid-template-columns: 68px 1fr auto; gap: 7px; font-size: 9.5px; }
+.result-column--build .dmg-row__val u { margin-left: 4px; font-size: 9px; }
+
+.result-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  margin: 10px 0 0;
+  padding: 10px 0 2px;
+  border-top: 1px solid rgba(198, 158, 98, 0.16);
+  background: linear-gradient(180deg, rgba(24, 17, 10, 0), rgba(24, 17, 10, 0.96) 38%, #18110a 100%);
+}
+.panel--result .result-actions .btn { padding: 8px 20px; }
+
+@media (max-width: 720px) {
+  .panel--result { padding: 16px 14px 10px; }
+  .result-head { grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+  .result-pay { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; grid-auto-flow: column; justify-content: end; align-items: baseline; gap: 3px 7px; padding: 5px 0 0; border-left: 0; border-top: 1px dashed rgba(198, 158, 98, 0.18); }
+  .result-pay b { font-size: 24px; }
+  .result-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .result-column--stats .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .result-actions { padding-top: 8px; }
+}
+
+@media (max-width: 400px) {
+  .result-head .outcome-seal { width: 43px; height: 43px; font-size: 19px; }
+  .result-head__title { font-size: 19px; letter-spacing: 4px; }
+  .result-head__title::after { display: none; }
+  .result-head__sub { font-size: 9.5px; }
+  .result-pay b { font-size: 22px; }
+  .result-col-head span { display: none; }
+  .result-column--stats .stats { gap: 0 8px; }
+  .result-column--stats .stats span { font-size: 9px; }
+  .result-column--stats .stats b { font-size: 11px; }
+  .panel--result .result-actions .btn { padding: 8px 14px; font-size: 12px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--result { padding: 9px 14px 7px; }
+  .result-head { grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; margin-bottom: 5px; padding-bottom: 5px; }
+  .result-head .outcome-seal { width: 36px; height: 36px; font-size: 17px; }
+  .result-head__kicker { font-size: 7px; letter-spacing: 1.8px; }
+  .result-head__title { font-size: 17px; letter-spacing: 3px; }
+  .result-head__title::after { flex-basis: 42px; }
+  .result-head__sub { font-size: 8.5px; }
+  .result-head .killer { font-size: 8.5px; }
+  .result-head .tour { font-size: 8px; }
+  .result-pay { min-width: 92px; padding-left: 10px; }
+  .result-pay span { font-size: 7px; letter-spacing: 1.4px; }
+  .result-pay b { font-size: 21px; }
+  .result-pay i { display: none; }
+  .result-meta { gap: 4px 6px; margin-bottom: 5px; }
+  .result-meta .hl { padding: 2px 6px; font-size: 8.5px; }
+  .result-meta .daily-score { padding: 2px 7px; font-size: 9px; }
+  .result-grid { grid-template-columns: minmax(0, 1.1fr) minmax(250px, 0.9fr); gap: 8px; }
+  .result-col-head { margin-bottom: 3px; padding-bottom: 3px; }
+  .result-col-head b { font-size: 10px; letter-spacing: 1.5px; }
+  .result-col-head span { font-size: 7.5px; }
+  .result-column--stats .stats { gap: 0 8px; }
+  .result-column--stats .stats > div { padding: 4px 2px; }
+  .result-column--stats .stats span { font-size: 8px; }
+  .result-column--stats .stats b { font-size: 10px; }
+  .result-column--build .run-build { padding: 5px 8px 6px; }
+  .result-column--build .run-build__title,
+  .result-column--build .dmg-block__title { margin-bottom: 2px; font-size: 9px; }
+  .result-column--build .run-build__row { font-size: 9px; line-height: 1.35; }
+  .result-column--build .dmg-block { margin-top: 5px; padding: 5px 8px 6px; }
+  .result-column--build .dmg-row { grid-template-columns: 58px 1fr auto; gap: 5px; font-size: 8.5px; }
+  .result-actions { margin-top: 5px; padding-top: 5px; }
+  .panel--result .result-actions .btn { padding: 6px 15px; font-size: 12px; }
+}

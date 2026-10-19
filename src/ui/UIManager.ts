@@ -1240,48 +1240,56 @@ export class UIManager implements UIHost {
   }
 
   private dead(): void {
-    this.show(`
-      <div class="panel panel--small panel--vellum panel--defeat">
-        <div class="outcome-seal outcome-seal--defeat">✧</div>
-        <div class="panel__title">灯火熄灭</div>
-        ${this.killerLine()}
-        <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
-        ${this.dailyLine()}
-        ${this.achievementEmbersLine()}
-        ${this.recordBadges()}
-        ${this.statsBlock()}
-        ${this.damageBlock()}
-        ${this.runBuildBlock()}
-        <div class="row-actions">
-          <button class="btn btn--primary" data-act="again">再点一盏<span class="key">回车</span></button>
-          <button class="btn" data-act="menu">返回主菜单</button>
-        </div>
-      </div>
-    `);
-    this.on('[data-act="again"]', () => this.game.openMenu('select'));
-    this.on('[data-act="menu"]', () => this.game.goMenu());
+    this.resultScreen(false);
   }
 
   private victory(): void {
+    this.resultScreen(true);
+  }
+
+  /** 死亡 / 通关共用一张战报：上半截交代结局与收益，下半截留给这一局本身。 */
+  private resultScreen(win: boolean): void {
+    const g = this.game;
+    const s = g.runStats();
+    const stage = STAGES[Math.min(g.stageIndex, STAGES.length - 1)];
+    const flags = `${this.dailyLine()}${this.achievementEmbersLine()}${this.recordBadges()}`;
+    const action = win
+      ? '<button class="btn btn--primary" data-act="endless">挑战无尽之夜<span class="key">回车</span></button>'
+      : '<button class="btn btn--primary" data-act="again">再点一盏<span class="key">回车</span></button>';
     this.show(`
-      <div class="panel panel--small panel--vellum panel--triumph">
-        <div class="outcome-seal outcome-seal--clear">✦</div>
-        <div class="panel__title">焚尽长夜</div>
-        <div class="subtitle">你举着灯，走完了长夜之城的最后一段黑暗。</div>
-        ${this.tourLine()}
-        <div class="ember-gain">获得余烬 <b>+${this.game.embersEarned}</b></div>
-        ${this.dailyLine()}
-        ${this.achievementEmbersLine()}
-        ${this.recordBadges()}
-        ${this.statsBlock()}
-        ${this.damageBlock()}
-        ${this.runBuildBlock()}
-        <div class="row-actions">
-          <button class="btn btn--primary" data-act="endless">挑战无尽之夜<span class="key">回车</span></button>
-          <button class="btn" data-act="menu">返回主菜单</button>
+      <div class="panel panel--result panel--vellum ${win ? 'panel--triumph' : 'panel--defeat'}">
+        <header class="result-head">
+          <div class="outcome-seal ${win ? 'outcome-seal--clear' : 'outcome-seal--defeat'}">${win ? '✦' : '✧'}</div>
+          <div class="result-head__copy">
+            <span class="result-head__kicker">${win ? '长夜已尽 · 灯火长明' : `第 ${s.stage} 关 · ${stage.theme.name}`}</span>
+            <div class="panel__title result-head__title">${win ? '焚尽长夜' : '灯火熄灭'}</div>
+            ${win ? '<p class="result-head__sub">你举着灯，走完了长夜之城的最后一段黑暗。</p>' : this.killerLine()}
+            ${this.tourLine()}
+          </div>
+          <div class="result-pay">
+            <span>本局余烬</span>
+            <b>+${g.embersEarned}</b>
+            <i>${win ? '长夜已焚' : '守到最后一刻'}</i>
+          </div>
+        </header>
+        ${flags ? `<div class="result-meta">${flags}</div>` : ''}
+        <div class="result-grid">
+          <section class="result-column result-column--stats">
+            <div class="result-col-head"><b>本局战报</b><span>${s.kills} 击杀 · ${UIManager.clock(s.time)} · 第 ${s.stage} 关</span></div>
+            ${this.statsBlock()}
+          </section>
+          <aside class="result-column result-column--build">
+            ${this.runBuildBlock()}
+            ${this.damageBlock()}
+          </aside>
         </div>
+        <footer class="row-actions result-actions">
+          ${action}
+          <button class="btn" data-act="menu">返回主菜单</button>
+        </footer>
       </div>
     `);
+    this.on('[data-act="again"]', () => this.game.openMenu('select'));
     this.on('[data-act="endless"]', () => { this.endless = true; this.openSelect(); });
     this.on('[data-act="menu"]', () => this.game.goMenu());
   }
