@@ -9387,3 +9387,136 @@ body.is-touch .lvl-actions__hint { display: none; }
 @media (orientation: landscape) and (max-height: 340px) {
   .lvl-actions { margin-top: 5px; padding-top: 5px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v176 · 结局双相：破晓与余烬
+   胜负原本共用同一张皮纸，只在标题上换了一个颜色。这里把结局重新拉开：
+   通关是一束从纸面上缘透进来的晨光，封印像缓慢转动的日轮；失败则是
+   底部沉下来的冷灰与顶端散尽的余温，封印外只剩一圈将熄的残火。
+   所有效果都藏在面板内，不改变任何布局尺寸。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--result { isolation: isolate; }
+.panel--result > * { position: relative; z-index: 1; }
+
+.panel--triumph.panel--vellum {
+  border-color: rgba(255, 194, 103, 0.52);
+  background:
+    radial-gradient(ellipse 74% 40% at 50% -4%, rgba(255, 220, 150, 0.3), rgba(255, 184, 78, 0) 68%),
+    linear-gradient(180deg, rgba(255, 208, 126, 0.09), rgba(255, 160, 60, 0) 31%),
+    repeating-linear-gradient(96deg, rgba(255, 224, 176, 0.034) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, #2a2417 0%, #20180e 40%, #130e08 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 238, 198, 0.16),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 0 140px rgba(255, 156, 48, 0.055),
+    0 0 0 1px rgba(0, 0, 0, 0.72),
+    0 0 78px rgba(255, 164, 58, 0.12),
+    0 34px 84px rgba(0, 0, 0, 0.68);
+}
+.panel--defeat.panel--vellum {
+  border-color: rgba(164, 108, 74, 0.38);
+  background:
+    radial-gradient(ellipse 84% 50% at 50% 108%, rgba(104, 92, 92, 0.16), rgba(70, 46, 43, 0) 64%),
+    radial-gradient(ellipse 36% 18% at 7% 78%, rgba(159, 56, 38, 0.08), rgba(159, 56, 38, 0) 76%),
+    repeating-linear-gradient(96deg, rgba(255, 224, 176, 0.025) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, #211a12 0%, #17120d 44%, #0d0c0b 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 170, 0.07),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.58),
+    inset 0 0 130px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(0, 0, 0, 0.74),
+    0 30px 80px rgba(0, 0, 0, 0.72);
+}
+
+/* 纸面里的天光 / 余烟：负层级让它们只在纸纹上，不压字。 */
+.panel--result.panel--vellum::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.panel--triumph.panel--vellum::after {
+  background:
+    radial-gradient(ellipse 42% 24% at 50% -8%, rgba(255, 232, 176, 0.17), rgba(255, 208, 126, 0) 72%),
+    repeating-conic-gradient(from -8deg at 50% -18%, rgba(255, 220, 148, 0.045) 0deg 1.6deg, rgba(255, 220, 148, 0) 1.6deg 8deg);
+  -webkit-mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.5) 28%, transparent 56%);
+  mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.5) 28%, transparent 56%);
+}
+.panel--defeat.panel--vellum::after {
+  background:
+    linear-gradient(180deg, transparent 58%, rgba(7, 8, 10, 0.24)),
+    radial-gradient(ellipse 58% 34% at 50% 112%, rgba(107, 105, 105, 0.12), transparent 72%);
+}
+
+/* 报头：晨光落在上缘，失败则只剩一线冷掉的余温。 */
+.panel--triumph .result-head {
+  border-bottom-color: rgba(255, 204, 128, 0.4);
+  box-shadow: 0 12px 34px -25px rgba(255, 193, 92, 0.85);
+}
+.panel--defeat .result-head {
+  border-bottom-color: rgba(155, 118, 94, 0.24);
+  box-shadow: 0 12px 34px -27px rgba(185, 62, 40, 0.62);
+}
+.panel--triumph .result-head__kicker { color: rgba(255, 224, 166, 0.62); }
+.panel--defeat .result-head__kicker { color: rgba(218, 194, 168, 0.38); }
+.panel--triumph .result-head__sub { color: rgba(255, 229, 184, 0.64); }
+.panel--triumph .result-pay b { color: #ffe3a4; text-shadow: 0 0 22px rgba(255, 188, 84, 0.42); }
+
+/* 封印徽记：通关是一轮转动的日冕，失败是一圈正在散掉的残火。 */
+.outcome-seal { position: relative; isolation: isolate; }
+.outcome-seal::before,
+.outcome-seal::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.outcome-seal--clear::before {
+  inset: -9px;
+  z-index: -1;
+  border: 1px dashed rgba(255, 214, 136, 0.36);
+  box-shadow: 0 0 18px rgba(255, 184, 76, 0.12);
+  animation: dawn-ring 18s linear infinite;
+}
+.outcome-seal--clear::after {
+  inset: -4px;
+  z-index: -1;
+  background: radial-gradient(circle, rgba(255, 220, 150, 0.16), rgba(255, 172, 68, 0) 68%);
+  animation: dawn-breathe 4.2s ease-in-out infinite;
+}
+.outcome-seal--defeat::before {
+  inset: -7px;
+  z-index: -1;
+  border: 1px solid rgba(208, 104, 78, 0.2);
+  border-right-color: rgba(120, 108, 108, 0.06);
+  border-bottom-color: rgba(120, 108, 108, 0.04);
+  animation: ember-ring 12s linear infinite reverse;
+}
+.outcome-seal--defeat::after {
+  inset: -10px -6px -2px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 100%, rgba(255, 126, 74, 0.14), rgba(134, 66, 52, 0.04) 44%, transparent 72%);
+  filter: blur(2px);
+  animation: ember-smoke 5.5s ease-in-out infinite;
+}
+@keyframes dawn-ring { to { rotate: 360deg; } }
+@keyframes dawn-breathe {
+  0%, 100% { opacity: 0.56; scale: 0.98; }
+  50% { opacity: 1; scale: 1.05; }
+}
+@keyframes ember-ring { to { rotate: 360deg; } }
+@keyframes ember-smoke {
+  0%, 100% { opacity: 0.42; translate: 0 1px; }
+  50% { opacity: 0.78; translate: 0 -2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outcome-seal--clear::before,
+  .outcome-seal--clear::after,
+  .outcome-seal--defeat::before,
+  .outcome-seal--defeat::after { animation: none; }
+}
