@@ -1792,30 +1792,200 @@ export class Game {
 
   private drawShrines(ctx: CanvasRenderingContext2D): void {
     ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const s of this.level.shrines) {
       const pulse = 0.6 + Math.sin(this.time * 2.2 + s.x * 0.01) * 0.4;
-      const dim = s.used ? 0.25 : 1;
-      ctx.fillStyle = '#2a2f42';
+      const breathe = 0.5 + Math.sin(this.time * 1.7 + s.y * 0.017) * 0.5;
+
+      // 冷石台阶：先落影，再垫两级基座，让它比灯台更像一处"被搬来的圣所"。
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#02050a';
       ctx.beginPath();
-      ctx.ellipse(s.x, s.y + 6, 26, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(s.x, s.y + 10, 32, 10, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#3b4260';
-      ctx.fillRect(s.x - 14, s.y - 10, 28, 14);
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(s.x - 14, s.y + 2, 28, 4);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#131822';
+      ctx.beginPath();
+      ctx.moveTo(s.x - 18, s.y + 9);
+      ctx.lineTo(s.x + 18, s.y + 9);
+      ctx.lineTo(s.x + 14, s.y + 2);
+      ctx.lineTo(s.x - 14, s.y + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#202638';
+      ctx.beginPath();
+      ctx.moveTo(s.x - 14, s.y + 2);
+      ctx.lineTo(s.x + 14, s.y + 2);
+      ctx.lineTo(s.x + 11, s.y - 1);
+      ctx.lineTo(s.x - 11, s.y - 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // 石身：冷蓝的受光面与近黑侧面拉开厚度，正面留一块平整的刻纹区。
+      const body = ctx.createLinearGradient(s.x - 12, 0, s.x + 12, 0);
+      body.addColorStop(0, '#161b27');
+      body.addColorStop(0.28, '#3a435c');
+      body.addColorStop(0.58, '#56617f');
+      body.addColorStop(1, '#1a202e');
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(s.x - 11, s.y);
+      ctx.lineTo(s.x + 11, s.y);
+      ctx.lineTo(s.x + 7, s.y - 16);
+      ctx.lineTo(s.x - 7, s.y - 16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.42;
+      ctx.strokeStyle = '#a2b4d8';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(s.x - 8.8, s.y - 2.5);
+      ctx.lineTo(s.x - 6.2, s.y - 13.8);
+      ctx.moveTo(s.x + 8.6, s.y - 3.8);
+      ctx.lineTo(s.x + 6.1, s.y - 13.8);
+      ctx.stroke();
+
+      // 正面霜纹：活着时是一枚冷光印记，献祭后只剩被擦淡的石刻。
+      const rune = s.used ? '#6d7892' : '#b9dcff';
+      ctx.globalAlpha = s.used ? 0.18 : 0.5 + breathe * 0.26;
+      ctx.strokeStyle = rune;
+      ctx.lineWidth = s.used ? 0.8 : 1;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y - 13.2);
+      ctx.lineTo(s.x + 3, s.y - 9.2);
+      ctx.lineTo(s.x, s.y - 4.4);
+      ctx.lineTo(s.x - 3, s.y - 9.2);
+      ctx.closePath();
+      ctx.moveTo(s.x, s.y - 12.4);
+      ctx.lineTo(s.x, s.y - 5.2);
+      ctx.moveTo(s.x - 4.6, s.y - 9.2);
+      ctx.lineTo(s.x + 4.6, s.y - 9.2);
+      ctx.stroke();
+
+      // 顶板与凹槽：两条椭圆叠出石沿，中央那圈留给供物。
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#1a202e';
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y - 15, 16, 5.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#454f6b';
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y - 17, 15.4, 5.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = '#a8bce2';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y - 17.3, 12.2, 4.1, 0, Math.PI * 1.04, Math.PI * 1.96);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#10151e';
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y - 17.4, 8.8, 2.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (!s.used) {
+        ctx.globalCompositeOperation = 'lighter';
+        const haloR = 38 * pulse;
+        const g2 = ctx.createRadialGradient(s.x, s.y - 27, 0, s.x, s.y - 27, haloR);
+        g2.addColorStop(0, `rgba(210,238,255,${0.54 + 0.3 * pulse})`);
+        g2.addColorStop(0.4, `rgba(120,172,255,${0.2 + 0.14 * pulse})`);
+        g2.addColorStop(1, 'rgba(40,60,180,0)');
+        ctx.fillStyle = g2;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y - 27, haloR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 一束很薄的冷光从晶石落回顶板。
+        const spill = ctx.createLinearGradient(s.x, s.y - 35, s.x, s.y - 15);
+        spill.addColorStop(0, `rgba(176,220,255,${0.2 + 0.1 * breathe})`);
+        spill.addColorStop(1, 'rgba(90,140,255,0)');
+        ctx.fillStyle = spill;
+        ctx.beginPath();
+        ctx.moveTo(s.x - 5, s.y - 31);
+        ctx.lineTo(s.x - 10, s.y - 16);
+        ctx.lineTo(s.x + 10, s.y - 16);
+        ctx.lineTo(s.x + 5, s.y - 31);
+        ctx.closePath();
+        ctx.fill();
+
+        // 悬浮霜晶：深色轮廓托底，亮面与两道内棱只切在晶体里。
+        const bob = Math.sin(this.time * 1.9 + s.x * 0.02) * 1.2;
+        const cy = s.y - 27 + bob;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#101827';
+        ctx.beginPath();
+        ctx.moveTo(s.x, cy - 11);
+        ctx.lineTo(s.x + 5.3, cy - 2.8);
+        ctx.lineTo(s.x + 3.1, cy + 7.4);
+        ctx.lineTo(s.x - 3.1, cy + 7.4);
+        ctx.lineTo(s.x - 5.3, cy - 2.8);
+        ctx.closePath();
+        ctx.fill();
+        const crystal = ctx.createLinearGradient(s.x - 4, cy - 10, s.x + 5, cy + 6);
+        crystal.addColorStop(0, '#f1fbff');
+        crystal.addColorStop(0.38, '#b9ddff');
+        crystal.addColorStop(0.72, '#6fa8ff');
+        crystal.addColorStop(1, '#354d91');
+        ctx.fillStyle = crystal;
+        ctx.beginPath();
+        ctx.moveTo(s.x, cy - 10);
+        ctx.lineTo(s.x + 4.5, cy - 2.6);
+        ctx.lineTo(s.x + 2.6, cy + 6.6);
+        ctx.lineTo(s.x - 2.6, cy + 6.6);
+        ctx.lineTo(s.x - 4.5, cy - 2.6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.62;
+        ctx.strokeStyle = '#eaf8ff';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(s.x, cy - 8.7);
+        ctx.lineTo(s.x, cy + 5.8);
+        ctx.moveTo(s.x - 3.1, cy - 1.5);
+        ctx.lineTo(s.x + 3.1, cy - 1.5);
+        ctx.stroke();
+
+        // 三枚绕晶石巡游的霜屑；位置完全由时间决定，不额外生成粒子。
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 3; i += 1) {
+          const a = this.time * 0.55 + (i / 3) * Math.PI * 2 + s.x * 0.01;
+          const rr = 13 + Math.sin(this.time * 1.6 + i * 1.3) * 1.8;
+          ctx.globalAlpha = 0.34 + 0.24 * breathe;
+          ctx.fillStyle = i === 1 ? '#ffffff' : '#9fceff';
+          ctx.beginPath();
+          ctx.arc(s.x + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.62, 1 + (i % 2) * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+      } else {
+        // 献祭后的空槽：不再发光，只剩冷灰、石沿和一圈被熄灭的刻线。
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.72;
+        ctx.fillStyle = '#343b4c';
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y - 18, 5.2, 1.9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.28;
+        ctx.strokeStyle = '#8a96af';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y - 18.2, 7.4, 2.6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let i = 0; i < 3; i += 1) {
+          const a = -Math.PI * 0.82 + i * 0.46;
+          ctx.globalAlpha = 0.13 + i * 0.025;
+          ctx.fillStyle = '#c2ccdf';
+          ctx.beginPath();
+          ctx.arc(s.x + Math.cos(a) * (10 + i * 2), s.y - 17 + Math.sin(a) * 4, 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
       ctx.globalCompositeOperation = 'lighter';
-      const g2 = ctx.createRadialGradient(s.x, s.y - 16, 0, s.x, s.y - 16, 34 * pulse);
-      g2.addColorStop(0, `rgba(190,230,255,${0.85 * dim * pulse})`);
-      g2.addColorStop(0.45, `rgba(120,170,255,${0.35 * dim})`);
-      g2.addColorStop(1, 'rgba(40,60,180,0)');
-      ctx.fillStyle = g2;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y - 16, 34 * pulse, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(235,245,255,${0.9 * dim})`;
-      ctx.beginPath();
-      ctx.ellipse(s.x, s.y - 18, 5, 9 * pulse, 0, 0, Math.PI * 2);
-      ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
 
       // 靠近时的可交互提示：扩散光环
