@@ -143,9 +143,31 @@ body {
   pointer-events: auto;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 50%, rgba(10, 10, 16, 0.55), rgba(4, 5, 9, 0.86));
   backdrop-filter: blur(3px);
   z-index: 30;
+}
+/* 面板背后的夜气：一团暖灯雾、一团冷夜雾，极慢地错位。
+   它们不进入战斗画面，也不从面板边缘露成一块亮斑——只在黑底上把纵深垫出来。 */
+.screen.is-visible::before {
+  content: '';
+  position: absolute;
+  inset: -18%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 38% 34% at 27% 31%, rgba(255, 148, 64, 0.065), rgba(255, 148, 64, 0) 70%),
+    radial-gradient(ellipse 36% 40% at 75% 69%, rgba(96, 126, 198, 0.045), rgba(96, 126, 198, 0) 72%);
+  animation: screen-night-air 26s ease-in-out infinite alternate;
+}
+.screen.is-visible > .panel {
+  position: relative;
+  z-index: 1;
+}
+@keyframes screen-night-air {
+  from { transform: translate3d(-1.2%, -0.6%, 0) scale(1); }
+  to { transform: translate3d(1.4%, 0.9%, 0) scale(1.035); }
 }
 
 /* 焦点环（v82）：键盘 / 手柄挪到的那一项。只画在 `outline` 上——不占布局，
@@ -2840,6 +2862,7 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
 @media (prefers-reduced-motion: reduce) {
   .panel,
   .panel::before,
+  .screen.is-visible::before,
   .bar i::after { animation: none; }
 }
 
