@@ -3350,11 +3350,6 @@ export function drawEnemy(
   if (e.defId === 'beacon') {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.13;
-    ctx.strokeStyle = '#ffe9a8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 10]);
-    ctx.beginPath();
     const radius = 210;
     // v102：速度光环已经只增益墙这一侧（v99），虚线却还画满整圆。
     // 这圈线是"它能照顾到哪儿"的承诺，得和光照一样停在墙面上：
@@ -3365,9 +3360,12 @@ export function drawEnemy(
       const a = ((i + 0.5) / segments) * TAU;
       visible.push(rayWalls(e.x, e.y, Math.cos(a), Math.sin(a), radius, walls) >= radius);
     }
-    if (visible.every(Boolean)) {
-      ctx.arc(e.x, e.y, radius, 0, TAU);
-    } else {
+
+    const traceAura = (rr: number): void => {
+      if (visible.every(Boolean)) {
+        ctx.arc(e.x, e.y, rr, 0, TAU);
+        return;
+      }
       for (let i = 0; i < segments;) {
         if (!visible[i]) {
           i += 1;
@@ -3377,13 +3375,61 @@ export function drawEnemy(
         while (end + 1 < segments && visible[end + 1]) end += 1;
         const a0 = (i / segments) * TAU;
         const a1 = ((end + 1) / segments) * TAU;
-        ctx.moveTo(e.x + Math.cos(a0) * radius, e.y + Math.sin(a0) * radius);
-        ctx.arc(e.x, e.y, radius, a0, a1);
+        ctx.moveTo(e.x + Math.cos(a0) * rr, e.y + Math.sin(a0) * rr);
+        ctx.arc(e.x, e.y, rr, a0, a1);
         i = end + 1;
       }
-    }
+    };
+
+    // 同一条路径先压宽热晕，再落虚线主缘；墙后的缺口在三层里完全一致。
+    ctx.beginPath();
+    traceAura(radius);
+    ctx.strokeStyle = '#ffe9a8';
+    ctx.globalAlpha = 0.045;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.globalAlpha = 0.13;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 10]);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // 内圈的短刻线以更慢的速度反向走，像灯罩里绕行的祝祷纹。
+    ctx.beginPath();
+    traceAura(radius * 0.94);
+    ctx.globalAlpha = 0.09;
+    ctx.strokeStyle = '#ffd98f';
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([2.5, 12]);
+    ctx.lineDashOffset = time * 13;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+
+    // 六枚沿环巡游的菱形刻点：只落在没有墙的角度，不越过自己的承诺。
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < 6; i += 1) {
+      const a = time * 0.19 + (i / 6) * TAU + e.wobble * 0.1;
+      const slot = Math.floor((a % TAU) / TAU * segments) % segments;
+      if (!visible[slot]) continue;
+      const rr = radius - 13;
+      const mx = e.x + Math.cos(a) * rr;
+      const my = e.y + Math.sin(a) * rr;
+      const s = 1.8 + (i % 2) * 0.7;
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(a + Math.PI / 4);
+      ctx.globalAlpha = 0.2 + 0.12 * Math.sin(time * 2.4 + i * 1.7);
+      ctx.fillStyle = '#ffe9a8';
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.lineTo(s * 0.7, 0);
+      ctx.lineTo(0, s);
+      ctx.lineTo(-s * 0.7, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
