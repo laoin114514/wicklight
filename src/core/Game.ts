@@ -7444,8 +7444,36 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.fillStyle = base;
     ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.98, 0, Math.PI * 2);
+    // 雾没有边：主体边缘交给一圈缓慢呼吸的雾脚，读数线仍留在 0.97r。
+    for (let i = 0; i <= 30; i += 1) {
+      const a = (i / 30) * Math.PI * 2;
+      const rr = g.r * (0.9 + 0.06 * Math.sin(ph * 1.3 + i * 2.19) + 0.028 * Math.sin(i * 0.61));
+      const px = g.x + Math.cos(a) * rr;
+      const py = g.y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fill();
+
+    // 外沿的雾脚：几团厚雾擦过边界，下一瞬又散开，轮廓因此不会一年到头都是圆的。
+    for (let i = 0; i < 6; i += 1) {
+      const a = ph * 0.5 + i * 1.047 + Math.sin(t * 0.11 + i * 1.9) * 0.08;
+      const d = g.r * (0.8 + 0.045 * (i % 3));
+      ctx.globalAlpha = (0.026 + 0.012 * (i % 3)) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#91a8b7' : '#748d9d';
+      ctx.beginPath();
+      ctx.ellipse(
+        g.x + Math.cos(a) * d,
+        g.y + Math.sin(a) * d,
+        g.r * (0.18 + 0.03 * (i % 2)),
+        g.r * (0.075 + 0.02 * (i % 3)),
+        a + 1.2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
 
     // 雾带不发光，只用很薄的冷灰反光勾出"它在动"。
     ctx.globalCompositeOperation = 'lighter';
@@ -7463,6 +7491,20 @@ export class Game {
       ctx.restore();
     }
 
+    // 湿地反光：几道贴地的短弧，只有一瞬的冷白，说明雾底下是水不是烟。
+    for (let i = 0; i < 5; i += 1) {
+      const a = ph + i * 1.63 + 0.4;
+      const d = g.r * (0.28 + 0.12 * (i % 3));
+      const px = g.x + Math.cos(a) * d;
+      const py = g.y + Math.sin(a) * d * 0.7;
+      ctx.globalAlpha = (0.045 + 0.018 * Math.sin(t * 0.7 + i * 2.2 + ph)) * fade;
+      ctx.strokeStyle = i % 2 === 0 ? '#c4dce8' : '#9ebdcc';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.ellipse(px, py, g.r * (0.12 + 0.025 * (i % 2)), g.r * 0.025, a * 0.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // 雾中浮起的三粒冷尘：只指示"这里有东西在呼吸"。
     for (let i = 0; i < 3; i += 1) {
       const cycle = (t * 0.19 + i * 0.31 + ph * 0.13) % 1;
@@ -7476,14 +7518,18 @@ export class Game {
     }
 
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = fade * (0.38 + 0.1 * Math.sin(g.life * 3));
+    // 读数线：切成不等长的短刻，位置仍在 0.97r——雾脚可以散，可躲的范围不能跟着散。
     ctx.strokeStyle = '#b6cfe2';
-    ctx.lineWidth = 2.2;
-    ctx.setLineDash([9, 11]);
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 20; i += 1) {
+      const a = ph * 0.1 + (i / 20) * Math.PI * 2;
+      const seg = 0.07 + 0.06 * Math.abs(Math.sin(ph + i * 1.87));
+      ctx.globalAlpha = fade * (0.24 + 0.1 * Math.sin(t * 0.62 + ph + i * 0.71));
+      ctx.lineWidth = 1.6 + (i % 3) * 0.24;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r * 0.97, a, a + seg);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
     ctx.restore();
   }
