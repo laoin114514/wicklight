@@ -2460,13 +2460,140 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'extinguisher': {
-      ctx.strokeStyle = 'rgba(255,110,130,0.55)';
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * TAU + time * 0.4;
+      const spin = time * 0.12 + w * 0.08;
+
+      // 铁面不是一整块：两层甲环与短接缝把它压成有厚度的熄灭器。
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(5,3,13,0.18)';
+      ctx.fillRect(e.x - r * 1.2, e.y - r * 1.2, r * 2.4, r * 2.4);
+      for (let ring = 0; ring < 2; ring += 1) {
+        const rr = r * (0.56 + ring * 0.23);
+        const rot = spin + ring * (Math.PI / 8);
+        ctx.strokeStyle = 'rgba(4,3,12,0.42)';
+        ctx.lineWidth = 1.7;
+        poly(ctx, e.x, e.y, rr, 8, rot, 1);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(189,174,235,0.12)';
+        ctx.lineWidth = 0.65;
+        poly(ctx, e.x, e.y, rr + r * 0.012, 8, rot, 1);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(4,3,12,0.38)';
+      ctx.lineWidth = 1.15;
+      for (let seam = 0; seam < 8; seam += 1) {
+        const a = spin + seam * (TAU / 8) + Math.PI / 8;
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(a) * r * 0.95, e.y + Math.sin(a) * r * 0.95);
-        ctx.lineTo(e.x + Math.cos(a) * r * 1.3, e.y + Math.sin(a) * r * 1.3);
+        ctx.moveTo(e.x + Math.cos(a) * r * 0.58, e.y + Math.sin(a) * r * 0.58);
+        ctx.lineTo(e.x + Math.cos(a) * r * 0.8, e.y + Math.sin(a) * r * 0.8);
+        ctx.stroke();
+      }
+
+      // 面心是一圈吞光的暗铁，不额外发光，等眼睛落在它上面。
+      const mask = ctx.createRadialGradient(e.x, e.y, r * 0.08, e.x, e.y, r * 0.56);
+      mask.addColorStop(0, 'rgba(3,2,9,0.5)');
+      mask.addColorStop(0.62, 'rgba(8,5,19,0.25)');
+      mask.addColorStop(1, 'rgba(8,5,19,0)');
+      ctx.fillStyle = mask;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 0.56, 0, TAU);
+      ctx.fill();
+
+      // 冷凝的冷紫裂纹，避开中央眼睛的位置。
+      ctx.strokeStyle = 'rgba(159,137,226,0.2)';
+      ctx.lineWidth = 0.9;
+      for (let crack = 0; crack < 3; crack += 1) {
+        const a = spin * 1.3 + crack * 2.2 + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * r * 0.22, e.y + Math.sin(a) * r * 0.22);
+        ctx.lineTo(e.x + Math.cos(a + 0.2) * r * 0.42, e.y + Math.sin(a + 0.2) * r * 0.42);
+        ctx.lineTo(e.x + Math.cos(a + 0.08) * r * 0.68, e.y + Math.sin(a + 0.08) * r * 0.68);
+        ctx.stroke();
+      }
+
+      for (let rivet = 0; rivet < 8; rivet += 1) {
+        const a = spin + rivet * (TAU / 8) + Math.PI / 8;
+        const rr = r * 0.78;
+        const rx = e.x + Math.cos(a) * rr;
+        const ry = e.y + Math.sin(a) * rr;
+        ctx.fillStyle = 'rgba(5,3,13,0.74)';
+        ctx.beginPath();
+        ctx.arc(rx, ry, Math.max(1.2, r * 0.038), 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(188,172,236,0.2)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 六枚熄灯罩：短铁臂、钟形罩口，再拖一缕被掐灭后的冷烟。
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * TAU + time * 0.16;
+        const baseX = e.x + Math.cos(a) * r * 0.9;
+        const baseY = e.y + Math.sin(a) * r * 0.9;
+        const capX = e.x + Math.cos(a) * r * 1.17;
+        const capY = e.y + Math.sin(a) * r * 1.17;
+        ctx.strokeStyle = 'rgba(7,5,16,0.78)';
+        ctx.lineWidth = Math.max(2, r * 0.055);
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.lineTo(capX, capY);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(186,170,235,0.2)';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(capX, capY);
+        ctx.rotate(a);
+        ctx.fillStyle = 'rgba(27,19,46,0.94)';
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.09, -r * 0.035);
+        ctx.quadraticCurveTo(0, -r * 0.15, r * 0.09, -r * 0.035);
+        ctx.lineTo(r * 0.115, r * 0.055);
+        ctx.quadraticCurveTo(0, r * 0.115, -r * 0.115, r * 0.055);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(211,198,246,0.46)';
+        ctx.lineWidth = 0.9;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(2,1,5,0.88)';
+        ctx.beginPath();
+        ctx.ellipse(r * 0.02, r * 0.035, r * 0.062, r * 0.032, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+
+        if (i % 2 === 0) {
+          const drift = Math.sin(time * 1.4 + i * 1.7 + w) * r * 0.08;
+          const lift = r * (0.18 + Math.sin(time * 1.1 + i) * 0.045);
+          ctx.strokeStyle = 'rgba(190,183,215,0.26)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(capX + Math.cos(a) * r * 0.08, capY + Math.sin(a) * r * 0.08);
+          ctx.bezierCurveTo(
+            capX + Math.cos(a) * r * 0.16 + drift,
+            capY - lift * 0.35,
+            capX - drift * 0.7,
+            capY - lift * 0.72,
+            capX + drift * 0.4,
+            capY - lift,
+          );
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      // 最外面仍留一圈熄灭色的冷针，提醒它正在“掐灯”。
+      ctx.strokeStyle = 'rgba(181,158,255,0.28)';
+      ctx.lineWidth = 1.1;
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * TAU + time * 0.16 + Math.PI / 6;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * r * 1.25, e.y + Math.sin(a) * r * 1.25);
+        ctx.lineTo(e.x + Math.cos(a) * r * 1.38, e.y + Math.sin(a) * r * 1.38);
         ctx.stroke();
       }
       break;
