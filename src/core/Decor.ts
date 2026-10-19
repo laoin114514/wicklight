@@ -215,35 +215,91 @@ function tree(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
 }
 
 function mushrooms(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const pulse = 0.7 + Math.sin(time * 1.6 + d.x * 0.02) * 0.3;
+  const pulse = 0.7 + Math.sin(time * 1.6 + d.x * 0.02) * 0.25;
+  const phase = time * 1.35 + d.x * 0.021 + d.y * 0.013;
   // 柔和的菌丝辉光（克制一点，别糊成一团绿雾）
   ctx.globalCompositeOperation = 'lighter';
-  const halo = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.5);
-  halo.addColorStop(0, `rgba(140,240,190,${0.2 * pulse})`);
-  halo.addColorStop(1, 'rgba(60,180,130,0)');
+  const halo = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.22);
+  halo.addColorStop(0, `rgba(140,240,190,${0.14 * pulse})`);
+  halo.addColorStop(0.42, `rgba(80,205,145,${0.05 * pulse})`);
+  halo.addColorStop(1, 'rgba(50,150,105,0)');
   ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(d.x, d.y, d.r * 1.5, 0, TAU);
+  ctx.arc(d.x, d.y, d.r * 1.22, 0, TAU);
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
 
-  // 三朵有柄有伞帽的小蘑菇
   for (let i = 0; i < 3; i += 1) {
-    const ox = d.x + Math.cos(i * 2.1) * d.r * 0.42;
+    const sway = Math.sin(phase + i * 1.9) * d.r * 0.012;
+    const ox = d.x + Math.cos(i * 2.1) * d.r * 0.42 + sway;
     const oy = d.y + Math.sin(i * 1.7) * d.r * 0.3;
-    const sr = d.r * (0.12 + i * 0.035);
-    ctx.fillStyle = '#375c47';
-    ctx.fillRect(ox - sr * 0.16, oy, sr * 0.32, sr * 0.9);
-    const cap = ctx.createRadialGradient(ox - sr * 0.25, oy - sr * 0.2, sr * 0.05, ox, oy, sr);
-    cap.addColorStop(0, `rgba(190,255,220,${0.75 + 0.25 * pulse})`);
-    cap.addColorStop(0.55, `rgba(110,215,165,${0.7 * pulse})`);
-    cap.addColorStop(1, 'rgba(40,120,85,0.85)');
-    ctx.fillStyle = cap;
+    const sr = d.r * (0.13 + i * 0.034);
+    const lean = Math.sin(phase * 0.8 + i * 2.3) * sr * 0.08;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
     ctx.beginPath();
-    ctx.ellipse(ox, oy, sr, sr * 0.62, 0, Math.PI, TAU);
+    ctx.ellipse(ox, oy + sr * 0.87, sr * 0.34, sr * 0.1, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = '#315343';
+    ctx.beginPath();
+    ctx.moveTo(ox - sr * 0.15 + lean, oy + sr * 0.02);
+    ctx.quadraticCurveTo(ox - sr * 0.1, oy + sr * 0.48, ox - sr * 0.17, oy + sr * 0.87);
+    ctx.quadraticCurveTo(ox, oy + sr * 0.94, ox + sr * 0.17, oy + sr * 0.86);
+    ctx.quadraticCurveTo(ox + sr * 0.09, oy + sr * 0.46, ox + sr * 0.15 + lean, oy + sr * 0.02);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(148,232,184,0.17)';
+    ctx.lineWidth = Math.max(0.55, sr * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(ox - sr * 0.1 + lean, oy + sr * 0.1);
+    ctx.quadraticCurveTo(ox - sr * 0.07, oy + sr * 0.49, ox - sr * 0.12, oy + sr * 0.81);
+    ctx.stroke();
+
+    const cap = ctx.createRadialGradient(ox - sr * 0.28, oy - sr * 0.24, sr * 0.04, ox, oy, sr * 1.04);
+    cap.addColorStop(0, `rgba(204,255,230,${0.72 + 0.2 * pulse})`);
+    cap.addColorStop(0.48, `rgba(126,230,176,${0.58 + 0.12 * pulse})`);
+    cap.addColorStop(0.84, `rgba(58,155,105,0.86)`);
+    cap.addColorStop(1, 'rgba(29,94,67,0.92)');
+    ctx.fillStyle = cap;
+    ctx.beginPath();
+    ctx.moveTo(ox - sr, oy);
+    ctx.bezierCurveTo(ox - sr * 0.94, oy - sr * 0.54, ox - sr * 0.38, oy - sr * 0.78, ox + lean, oy - sr * 0.8);
+    ctx.bezierCurveTo(ox + sr * 0.45, oy - sr * 0.79, ox + sr * 0.96, oy - sr * 0.5, ox + sr, oy);
+    ctx.quadraticCurveTo(ox, oy + sr * 0.17, ox - sr, oy);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(18,66,48,0.45)';
+    ctx.lineWidth = Math.max(0.55, sr * 0.03);
+    for (const at of [-0.55, -0.18, 0.2, 0.56]) {
+      ctx.beginPath();
+      ctx.moveTo(ox + lean * 0.35, oy + sr * 0.06);
+      ctx.quadraticCurveTo(ox + sr * at * 0.62, oy + sr * 0.08, ox + sr * at, oy - sr * 0.01);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(190,255,218,0.28)';
+    ctx.lineWidth = Math.max(0.6, sr * 0.026);
+    ctx.beginPath();
+    ctx.moveTo(ox - sr * 0.9, oy - sr * 0.02);
+    ctx.quadraticCurveTo(ox - sr * 0.73, oy - sr * 0.46, ox - sr * 0.18, oy - sr * 0.69);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(225,255,236,0.27)';
+    ctx.beginPath();
+    ctx.ellipse(ox - sr * 0.3, oy - sr * 0.5, sr * 0.2, sr * 0.07, -0.42, 0, TAU);
+    ctx.fill();
   }
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 3; i += 1) {
+    const mote = 0.45 + Math.sin(phase * 1.7 + i * 2.2) * 0.35;
+    const ox = d.x + Math.cos(phase * 0.32 + i * 2.4) * d.r * (0.46 + i * 0.09);
+    const oy = d.y - d.r * (0.16 + i * 0.12) + Math.sin(phase * 0.5 + i) * d.r * 0.04;
+    ctx.fillStyle = `rgba(165,255,205,${0.16 + mote * 0.14})`;
+    ctx.beginPath();
+    ctx.arc(ox, oy, Math.max(0.55, d.r * 0.018), 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 function rock(ctx: CanvasRenderingContext2D, d: Decor): void {
