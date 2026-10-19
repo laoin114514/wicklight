@@ -6787,11 +6787,58 @@ export class Game {
   private drawDecals(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     for (const d of this.decals) {
-      ctx.globalAlpha = clamp(d.life / d.maxLife, 0, 1) * 0.8;
+      const fade = clamp(d.life / d.maxLife, 0, 1) * 0.8;
+      // 每块焦痕的形只在创建时由坐标定一次，逐帧稳定；不用随机数，也不改寿命。
+      const h = (k: number): number => {
+        const v = Math.sin(d.x * 0.017 + d.y * 0.013 + k * 12.9898) * 43758.5453;
+        return v - Math.floor(v);
+      };
+
+      // 外圈是烟熏散开的软边，内层由几团错位圆压成不规则污渍。
       ctx.fillStyle = d.color;
+      ctx.globalAlpha = fade * 0.18;
       ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, d.r * 1.12, 0, Math.PI * 2);
       ctx.fill();
+
+      ctx.globalAlpha = fade * 0.5;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i += 1) {
+        const a = h(i) * Math.PI * 2;
+        const dist = d.r * (0.08 + h(i + 9) * 0.58);
+        const rr = d.r * (0.28 + h(i + 21) * 0.26) * (1 - (dist / Math.max(1, d.r)) * 0.22);
+        ctx.moveTo(d.x + Math.cos(a) * dist + rr, d.y + Math.sin(a) * dist);
+        ctx.arc(d.x + Math.cos(a) * dist, d.y + Math.sin(a) * dist, rr, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      // 中心再压一层更深的湿痕，边缘拉几道短裂，让圆形边界彻底消失。
+      ctx.globalAlpha = fade * 0.34;
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, d.r * 0.46, d.r * 0.37, h(37) * Math.PI * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth = Math.max(0.7, d.r * 0.028);
+      ctx.globalAlpha = fade * 0.3;
+      for (let i = 0; i < 4; i += 1) {
+        const a = h(i + 51) * Math.PI * 2;
+        const r0 = d.r * (0.4 + h(i + 63) * 0.3);
+        const r1 = r0 + d.r * (0.12 + h(i + 77) * 0.17);
+        ctx.beginPath();
+        ctx.moveTo(d.x + Math.cos(a) * r0, d.y + Math.sin(a) * r0);
+        ctx.lineTo(d.x + Math.cos(a + 0.08) * r1, d.y + Math.sin(a + 0.08) * r1);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = fade * 0.24;
+      for (let i = 0; i < 5; i += 1) {
+        const a = h(i + 91) * Math.PI * 2;
+        const dist = d.r * (0.82 + h(i + 103) * 0.32);
+        ctx.beginPath();
+        ctx.arc(d.x + Math.cos(a) * dist, d.y + Math.sin(a) * dist, Math.max(0.55, d.r * (0.025 + h(i + 117) * 0.03)), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
