@@ -1805,32 +1805,91 @@ function heatCrack(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
 }
 
 function runeInlay(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const pulse = 0.56 + Math.sin(time * 1.7 + d.x * 0.03) * 0.24;
+  const phase = d.x * 0.023 + d.y * 0.017;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const pulse = 0.5 + Math.sin(time * 1.55 + phase) * 0.17;
   ctx.save();
   ctx.translate(d.x, d.y);
-  ctx.rotate(d.x * 0.007 + d.y * 0.003);
-  ctx.fillStyle = 'rgba(38,28,60,0.44)';
+  ctx.rotate((d.x * 0.007 + d.y * 0.003) * 0.55);
+  ctx.scale(1, 0.68);
+
+  ctx.fillStyle = 'rgba(3,3,9,0.28)';
   ctx.beginPath();
-  ctx.ellipse(0, 0, d.r * 0.86, d.r * 0.48, 0, 0, TAU);
+  ctx.ellipse(d.r * 0.08, d.r * 0.38, d.r * 0.73, d.r * 0.32, 0, 0, TAU);
   ctx.fill();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = pulse;
-  ctx.strokeStyle = '#b58dff';
-  ctx.lineWidth = 1;
+
   ctx.beginPath();
-  ctx.arc(0, 0, d.r * 0.5, 0, TAU);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(0, -d.r * 0.32);
-  ctx.lineTo(d.r * 0.24, 0);
-  ctx.lineTo(0, d.r * 0.32);
-  ctx.lineTo(-d.r * 0.24, 0);
+  for (const [x, y] of [
+    [-0.94, 0.03],
+    [-0.76, -0.41],
+    [-0.31, -0.57],
+    [0.23, -0.53],
+    [0.72, -0.27],
+    [0.91, 0.08],
+    [0.68, 0.39],
+    [0.18, 0.51],
+    [-0.38, 0.46],
+    [-0.84, 0.25],
+  ] as const) {
+    const xPos = x * d.r * mirror;
+    if (x === -0.94) ctx.moveTo(xPos, y * d.r);
+    else ctx.lineTo(xPos, y * d.r);
+  }
   ctx.closePath();
+  ctx.fillStyle = 'rgba(29,23,46,0.5)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(99,83,132,0.18)';
+  ctx.lineWidth = Math.max(0.5, d.r * 0.045);
   ctx.stroke();
-  ctx.globalAlpha = pulse * 0.66;
-  ctx.fillStyle = '#d9c4ff';
+
+  ctx.strokeStyle = 'rgba(124,103,164,0.11)';
+  ctx.lineWidth = Math.max(0.45, d.r * 0.035);
   ctx.beginPath();
-  ctx.arc(0, 0, Math.max(0.6, d.r * 0.08), 0, TAU);
+  ctx.moveTo(-d.r * 0.57 * mirror, -d.r * 0.23);
+  ctx.lineTo(-d.r * 0.28 * mirror, -d.r * 0.37);
+  ctx.lineTo(d.r * 0.22 * mirror, -d.r * 0.34);
+  ctx.lineTo(d.r * 0.55 * mirror, -d.r * 0.13);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(5,4,12,0.26)';
+  ctx.beginPath();
+  ctx.ellipse(-d.r * 0.39 * mirror, d.r * 0.17, d.r * 0.22, d.r * 0.1, -0.16 * mirror, 0, TAU);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(164,125,235,${0.13 + pulse * 0.1})`;
+  ctx.lineWidth = Math.max(0.65, d.r * 0.075);
+  ctx.beginPath();
+  ctx.arc(0, 0, d.r * 0.57, Math.PI * 1.06, Math.PI * 1.91);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, d.r * 0.57, Math.PI * 0.12, Math.PI * 0.76);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(184,147,255,${0.22 + pulse * 0.17})`;
+  ctx.lineWidth = Math.max(0.6, d.r * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(-d.r * 0.03 * mirror, -d.r * 0.34);
+  ctx.lineTo(d.r * 0.16 * mirror, -d.r * 0.1);
+  ctx.lineTo(-d.r * 0.15 * mirror, d.r * 0.03);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -d.r * 0.34);
+  ctx.lineTo(-d.r * 0.05 * mirror, d.r * 0.34);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-d.r * 0.05 * mirror, d.r * 0.34);
+  ctx.lineTo(d.r * 0.25 * mirror, d.r * 0.2);
+  ctx.stroke();
+
+  ctx.fillStyle = `rgba(219,195,255,${0.28 + pulse * 0.2})`;
+  ctx.beginPath();
+  ctx.arc(-d.r * 0.03 * mirror, -d.r * 0.37, Math.max(0.5, d.r * 0.045), 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = `rgba(197,160,255,${0.08 + pulse * 0.05})`;
+  ctx.beginPath();
+  ctx.ellipse(d.r * 0.02 * mirror, d.r * 0.03, d.r * 0.32, d.r * 0.17, 0, 0, TAU);
   ctx.fill();
   ctx.restore();
 }
