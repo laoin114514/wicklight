@@ -144,6 +144,9 @@ body {
   display: grid;
   place-items: center;
   overflow: hidden;
+  /* 夜气层向四周伸出后，hidden 仍算一个可编程滚动的容器：焦点落到面板底部时，
+     浏览器会把整块遮罩连同总览一起滚走。clip 不产生滚动容器，面板才能始终居中。 */
+  overflow: clip;
   background: radial-gradient(circle at 50% 50%, rgba(10, 10, 16, 0.55), rgba(4, 5, 9, 0.86));
   backdrop-filter: blur(3px);
   z-index: 30;
