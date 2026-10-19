@@ -3323,22 +3323,96 @@ export function drawEnemy(
     const dx = px - e.x;
     const dy = py - e.y;
     const d = Math.hypot(dx, dy);
-    if (d < 460) {
+    if (d > 1 && d < 460) {
       // v98：抽油已经停在墙面上（v97），画出来的那根线也得停在同一处。
       // `rayWalls` 与 `wallBetween` 用的是同一条线段：1 = 一路通到玩家，
       // 小于 1 就是先撞上了墙，线只画到墙面为止。
       const reach = rayWalls(e.x, e.y, dx, dy, 1, walls);
+      const endX = e.x + dx * reach;
+      const endY = e.y + dy * reach;
+      const nx = -dy / d;
+      const ny = dx / d;
+      const len = d * reach;
+      const bendMax = Math.min(13, 3.5 + len * 0.018);
+      const strand = (offset: number, phase: number): [number, number, number, number] => {
+        // 固定偏置 + 行进波：任何一帧都不会恰好绷成直线，但起伏仍然连续。
+        const fixed = Math.sin(phase * 1.9 + e.wobble * 1.3) * bendMax * 0.52;
+        const sway = fixed + Math.sin(time * 3.1 + phase + e.wobble) * bendMax * (0.48 + offset * 0.22);
+        const cross = offset * Math.min(9, 2.5 + len * 0.01);
+        return [
+          e.x + dx * reach * 0.34 + nx * (cross + sway),
+          e.y + dy * reach * 0.34 + ny * (cross + sway),
+          e.x + dx * reach * 0.68 + nx * (cross - sway * 0.7),
+          e.y + dy * reach * 0.68 + ny * (cross - sway * 0.7),
+        ];
+      };
+
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.34 + 0.16 * Math.sin(time * 9);
-      ctx.strokeStyle = '#c98fe8';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([7, 9]);
+      ctx.globalCompositeOperation = 'source-over';
+
+      // 先压一根近黑的缆芯：抽取线穿过灯火最亮的地方时也要有实体感。
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.68;
+      ctx.strokeStyle = '#140a1e';
+      ctx.lineWidth = 3.2;
       ctx.beginPath();
       ctx.moveTo(e.x, e.y);
-      ctx.lineTo(e.x + dx * reach, e.y + dy * reach);
+      ctx.quadraticCurveTo(
+        e.x + dx * reach * 0.5 + nx * Math.sin(time * 2.7 + e.wobble) * bendMax * 0.55,
+        e.y + dy * reach * 0.5 + ny * Math.sin(time * 2.7 + e.wobble) * bendMax * 0.55,
+        endX,
+        endY,
+      );
       ctx.stroke();
-      ctx.setLineDash([]);
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      // 宽而暗的底束先把"有东西连着他"铺出来，再让两股细丝互相绞着走。
+      ctx.globalAlpha = 0.11 + 0.035 * Math.sin(time * 4.2 + e.wobble);
+      ctx.strokeStyle = '#a75be0';
+      ctx.lineWidth = 6.2;
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+
+      for (let i = 0; i < 2; i += 1) {
+        const [c1x, c1y, c2x, c2y] = strand(i === 0 ? -1 : 1, i * 2.37);
+        ctx.globalAlpha = 0.25 + 0.13 * Math.sin(time * 7.4 + i * 2.1 + e.wobble);
+        ctx.strokeStyle = i === 0 ? '#c98fe8' : '#e6bdff';
+        ctx.lineWidth = i === 0 ? 1.5 : 0.8;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.bezierCurveTo(c1x, c1y, c2x, c2y, endX, endY);
+        ctx.stroke();
+      }
+
+      // 光珠从灯这一端被抽回吸取者：走向本身就是这套机制最直观的说明。
+      for (let i = 0; i < 3; i += 1) {
+        const travel = (time * 0.42 + i / 3 + e.wobble * 0.08) % 1;
+        const u = 1 - travel;
+        const drift = Math.sin(time * 4.6 + i * 2.1 + e.wobble) * Math.min(4.5, 1.2 + len * 0.006);
+        const bx = e.x + dx * reach * u + nx * drift;
+        const by = e.y + dy * reach * u + ny * drift;
+        const glow = Math.sin(Math.PI * travel);
+        ctx.globalAlpha = glow * 0.2;
+        ctx.fillStyle = '#a75be0';
+        ctx.beginPath();
+        ctx.arc(bx, by, 3.1 + glow * 1.2, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 0.28 + glow * 0.52;
+        ctx.fillStyle = i === 1 ? '#fff2d2' : '#d6a0f4';
+        ctx.beginPath();
+        ctx.arc(bx, by, 0.9 + glow * 1.45, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 0.22 + 0.12 * Math.sin(time * 8.3 + e.wobble);
+      ctx.strokeStyle = '#b978e4';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(endX, endY, 3.2 + Math.sin(time * 5.2 + e.wobble) * 0.7, 0.15, Math.PI * 1.15);
+      ctx.stroke();
       ctx.restore();
     }
   }
