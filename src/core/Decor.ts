@@ -884,26 +884,176 @@ function brazier(ctx: CanvasRenderingContext2D, d: Decor, time: number, themeId:
 }
 
 function shard(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  ctx.fillStyle = '#2a1a18';
+  const phase = d.x * 0.019 + d.y * 0.013;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const pulse = 0.64 + Math.sin(time * 2.2 + phase) * 0.24;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+  const shape = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(px(x), py(y));
+      else ctx.lineTo(px(x), py(y));
+    });
+    ctx.closePath();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.34)';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.3, d.y + d.r * 0.3);
-  ctx.lineTo(d.x - d.r * 0.05, d.y - d.r * 0.85);
-  ctx.lineTo(d.x + d.r * 0.22, d.y + d.r * 0.3);
-  ctx.closePath();
+  ctx.ellipse(d.x, d.y + d.r * 0.32, d.r * 0.36, d.r * 0.12, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,140,60,0.22)';
+  ctx.fillStyle = 'rgba(101,52,31,0.17)';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.05, d.y - d.r * 0.85);
-  ctx.lineTo(d.x + d.r * 0.1, d.y + d.r * 0.3);
-  ctx.lineTo(d.x - d.r * 0.02, d.y + d.r * 0.3);
-  ctx.closePath();
+  ctx.ellipse(d.x - d.r * 0.02, d.y + d.r * 0.28, d.r * 0.44, d.r * 0.09, -0.05 * mirror, 0, TAU);
   ctx.fill();
-  const pulse = 0.6 + Math.sin(time * 2.4 + d.y * 0.03) * 0.4;
+
+  ctx.fillStyle = '#1e1110';
+  ctx.strokeStyle = 'rgba(5,2,2,0.56)';
+  ctx.lineWidth = Math.max(0.8, d.r * 0.016);
+  shape([
+    [-0.22, 0.32],
+    [-0.33, 0.04],
+    [-0.41, -0.3],
+    [-0.2, 0.02],
+    [-0.02, 0.32],
+  ]);
+  ctx.fill();
+  ctx.stroke();
+  shape([
+    [0.07, 0.32],
+    [0.18, 0.03],
+    [0.35, -0.24],
+    [0.26, 0.08],
+    [0.24, 0.31],
+  ]);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,116,42,${0.2 + pulse * 0.16})`;
+  ctx.lineWidth = Math.max(0.6, d.r * 0.009);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.3), py(0.12));
+  ctx.lineTo(px(-0.34), py(-0.08));
+  ctx.lineTo(px(-0.37), py(-0.22));
+  ctx.moveTo(px(0.19), py(0.08));
+  ctx.lineTo(px(0.24), py(-0.08));
+  ctx.stroke();
+
+  const outer: readonly (readonly [number, number])[] = [
+    [-0.31, 0.33],
+    [-0.225, 0.04],
+    [-0.16, -0.33],
+    [0.03, -0.86],
+    [0.095, -0.34],
+    [0.17, -0.01],
+    [0.27, 0.32],
+  ];
+  shape(outer);
+  ctx.fillStyle = '#281714';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(6,2,2,0.72)';
+  ctx.lineWidth = Math.max(1, d.r * 0.02);
+  ctx.stroke();
+
+  shape([
+    [-0.31, 0.33],
+    [-0.225, 0.04],
+    [-0.16, -0.33],
+    [0.03, -0.86],
+    [0.01, 0.33],
+  ]);
+  ctx.fillStyle = '#170d0d';
+  ctx.fill();
+  shape([
+    [0.03, -0.86],
+    [0.095, -0.34],
+    [0.17, -0.01],
+    [0.27, 0.32],
+    [0.01, 0.33],
+  ]);
+  ctx.fillStyle = '#3b2017';
+  ctx.fill();
+  shape([
+    [0.03, -0.86],
+    [0.04, -0.32],
+    [0.035, 0.05],
+    [0.01, 0.33],
+    [-0.035, 0.33],
+    [-0.022, -0.31],
+  ]);
+  ctx.fillStyle = 'rgba(88,43,26,0.72)';
+  ctx.fill();
+
+  ctx.save();
+  shape(outer);
+  ctx.clip();
+  const inner = ctx.createRadialGradient(px(0.01), py(-0.05), 0, px(0.01), py(-0.05), d.r * 0.5);
+  inner.addColorStop(0, `rgba(255,104,33,${0.24 * pulse})`);
+  inner.addColorStop(0.55, `rgba(175,58,22,${0.09 * pulse})`);
+  inner.addColorStop(1, 'rgba(80,24,12,0)');
+  ctx.fillStyle = inner;
+  ctx.fillRect(px(-0.35), py(-0.9), d.r * 0.7, d.r * 1.3);
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(14,6,4,0.72)';
+  ctx.lineWidth = Math.max(1, d.r * 0.018);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.2), py(-0.36));
+  ctx.lineTo(px(-0.08), py(-0.12));
+  ctx.lineTo(px(0.02), py(0.09));
+  ctx.lineTo(px(-0.03), py(0.3));
+  ctx.moveTo(px(0.075), py(-0.41));
+  ctx.lineTo(px(0.12), py(-0.14));
+  ctx.moveTo(px(-0.12), py(0.12));
+  ctx.lineTo(px(-0.26), py(0.27));
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,122,43,${0.32 + pulse * 0.25})`;
+  ctx.lineWidth = Math.max(0.7, d.r * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.2), py(-0.36));
+  ctx.lineTo(px(-0.08), py(-0.12));
+  ctx.lineTo(px(0.02), py(0.09));
+  ctx.lineTo(px(-0.03), py(0.3));
+  ctx.moveTo(px(0.075), py(-0.41));
+  ctx.lineTo(px(0.12), py(-0.14));
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,218,137,${0.18 + pulse * 0.16})`;
+  ctx.lineWidth = Math.max(0.45, d.r * 0.005);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.08), py(-0.12));
+  ctx.lineTo(px(0.02), py(0.09));
+  ctx.lineTo(px(-0.03), py(0.3));
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,126,48,0.2)';
+  shape([
+    [-0.18, 0.31],
+    [-0.1, 0.23],
+    [-0.02, 0.31],
+    [0.11, 0.21],
+    [0.25, 0.32],
+    [0.17, 0.36],
+    [-0.15, 0.36],
+  ]);
+  ctx.fill();
+
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = `rgba(255,120,40,${0.3 * pulse})`;
+  const halo = ctx.createRadialGradient(d.x, d.y + d.r * 0.02, 0, d.x, d.y + d.r * 0.02, d.r * 0.54);
+  halo.addColorStop(0, `rgba(255,104,36,${0.13 * pulse})`);
+  halo.addColorStop(0.5, `rgba(210,65,20,${0.04 * pulse})`);
+  halo.addColorStop(1, 'rgba(120,32,10,0)');
+  ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(d.x, d.y, d.r * 0.7, 0, TAU);
+  ctx.arc(d.x, d.y + d.r * 0.02, d.r * 0.54, 0, TAU);
   ctx.fill();
+  for (let i = 0; i < 3; i += 1) {
+    const rise = (time * 0.17 + i * 0.31 + phase * 0.1) % 1;
+    const ex = d.x + Math.sin(phase * 2 + i * 2.3 + rise * 4) * d.r * 0.07;
+    const ey = d.y + d.r * 0.05 - rise * d.r * 0.82;
+    ctx.fillStyle = `rgba(255,157,77,${(1 - rise) * 0.32})`;
+    ctx.beginPath();
+    ctx.arc(ex, ey, Math.max(0.55, d.r * (0.016 - rise * 0.005)), 0, TAU);
+    ctx.fill();
+  }
   ctx.globalCompositeOperation = 'source-over';
 }
 
