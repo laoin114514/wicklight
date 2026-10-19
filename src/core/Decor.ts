@@ -1439,14 +1439,65 @@ function bones(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void {
 // ─────────────────────────── 细碎地面装饰 ───────────────────────────
 
 function grassTuft(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const sway = Math.sin(time * 1.1 + d.x * 0.04) * d.r * 0.16;
-  ctx.strokeStyle = 'rgba(88,150,104,0.55)';
-  ctx.lineWidth = 1.4;
-  for (let i = -1; i <= 1; i += 1) {
+  const phase = time * 1.05 + d.x * 0.04 + d.y * 0.017;
+  const mirror = Math.sin(d.x * 0.021 + d.y * 0.033) < 0 ? -1 : 1;
+  const wind = Math.sin(phase) * d.r * 0.08 + Math.sin(phase * 0.57 + 1.3) * d.r * 0.035;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(2,7,4,0.26)';
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.36, d.r * 0.58, d.r * 0.2, 0.03 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(14,35,21,0.54)';
+  for (const [x, y, rx, ry] of [
+    [-0.25, 0.3, 0.28, 0.12],
+    [0.03, 0.31, 0.24, 0.1],
+    [0.27, 0.28, 0.18, 0.09],
+  ] as const) {
     ctx.beginPath();
-    ctx.moveTo(d.x + i * d.r * 0.3, d.y + d.r * 0.4);
-    ctx.quadraticCurveTo(d.x + i * d.r * 0.42, d.y - d.r * 0.2, d.x + i * d.r * 0.55 + sway, d.y - d.r * 0.85);
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, -0.08 * mirror, 0, TAU);
+    ctx.fill();
+  }
+
+  const blades: readonly (readonly [number, number, number, number, number, string])[] = [
+    [-0.38, 0.27, -0.61, -0.62, 0.06, 'rgba(57,102,70,0.5)'],
+    [-0.19, 0.3, -0.28, -0.9, 0.075, 'rgba(75,134,88,0.52)'],
+    [0.02, 0.32, 0.1, -1.02, 0.082, 'rgba(100,163,105,0.52)'],
+    [0.2, 0.3, 0.43, -0.78, 0.068, 'rgba(72,129,86,0.5)'],
+    [0.36, 0.27, 0.6, -0.55, 0.052, 'rgba(55,96,66,0.48)'],
+    [-0.08, 0.2, -0.03, -0.43, 0.048, 'rgba(86,139,91,0.4)'],
+    [0.25, 0.22, 0.32, -0.42, 0.045, 'rgba(78,123,78,0.38)'],
+  ];
+  blades.forEach(([rootX, rootY, tipX, tipY, width, tint], index) => {
+    const bend = Math.sin(phase + index * 0.72) * d.r * (0.045 + Math.abs(tipY) * 0.025) + wind;
+    const bx = px(rootX);
+    const by = py(rootY);
+    const tx = px(tipX) + bend;
+    const ty = py(tipY);
+    const mx = bx + (tx - bx) * 0.38;
+    const my = by + (ty - by) * 0.52;
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.moveTo(bx - d.r * width * 0.5, by);
+    ctx.quadraticCurveTo(mx - d.r * width * 0.7, my, tx, ty);
+    ctx.quadraticCurveTo(mx + d.r * width * 0.55, my, bx + d.r * width * 0.5, by);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  if (d.r > 9) {
+    const stemX = px(0.22) + wind * 1.2;
+    ctx.strokeStyle = 'rgba(121,124,76,0.32)';
+    ctx.lineWidth = Math.max(0.45, d.r * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(px(0.16), py(0.25));
+    ctx.quadraticCurveTo(px(0.24), py(-0.12), stemX, py(-0.54));
     ctx.stroke();
+    ctx.fillStyle = 'rgba(142,137,88,0.38)';
+    ctx.beginPath();
+    ctx.ellipse(stemX, py(-0.56), d.r * 0.055, d.r * 0.11, 0.26 * mirror, 0, TAU);
+    ctx.fill();
   }
 }
 
