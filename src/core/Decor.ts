@@ -1583,13 +1583,92 @@ function pebble(ctx: CanvasRenderingContext2D, d: Decor, tint: string): void {
 }
 
 function chip(ctx: CanvasRenderingContext2D, d: Decor, tint: string): void {
-  ctx.fillStyle = tint;
+  const phase = d.x * 0.021 + d.y * 0.016;
+  const rot = Math.sin(phase) * 0.5;
+  const mirror = Math.cos(phase * 1.4) < 0 ? -1 : 1;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  const point = (x: number, y: number): readonly [number, number] => [
+    d.x + (x * cos - y * sin) * d.r * mirror,
+    d.y + (x * sin + y * cos) * d.r * 0.58,
+  ];
+  const trace = (points: readonly (readonly [number, number])[]): void => {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      const [wx, wy] = point(x, y);
+      if (index === 0) ctx.moveTo(wx, wy);
+      else ctx.lineTo(wx, wy);
+    });
+    ctx.closePath();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
-  ctx.moveTo(d.x - d.r * 0.7, d.y + d.r * 0.4);
-  ctx.lineTo(d.x - d.r * 0.1, d.y - d.r * 0.55);
-  ctx.lineTo(d.x + d.r * 0.75, d.y + d.r * 0.25);
-  ctx.closePath();
+  ctx.ellipse(d.x + d.r * 0.1 * mirror, d.y + d.r * 0.27, d.r * 0.7, d.r * 0.22, rot * 0.3, 0, TAU);
   ctx.fill();
+
+  trace([
+    [-0.91, -0.08],
+    [-0.67, -0.4],
+    [-0.21, -0.52],
+    [0.27, -0.44],
+    [0.82, -0.29],
+    [0.58, -0.06],
+    [0.84, 0.07],
+    [0.58, 0.31],
+    [0.04, 0.42],
+    [-0.58, 0.35],
+    [-0.84, 0.14],
+  ]);
+  ctx.fillStyle = tint;
+  ctx.fill();
+  trace([
+    [-0.67, -0.4],
+    [-0.21, -0.52],
+    [0.27, -0.44],
+    [0.61, -0.33],
+    [0.24, -0.13],
+    [-0.51, -0.16],
+  ]);
+  ctx.fillStyle = 'rgba(218,228,255,0.11)';
+  ctx.fill();
+  trace([
+    [0.82, -0.29],
+    [0.84, 0.07],
+    [0.58, 0.31],
+    [0.32, 0.18],
+    [0.53, -0.03],
+  ]);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.26)';
+  ctx.lineWidth = Math.max(0.4, d.r * 0.024);
+  const [c1x, c1y] = point(-0.16, -0.36);
+  const [c2x, c2y] = point(-0.05, -0.1);
+  const [c3x, c3y] = point(0.24, 0.02);
+  ctx.beginPath();
+  ctx.moveTo(c1x, c1y);
+  ctx.lineTo(c2x, c2y);
+  ctx.lineTo(c3x, c3y);
+  ctx.stroke();
+
+  trace([
+    [-0.64, 0.34],
+    [-0.46, 0.19],
+    [-0.2, 0.27],
+    [-0.29, 0.43],
+  ]);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fill();
+  const [edgeX, edgeY] = point(0.55, -0.25);
+  const [edgeX2, edgeY2] = point(0.18, -0.39);
+  ctx.strokeStyle = 'rgba(220,230,255,0.12)';
+  ctx.lineWidth = Math.max(0.4, d.r * 0.022);
+  ctx.beginPath();
+  ctx.moveTo(edgeX, edgeY);
+  ctx.lineTo(edgeX2, edgeY2);
+  ctx.stroke();
 }
 
 function hairlineCrack(ctx: CanvasRenderingContext2D, d: Decor): void {
