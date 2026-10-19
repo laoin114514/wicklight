@@ -1843,7 +1843,7 @@ export class UIManager implements UIHost {
         <section class="rec-sec"><h4>个人纪录</h4><div class="rec-grid">${personal}</div></section>
         <section class="rec-sec"><h4>灯火战绩</h4><div class="rec-lanterns">${lanterns}</div></section>
         <section class="rec-sec"><h4>最近对局 <b>${runs.length}</b></h4><div class="rec-runs">${history}</div></section>
-        <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
+        <div class="row-actions rec-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
       </div>
     `);
     this.on('[data-act="back"]', () => this.backToOrigin());
