@@ -2,7 +2,7 @@ import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS } from '../data/achievements';
 import { LANTERNS, LANTERN_MAP } from '../data/lanterns';
 import { FIRE_LEVELS_TOTAL, FIRE_LINES, META_TREE, fireCost } from '../data/meta';
 import { PASSIVE_MAP, type PlayerStats } from '../data/upgrades';
-import { CODEX_SECTIONS, HAZARD_LABEL } from '../systems/CodexSystem';
+import { CODEX_SECTIONS, HAZARD_LABEL, type CodexKind } from '../systems/CodexSystem';
 import { RELIC_MAP, TRIBES } from '../data/relics';
 import { WEAPON_MAP, weaponAt } from '../data/weapons';
 import { STAGES, STAGE_MAP } from '../data/stages';
@@ -53,6 +53,8 @@ export class UIManager implements UIHost {
   codexFocus: string | null = null;
   /** 图鉴搜索词（v113）：只看已发现条目，搜索框本身不会把 ??? 翻出来。 */
   private codexQuery = '';
+  /** 图鉴当前展开的分类；搜索时会让所有命中的分类同时展开。 */
+  private codexTab: CodexKind = 'enemy';
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -1498,9 +1500,18 @@ export class UIManager implements UIHost {
     const seen = cx.seenCount();
     const total = cx.total();
     const pct = total ? Math.round((seen / total) * 100) : 0;
-    const sections = CODEX_SECTIONS.map((sec) => {
+    const catalog = CODEX_SECTIONS.map((sec) => {
       const entries = cx.entries.filter((e) => e.kind === sec.kind);
-      if (!entries.length) return '';
+      return { sec, entries, got: cx.sectionSeen(sec.kind) };
+    }).filter((item) => item.entries.length > 0);
+    if (!catalog.some((item) => item.sec.kind === this.codexTab)) {
+      this.codexTab = catalog[0]?.sec.kind ?? 'enemy';
+    }
+    const tabs = catalog.map(({ sec, entries, got }) => `
+      <button class="cx-tab${sec.kind === this.codexTab ? ' is-on' : ''}" data-cx-tab="${sec.kind}" role="tab" aria-selected="${sec.kind === this.codexTab}">
+        <span>${sec.title}</span><b>${got}/${entries.length}</b>
+      </button>`).join('');
+    const sections = catalog.map(({ sec, entries, got }) => {
       const cards = entries
         .map((e) => {
           if (!cx.has(e.kind, e.id)) {
@@ -1514,9 +1525,9 @@ export class UIManager implements UIHost {
           </button>`;
         })
         .join('');
-      const got = cx.sectionSeen(sec.kind);
       const progress = (got / entries.length) * 100;
-      return `<section class="cx-sec">
+      const active = sec.kind === this.codexTab;
+      return `<section class="cx-sec" data-cx-kind="${sec.kind}"${active ? '' : ' hidden'}>
         <h4>${sec.title} <b>${got}/${entries.length}</b><i class="cx-sec__rule" style="--codex-progress:${progress.toFixed(1)}%" aria-hidden="true"><span></span></i><span>${sec.hint}</span></h4>
         <div class="cx-grid">${cards}</div>
       </section>`;
@@ -1529,6 +1540,7 @@ export class UIManager implements UIHost {
           <input class="cx-search__input" type="search" placeholder="搜索已发现条目…（名称 / 说明 / 数值 · / 聚焦）" aria-label="搜索图鉴" />
           <span class="cx-search__hit"></span>
         </label>
+        <div class="cx-tabs" role="tablist" aria-label="图鉴分类">${tabs}</div>
         ${sections}
         <div class="cx-none" hidden>没有找到已发现条目。搜索不会剧透尚未发现的 ???。</div>
         <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
@@ -1537,11 +1549,14 @@ export class UIManager implements UIHost {
     const input = this.screen.querySelector('.cx-search__input') as HTMLInputElement | null;
     const hit = this.screen.querySelector('.cx-search__hit') as HTMLElement | null;
     const none = this.screen.querySelector('.cx-none') as HTMLElement | null;
+    const panel = this.screen.querySelector('.panel--codex') as HTMLElement | null;
+    const tabsList = [...this.screen.querySelectorAll<HTMLElement>('[data-cx-tab]')];
+    const sectionList = [...this.screen.querySelectorAll<HTMLElement>('.cx-sec')];
     const applyFilter = () => {
       const tokens = (input?.value ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
       let shown = 0;
       let found = 0;
-      this.screen.querySelectorAll<HTMLElement>('.cx-sec').forEach((section) => {
+      sectionList.forEach((section) => {
         let visible = 0;
         section.querySelectorAll<HTMLElement>('.cx').forEach((card) => {
           const locked = card.classList.contains('is-locked');
@@ -1553,8 +1568,9 @@ export class UIManager implements UIHost {
           visible += 1;
           if (!locked) shown += 1;
         });
-        section.hidden = tokens.length > 0 && visible === 0;
+        section.hidden = tokens.length > 0 ? visible === 0 : section.dataset.cxKind !== this.codexTab;
       });
+      panel?.classList.toggle('is-filtering', tokens.length > 0);
       if (hit) hit.textContent = tokens.length ? `找到 ${shown} 个已发现条目` : `${found} 个已发现条目`;
       if (none) none.hidden = tokens.length === 0 || shown > 0;
     };
@@ -1571,6 +1587,18 @@ export class UIManager implements UIHost {
       applyFilter();
     }
     this.on('[data-act="back"]', () => this.backToOrigin());
+    this.onAll('[data-cx-tab]', (el) => {
+      this.codexTab = el.dataset.cxTab as CodexKind;
+      if (input) input.value = '';
+      this.codexQuery = '';
+      tabsList.forEach((tab) => {
+        const on = tab.dataset.cxTab === this.codexTab;
+        tab.classList.toggle('is-on', on);
+        tab.setAttribute('aria-selected', String(on));
+      });
+      applyFilter();
+      panel?.scrollTo({ top: 0, behavior: 'auto' });
+    });
     this.onAll('[data-cx]', (el) => {
       this.codexQuery = input?.value ?? this.codexQuery;
       this.codexFocus = el.dataset.cx as string;

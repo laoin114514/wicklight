@@ -418,7 +418,15 @@ body {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-dim);
 }
-.cx__blurb { font-size: 11.5px; line-height: 1.5; color: var(--text-dim); }
+.cx__blurb {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
 .cx.is-locked { opacity: 0.4; }
 .cx.is-locked .cx__dot { background: rgba(255, 255, 255, 0.08); box-shadow: none; }
 
@@ -8419,4 +8427,151 @@ body.is-touch .lvl-actions__hint { display: none; }
   .lo-col h4 { margin: 7px 0 4px; padding-bottom: 3px; font-size: 10px; }
   .lo-actions { margin-top: 6px; padding-top: 5px; }
   .lo-actions .btn { padding: 7px 16px; font-size: 11.5px; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v163 · 图鉴：从一面标本墙收成一本分章目录
+   全收录时旧目录会把十个章节一路铺开，手机要滚过近二十屏才到底。
+   这一版把章节做成吸顶索引：平时只摊开当前一章，搜索时自动跨章显示命中；
+   窄屏条目改成双列标签，返回键吸在纸页底边。条目内容与详情没有改动。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--codex { padding-bottom: 12px; }
+.cx[hidden],
+.cx-sec[hidden] { display: none !important; }
+.panel--codex .cx-grid { align-items: start; }
+
+.cx-tabs {
+  position: sticky;
+  top: -1px;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin: 7px -30px 8px;
+  padding: 6px 30px 7px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(198, 158, 98, 0.13);
+  border-bottom: 1px solid rgba(198, 158, 98, 0.24);
+  background:
+    repeating-linear-gradient(96deg, rgba(255, 224, 176, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, rgba(33, 27, 19, 0.985), rgba(17, 13, 9, 0.995));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  scrollbar-width: none;
+  transition: opacity 0.18s ease;
+}
+.cx-tabs::-webkit-scrollbar { display: none; }
+.panel--codex.is-filtering .cx-tabs { opacity: 0.56; }
+.cx-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 8px 4px;
+  border: 1px solid rgba(198, 158, 98, 0.2);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(255, 228, 178, 0.035), rgba(0, 0, 0, 0.13));
+  color: rgba(226, 207, 174, 0.56);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 194, 0.035);
+}
+.cx-tab b {
+  color: rgba(232, 195, 130, 0.46);
+  font-size: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.cx-tab:hover {
+  border-color: rgba(255, 202, 112, 0.42);
+  color: rgba(255, 226, 177, 0.84);
+}
+.cx-tab.is-on {
+  border-color: rgba(255, 205, 119, 0.54);
+  background:
+    linear-gradient(180deg, rgba(255, 206, 111, 0.18), rgba(80, 44, 8, 0.24)),
+    rgba(255, 220, 154, 0.035);
+  color: #ffe1a6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 242, 208, 0.14),
+    0 0 12px rgba(255, 169, 59, 0.09);
+}
+.cx-tab.is-on b { color: #ffc96b; }
+.cx-tab:focus-visible {
+  outline: 1px solid rgba(255, 206, 116, 0.7);
+  outline-offset: 2px;
+}
+
+.panel--codex .cx-sec { margin-top: 10px; }
+.panel--codex .row-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  margin: 11px 0 0;
+  padding: 9px 0 1px;
+  border-top: 1px solid rgba(198, 158, 98, 0.18);
+  background: linear-gradient(180deg, rgba(18, 13, 9, 0), rgba(18, 13, 9, 0.97) 40%, #120d09 100%);
+}
+
+@media (max-width: 720px) {
+  .panel--codex { padding: 15px 12px 8px; }
+  .panel--codex .panel__title { margin-bottom: 5px; font-size: 18px; letter-spacing: 2.5px; }
+  .cx-bar { height: 6px; margin: 5px 0 8px; }
+  .cx-search { gap: 3px 8px; margin: 5px 0 2px; }
+  .cx-search__input { flex-basis: 100%; padding: 6px 9px; font-size: 11px; }
+  .cx-search__hit { font-size: 9px; letter-spacing: 0.5px; }
+  .cx-tabs {
+    justify-content: flex-start;
+    gap: 4px;
+    margin: 5px -12px 6px;
+    padding: 5px 12px;
+  }
+  .cx-tab { gap: 4px; padding: 3px 7px 4px; font-size: 8.6px; letter-spacing: 0.7px; }
+  .cx-tab b { font-size: 7.8px; }
+  .panel--codex .cx-sec { margin-top: 7px; }
+  .panel--codex .cx-sec h4 { gap: 6px; margin-bottom: 5px; padding-bottom: 4px; font-size: 11px; letter-spacing: 1.4px; }
+  .panel--codex .cx-sec h4 b { font-size: 10.5px; }
+  .panel--codex .cx-sec h4 > span { font-size: 9px; }
+  .cx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .cx {
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 1px 6px;
+    padding: 6px 7px;
+    border-radius: 6px;
+  }
+  .cx__dot { width: 14px; height: 14px; margin-top: 1px; font-size: 8px; }
+  .cx__name { font-size: 11.5px; line-height: 1.3; }
+  .cx__tag { margin-left: 3px; padding: 0 3px; font-size: 8px; }
+  .cx__blurb { font-size: 9.6px; line-height: 1.4; }
+  .cx__more { font-size: 8.5px; }
+  .panel--codex .row-actions { margin-top: 7px; padding-top: 6px; }
+  .panel--codex .row-actions .btn { padding: 8px 18px; font-size: 11.5px; }
+}
+
+@media (max-width: 400px) {
+  .panel--codex { padding: 12px 8px 7px; }
+  .panel--codex .panel__title { font-size: 16.5px; }
+  .cx-tabs { margin-inline: -8px; padding-inline: 8px; gap: 3px; }
+  .cx-tab { padding: 2px 6px 3px; font-size: 8.1px; }
+  .panel--codex .cx-sec h4 > span { padding-left: 0; }
+  .cx { padding: 5px 6px; gap: 1px 5px; }
+  .cx__name { font-size: 10.8px; }
+  .cx__blurb { font-size: 9.1px; line-height: 1.36; }
+  .cx__more { font-size: 8px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--codex { padding: 11px 14px 7px; }
+  .panel--codex .panel__title { margin-bottom: 4px; font-size: 16px; letter-spacing: 2.5px; }
+  .cx-bar { margin: 4px 0 6px; }
+  .cx-search { margin: 3px 0 2px; }
+  .cx-tabs { justify-content: flex-start; margin: 4px -14px 5px; padding: 4px 14px; }
+  .panel--codex .cx-sec { margin-top: 6px; }
+  .panel--codex .row-actions { margin-top: 6px; padding-top: 5px; }
+  .panel--codex .row-actions .btn { padding: 7px 16px; font-size: 11px; }
 }
