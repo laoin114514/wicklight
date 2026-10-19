@@ -6956,3 +6956,278 @@ body.is-touch .key { display: none; }
   .result-actions { margin-top: 5px; padding-top: 5px; }
   .panel--result .result-actions .btn { padding: 6px 15px; font-size: 12px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v156 · 升级三选一：夜火抉择
+   题头先说清“三簇火，只添一簇”，三张牌各带一枚编号火印；
+   数值对照压成牌脚的一行读数，重掷则吸在面板底边。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--levelup {
+  width: min(94vw, 860px);
+  padding: 20px 22px 12px;
+  background:
+    radial-gradient(88% 62% at 50% -14%, rgba(255, 178, 84, 0.14), rgba(255, 178, 84, 0) 64%),
+    repeating-linear-gradient(93deg, rgba(255, 228, 184, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 9px),
+    linear-gradient(180deg, #1d1b20 0%, #121319 48%, #090a0e 100%);
+}
+
+.lvl-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(198, 158, 98, 0.22);
+  text-align: left;
+}
+.lvl-head__copy { min-width: 0; }
+.lvl-head__kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(234, 210, 166, 0.44);
+  font-size: 9px;
+  letter-spacing: 3.2px;
+}
+.lvl-head__kicker::before {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0.16), var(--brass-hi));
+}
+.lvl-head__title {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 2px 0 3px;
+  font-size: 21px;
+  letter-spacing: 4px;
+}
+.lvl-head__title::before { display: none; }
+.lvl-head__title::after { flex: 1 1 auto; max-width: none; margin-right: 2px; }
+.lvl-head__sub {
+  color: rgba(228, 210, 178, 0.5);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.8px;
+}
+.lvl-head__count {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(255, 209, 126, 0.34);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 32%, rgba(255, 231, 171, 0.14), rgba(255, 144, 46, 0.04) 48%, rgba(0, 0, 0, 0.32) 72%),
+    rgba(22, 15, 7, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 204, 0.14),
+    inset 0 0 18px rgba(255, 150, 50, 0.08),
+    0 0 24px rgba(255, 156, 56, 0.1);
+}
+.lvl-head__count::before,
+.lvl-head__count::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  border: 1px solid rgba(192, 138, 62, 0.2);
+}
+.lvl-head__count::after {
+  inset: -5px;
+  border-style: dashed;
+  border-color: rgba(192, 138, 62, 0.13);
+}
+.lvl-head__count b {
+  color: #ffd995;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 0.95;
+  text-shadow: 0 0 14px rgba(255, 176, 74, 0.34);
+}
+.lvl-head__count span {
+  color: rgba(232, 207, 166, 0.44);
+  font-size: 8px;
+  letter-spacing: 1.6px;
+}
+
+.lvl-grid { margin-top: 2px; align-items: stretch; }
+.panel--levelup .card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 238px;
+  padding: 15px 16px 13px;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    linear-gradient(112deg, rgba(255, 255, 255, 0.024) 0 17%, rgba(255, 255, 255, 0) 17.2% 51%, rgba(255, 255, 255, 0.012) 51.2% 53%, rgba(255, 255, 255, 0) 53.2%),
+    radial-gradient(130% 88% at 50% -8%, color-mix(in srgb, var(--accent) 18%, transparent), rgba(0, 0, 0, 0) 64%),
+    linear-gradient(180deg, rgba(29, 31, 38, 0.98), rgba(10, 11, 15, 0.99));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+    inset 0 0 0 5px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 238, 198, 0.075),
+    0 12px 26px rgba(0, 0, 0, 0.4);
+}
+.panel--levelup .card::before {
+  left: 13%;
+  right: 13%;
+  height: 2px;
+  opacity: 0.78;
+}
+.panel--levelup .card::after { display: none; }
+.panel--levelup .card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 211, 0.13),
+    inset 0 0 0 5px rgba(0, 0, 0, 0.06),
+    0 19px 38px rgba(0, 0, 0, 0.54),
+    0 0 34px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.panel--levelup .card--evolve {
+  border-color: color-mix(in srgb, var(--accent) 72%, rgba(255, 216, 138, 0.2));
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--accent) 25%, transparent), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, #25251f 0%, #15130f 54%, #0c0b09 100%);
+}
+.panel--levelup .card__icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 0 8px -1px;
+  font-size: 27px;
+}
+.panel--levelup .card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 3px 7px 3px 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, rgba(192, 138, 62, 0.16));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 7%, rgba(0, 0, 0, 0.14));
+  font-size: 10px;
+  letter-spacing: 1.5px;
+}
+.panel--levelup .card__tag .hotkey {
+  min-width: 14px;
+  margin: 0;
+  padding: 1px 3px;
+  text-align: center;
+  border-color: color-mix(in srgb, var(--accent) 34%, rgba(192, 138, 62, 0.18));
+  background: rgba(0, 0, 0, 0.2);
+  color: color-mix(in srgb, var(--accent) 78%, #ffe9bd);
+}
+.panel--levelup .card__lv {
+  padding: 2px 6px;
+  border: 1px solid rgba(198, 158, 98, 0.15);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 9.5px;
+  letter-spacing: 0.7px;
+}
+.panel--levelup .card__top { align-items: center; }
+.panel--levelup .card__pips { margin: 7px 0 8px; }
+.panel--levelup .card__pips i {
+  width: 16px;
+  height: 3px;
+  background: rgba(255, 236, 201, 0.1);
+}
+.panel--levelup .card__name {
+  margin-bottom: 6px;
+  color: #f7ead2;
+  font-family: var(--font-display);
+  font-size: 21px;
+  letter-spacing: 1.8px;
+}
+.panel--levelup .card__blurb {
+  color: rgba(218, 205, 183, 0.78);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.panel--levelup .card__delta {
+  gap: 4px 12px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(198, 158, 98, 0.18);
+}
+.panel--levelup .card__delta .dl { font-size: 10.5px; }
+.panel--levelup .card__delta .dl__k { color: rgba(228, 210, 178, 0.46); }
+.panel--levelup .card__delta .dl__to { color: #ffe3ad; }
+.panel--levelup .card__hint {
+  margin-top: 7px;
+  padding-top: 6px;
+  font-size: 10px;
+  color: rgba(255, 227, 173, 0.7);
+}
+
+.lvl-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  align-items: center;
+  justify-content: center;
+  gap: 7px 14px;
+  margin: 11px 0 0;
+  padding: 9px 0 2px;
+  border-top: 1px solid rgba(198, 158, 98, 0.16);
+  background: linear-gradient(180deg, rgba(14, 12, 10, 0), rgba(14, 12, 10, 0.96) 38%, #0e0c0a 100%);
+}
+.lvl-actions__hint {
+  color: rgba(228, 210, 178, 0.34);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+.lvl-actions__hint::before { content: '◇'; margin-right: 5px; color: rgba(255, 190, 95, 0.5); }
+body.is-touch .lvl-actions__hint { display: none; }
+
+@media (max-width: 720px) {
+  .panel--levelup { padding: 17px 14px 10px; }
+  .lvl-head { gap: 10px; margin-bottom: 9px; padding-bottom: 8px; }
+  .lvl-head__title { font-size: 19px; letter-spacing: 3px; }
+  .lvl-head__count { width: 46px; height: 46px; }
+  .lvl-head__count b { font-size: 21px; }
+  .panel--levelup .card { min-height: 0; padding: 13px 14px 11px; }
+  .panel--levelup .card__icon { width: 36px; height: 36px; margin-bottom: 6px; font-size: 23px; }
+  .panel--levelup .card__name { font-size: 19px; }
+  .panel--levelup .card__blurb { font-size: 11px; line-height: 1.45; }
+  .panel--levelup .card__delta { margin-top: 7px; padding-top: 6px; }
+}
+
+@media (max-width: 400px) {
+  .lvl-head__sub { display: none; }
+  .lvl-head__title { font-size: 18px; letter-spacing: 2.4px; }
+  .lvl-head__title::after { display: none; }
+  .lvl-head__count { width: 42px; height: 42px; }
+  .lvl-head__count::after { inset: -3px; }
+  .lvl-head__count b { font-size: 19px; }
+  .lvl-head__count span { font-size: 7px; }
+  .panel--levelup .card__blurb { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--levelup { padding: 9px 14px 7px; }
+  .lvl-head { gap: 10px; margin-bottom: 6px; padding-bottom: 5px; }
+  .lvl-head__kicker { font-size: 7px; letter-spacing: 2.2px; }
+  .lvl-head__title { margin: 1px 0 0; font-size: 16px; letter-spacing: 2.5px; }
+  .lvl-head__sub { font-size: 8.5px; line-height: 1.3; }
+  .lvl-head__count { width: 34px; height: 34px; }
+  .lvl-head__count b { font-size: 16px; }
+  .lvl-head__count span { font-size: 6px; letter-spacing: 1px; }
+  .panel--levelup .card { min-height: 0; padding: 9px 11px 8px; }
+  .panel--levelup .card__icon { width: 25px; height: 25px; margin-bottom: 4px; font-size: 18px; }
+  .panel--levelup .card__tag { padding: 1px 5px 1px 2px; font-size: 8.5px; }
+  .panel--levelup .card__pips { margin: 4px 0 5px; }
+  .panel--levelup .card__pips i { width: 11px; }
+  .panel--levelup .card__name { margin-bottom: 4px; font-size: 15.5px; letter-spacing: 1px; }
+  .panel--levelup .card__blurb { font-size: 10px; line-height: 1.35; }
+  .panel--levelup .card__delta { margin-top: 5px; padding-top: 4px; }
+  .panel--levelup .card__delta .dl { font-size: 9.5px; }
+  .lvl-actions { margin-top: 6px; padding-top: 6px; }
+  .lvl-actions__hint { font-size: 8px; }
+}

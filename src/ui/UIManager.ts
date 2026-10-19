@@ -423,7 +423,7 @@ export class UIManager implements UIHost {
 
   private offerCard(o: UpgradeOffer, index: number): string {
     const tagLabel = o.tag === 'evolve' ? '进化' : o.tag === 'new' ? '新' : '升级';
-    return `<button class="card" data-offer="${o.kind}:${o.id}" style="--accent:${o.color}">
+    return `<button class="card ${o.tag === 'evolve' ? 'card--evolve' : ''}" data-offer="${o.kind}:${o.id}" style="--accent:${o.color}">
       <div class="card__icon">${o.icon}</div>
       <div class="card__top">
         <span class="card__tag">${this.hotkey(index)}${tagLabel}</span>
@@ -479,12 +479,22 @@ export class UIManager implements UIHost {
 
   private levelup(): void {
     const cards = this.offers.map((o, i) => this.offerCard(o, i)).join('');
+    const count = this.offers.length;
+    const hotkeys = this.offers.map((_, i) => i + 1).join(' / ');
     this.show(`
       <div class="panel panel--levelup panel--plank">
-        <div class="panel__title">灯火更亮 · Lv ${this.game.playerLevel}</div>
-        <div class="card-grid">${cards}</div>
-        <div class="row-actions">
+        <header class="lvl-head">
+          <div class="lvl-head__copy">
+            <span class="lvl-head__kicker">夜火抉择</span>
+            <div class="panel__title lvl-head__title">灯火更亮 · Lv ${this.game.playerLevel}</div>
+            <p class="lvl-head__sub">${count} 簇火，只添一簇。选中的路会一直亮到这一夜结束。</p>
+          </div>
+          <div class="lvl-head__count" aria-hidden="true"><b>${count}</b><span>选一</span></div>
+        </header>
+        <div class="card-grid lvl-grid">${cards}</div>
+        <div class="row-actions lvl-actions">
           <button class="btn ${this.rerolls > 0 ? '' : 'is-locked'}" data-act="reroll">重掷 (${this.rerolls})<span class="key">R</span></button>
+          <span class="lvl-actions__hint">按 ${hotkeys} 直接选牌</span>
         </div>
       </div>
     `);
