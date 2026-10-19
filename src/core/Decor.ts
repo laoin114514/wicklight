@@ -2113,8 +2113,9 @@ function candleStub(ctx: CanvasRenderingContext2D, d: Decor, time: number, theme
   const night = themeId === 'nightcity';
   const phase = time * 7.6 + d.x * 0.05 + d.y * 0.017;
   const flick = 0.8 + Math.sin(phase) * 0.2;
-  const wax = night ? '#6b577e' : '#776d58';
-  const waxLit = night ? '#9c82b8' : '#aa9c7d';
+  const lit = Math.sin(d.x * 0.031 + d.y * 0.023) > -0.45;
+  const wax = lit ? (night ? '#6b577e' : '#776d58') : night ? '#584a67' : '#665f50';
+  const waxLit = lit ? (night ? '#9c82b8' : '#aa9c7d') : night ? '#78638c' : '#827a67';
   const waxDark = night ? '#443650' : '#4d463a';
   const metal = night ? '#8066a8' : '#59617d';
 
@@ -2179,6 +2180,15 @@ function candleStub(ctx: CanvasRenderingContext2D, d: Decor, time: number, theme
   ctx.moveTo(d.x, d.y - d.r * 0.225);
   ctx.quadraticCurveTo(d.x - d.r * 0.01, d.y - d.r * 0.29, d.x + d.r * 0.008, d.y - d.r * 0.32);
   ctx.stroke();
+
+  if (!lit) {
+    ctx.fillStyle = 'rgba(151,142,126,0.2)';
+    ctx.beginPath();
+    ctx.arc(d.x + d.r * 0.008, d.y - d.r * 0.33, Math.max(0.35, d.r * 0.022), 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
 
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = night ? `rgba(143,92,230,${0.055 * flick})` : `rgba(101,149,255,${0.05 * flick})`;
@@ -2330,6 +2340,7 @@ function heatCrack(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
 function runeInlay(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
   const phase = d.x * 0.023 + d.y * 0.017;
   const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const lit = Math.sin(d.x * 0.026 + d.y * 0.021) > -0.65;
   const pulse = 0.5 + Math.sin(time * 1.55 + phase) * 0.17;
   ctx.save();
   ctx.translate(d.x, d.y);
@@ -2379,8 +2390,8 @@ function runeInlay(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
   ctx.ellipse(-d.r * 0.39 * mirror, d.r * 0.17, d.r * 0.22, d.r * 0.1, -0.16 * mirror, 0, TAU);
   ctx.fill();
 
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(164,125,235,${0.13 + pulse * 0.1})`;
+  ctx.globalCompositeOperation = lit ? 'lighter' : 'source-over';
+  ctx.strokeStyle = lit ? `rgba(164,125,235,${0.13 + pulse * 0.1})` : 'rgba(95,82,121,0.16)';
   ctx.lineWidth = Math.max(0.65, d.r * 0.075);
   ctx.beginPath();
   ctx.arc(0, 0, d.r * 0.57, Math.PI * 1.06, Math.PI * 1.91);
@@ -2389,7 +2400,7 @@ function runeInlay(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
   ctx.arc(0, 0, d.r * 0.57, Math.PI * 0.12, Math.PI * 0.76);
   ctx.stroke();
 
-  ctx.strokeStyle = `rgba(184,147,255,${0.22 + pulse * 0.17})`;
+  ctx.strokeStyle = lit ? `rgba(184,147,255,${0.22 + pulse * 0.17})` : 'rgba(108,94,131,0.18)';
   ctx.lineWidth = Math.max(0.6, d.r * 0.06);
   ctx.beginPath();
   ctx.moveTo(-d.r * 0.03 * mirror, -d.r * 0.34);
@@ -2405,15 +2416,17 @@ function runeInlay(ctx: CanvasRenderingContext2D, d: Decor, time: number): void 
   ctx.lineTo(d.r * 0.25 * mirror, d.r * 0.2);
   ctx.stroke();
 
-  ctx.fillStyle = `rgba(219,195,255,${0.28 + pulse * 0.2})`;
+  ctx.fillStyle = lit ? `rgba(219,195,255,${0.28 + pulse * 0.2})` : 'rgba(112,99,136,0.18)';
   ctx.beginPath();
   ctx.arc(-d.r * 0.03 * mirror, -d.r * 0.37, Math.max(0.5, d.r * 0.045), 0, TAU);
   ctx.fill();
 
-  ctx.fillStyle = `rgba(197,160,255,${0.08 + pulse * 0.05})`;
-  ctx.beginPath();
-  ctx.ellipse(d.r * 0.02 * mirror, d.r * 0.03, d.r * 0.32, d.r * 0.17, 0, 0, TAU);
-  ctx.fill();
+  if (lit) {
+    ctx.fillStyle = `rgba(197,160,255,${0.08 + pulse * 0.05})`;
+    ctx.beginPath();
+    ctx.ellipse(d.r * 0.02 * mirror, d.r * 0.03, d.r * 0.32, d.r * 0.17, 0, 0, TAU);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
