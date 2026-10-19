@@ -4305,3 +4305,71 @@ body.is-touch .key { display: none; }
 .ach:not(.is-ok) .ach__reward { opacity: 0.56; }
 .ach.is-ok .ach__name { color: #ffe6b0; }
 .ach.is-ok .ach__blurb { color: rgba(236, 214, 173, 0.68); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v144 · 结算复盘：本局构筑是一条条有颜色的存货铭牌
+
+   旧版把武器 / 被动 / 遗物写成一行彩色文本，和旁边的数字糊在同一种字色里。
+   现在每一项都压进自己的小铜牌，牌沿取它自己的颜色；行与行之间用细虚线
+   分开，复盘时先认出“我拿了什么”，再去读等级和数量。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--vellum .run-build {
+  position: relative;
+  padding: 10px 12px 9px;
+  border-left-color: rgba(214, 164, 88, 0.52);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 231, 182, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 6px),
+    linear-gradient(90deg, rgba(255, 200, 120, 0.085), rgba(255, 200, 120, 0.015) 58%, rgba(0, 0, 0, 0.03));
+}
+.run-build__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.run-build__title::before {
+  content: '◆';
+  color: rgba(255, 190, 95, 0.72);
+  font-size: 7px;
+  transform: translateY(-1px);
+}
+.run-build__row {
+  align-items: flex-start;
+  padding: 5px 0;
+  border-top: 1px dashed rgba(198, 158, 98, 0.15);
+}
+.run-build__row:first-of-type { border-top: 0; }
+.run-build__row > span {
+  flex-basis: 32px;
+  padding-top: 2px;
+  font-size: 10.5px;
+  letter-spacing: 2px;
+  color: rgba(226, 210, 181, 0.48);
+}
+.run-build__row > b { gap: 4px 6px; }
+.rb-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 1px 6px 2px;
+  border: 1px solid color-mix(in srgb, var(--c, #d9a85f) 24%, rgba(192, 138, 62, 0.16));
+  border-radius: 3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c, #d9a85f) 9%, rgba(255, 255, 255, 0.015)), rgba(0, 0, 0, 0.17));
+  box-shadow:
+    inset 2px 0 0 color-mix(in srgb, var(--c, #d9a85f) 72%, rgba(255, 255, 255, 0.18)),
+    inset 0 1px 0 rgba(255, 236, 194, 0.055);
+  color: color-mix(in srgb, var(--c, #e3c48f) 72%, #f2e8d6);
+  line-height: 1.4;
+}
+.rb-item u {
+  margin-left: 5px;
+  font-size: 9.5px;
+  color: rgba(232, 221, 200, 0.5);
+  letter-spacing: 0.3px;
+}
+.rb-reso {
+  padding: 0 3px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 207, 115, 0.68);
+}
