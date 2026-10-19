@@ -1700,6 +1700,45 @@ export class Player {
         const oy = Math.sin(a) * radius * 0.86;
         const fl = 0.85 + Math.sin(time * 9 + i * 2.1) * 0.15;
         const rad = st.radius * 1.8 * fl;
+        const vx = -Math.sin(a) * radius;
+        const vy = Math.cos(a) * radius * 0.86;
+        const vlen = Math.max(1, Math.hypot(vx, vy));
+        const fwdX = vx / vlen;
+        const fwdY = vy / vlen;
+        const lean = Math.sin(time * 6.8 + i * 2.1) * rad * 0.22;
+
+        // 一小截轨道余烬 + 向后的火尾：火球在绕着你转，而不是钉在空中的灯泡。
+        ctx.globalAlpha = 0.1 * fl;
+        ctx.strokeStyle = def.color;
+        ctx.lineWidth = st.radius * 0.68;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius, radius * 0.86, 0, a - 0.58, a - 0.08);
+        ctx.stroke();
+
+        const tail = rad * (1.9 + 0.25 * Math.sin(time * 5.3 + i * 1.7));
+        ctx.globalAlpha = 0.16 * fl;
+        ctx.lineWidth = rad * 0.72;
+        ctx.beginPath();
+        ctx.moveTo(ox + fwdX * rad * 0.28, oy + fwdY * rad * 0.28);
+        ctx.quadraticCurveTo(
+          ox - fwdX * tail * 0.36 - fwdY * lean * 0.4,
+          oy - fwdY * tail * 0.36 + fwdX * lean * 0.4,
+          ox - fwdX * tail,
+          oy - fwdY * tail,
+        );
+        ctx.stroke();
+        ctx.globalAlpha = 0.42 * fl;
+        ctx.lineWidth = rad * 0.24;
+        ctx.beginPath();
+        ctx.moveTo(ox + fwdX * rad * 0.24, oy + fwdY * rad * 0.24);
+        ctx.quadraticCurveTo(
+          ox - fwdX * tail * 0.28 - fwdY * lean * 0.3,
+          oy - fwdY * tail * 0.28 + fwdX * lean * 0.3,
+          ox - fwdX * tail * 0.72,
+          oy - fwdY * tail * 0.72,
+        );
+        ctx.stroke();
+
         const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, rad);
         g.addColorStop(0, 'rgba(255,255,255,0.95)');
         g.addColorStop(0.28, def.color);
@@ -1709,12 +1748,32 @@ export class Player {
         ctx.beginPath();
         ctx.arc(ox, oy, rad, 0, TAU);
         ctx.fill();
-        // 拖尾的小火星
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = 'rgba(255,180,90,0.8)';
+
+        // 焰尖从火心往上抽，尖端随时间偏摆；用渐变收口，避免变成一块不透明的尖三角。
+        const crest = ctx.createLinearGradient(ox, oy + rad * 0.2, ox + lean, oy - rad * 1.55);
+        crest.addColorStop(0, 'rgba(255,120,30,0)');
+        crest.addColorStop(0.52, 'rgba(255,166,58,0.22)');
+        crest.addColorStop(1, 'rgba(255,241,193,0.5)');
+        ctx.globalAlpha = 0.62 * fl;
+        ctx.fillStyle = crest;
         ctx.beginPath();
-        ctx.arc(ox - Math.cos(a) * 6, oy - Math.sin(a) * 6, st.radius * 0.32, 0, TAU);
+        ctx.moveTo(ox - rad * 0.34, oy + rad * 0.08);
+        ctx.quadraticCurveTo(ox - rad * 0.52 + lean, oy - rad * 0.58, ox + lean, oy - rad * 1.48);
+        ctx.quadraticCurveTo(ox + rad * 0.48 + lean * 0.35, oy - rad * 0.48, ox + rad * 0.34, oy + rad * 0.08);
+        ctx.closePath();
         ctx.fill();
+
+        // 两粒脱开的余烬沿着来路后退，补足速度感。
+        for (let k = 0; k < 2; k += 1) {
+          const cycle = (time * 1.7 + i * 0.37 + k * 0.46) % 1;
+          const ex = ox - fwdX * tail * (0.55 + cycle * 0.62) - fwdY * lean * (0.3 + cycle * 0.4);
+          const ey = oy - fwdY * tail * (0.55 + cycle * 0.62) + fwdX * lean * (0.3 + cycle * 0.4);
+          ctx.globalAlpha = (1 - cycle) * (0.3 + k * 0.08) * fl;
+          ctx.fillStyle = k === 0 ? '#ffd89a' : def.color;
+          ctx.beginPath();
+          ctx.arc(ex, ey, Math.max(0.7, st.radius * (0.24 - cycle * 0.1)), 0, TAU);
+          ctx.fill();
+        }
         ctx.globalAlpha = 1;
       }
       ctx.globalCompositeOperation = 'source-over';
