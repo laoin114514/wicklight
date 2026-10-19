@@ -309,6 +309,12 @@ export class Player {
   private refundLeft = 0;
   private refundRate = 0;
   moving = false;
+  /** 行走倾身与提灯惯性：只服务绘制，不参与碰撞或速度计算。 */
+  private leanF = 0;
+  private leanS = 0;
+  private stepClock = 0;
+  private footstep = 0;
+  private footSide = 1;
   private cooldowns = new Map<string, number>();
   private orbit: OrbitState = { angle: 0, hitCooldown: new Map() };
   /**
@@ -418,6 +424,11 @@ export class Player {
     this.ashTimer = 0;
     this.refundLeft = 0;
     this.refundRate = 0;
+    this.leanF = 0;
+    this.leanS = 0;
+    this.stepClock = 0;
+    this.footstep = 0;
+    this.footSide = 1;
     this.cooldowns.clear();
     this.orbit.hitCooldown.clear();
     this.recomputeStats();
@@ -904,6 +915,37 @@ export class Player {
       this.angle = Math.atan2(target.y - this.y, target.x - this.x);
     } else if (ml > 0.1) {
       this.angle = Math.atan2(mvy, mvx);
+    }
+
+    // ── 行走的惯性 ──
+    // 这里的都是纯视觉量：倾身、摆灯和脚步落到哪一侧。它们不改速度，也不参与碰撞。
+    const moveSpeed = Math.max(1, s.moveSpeed);
+    const faceX = Math.cos(this.angle);
+    const faceY = Math.sin(this.angle);
+    const forwardFrac = clamp((this.vx * faceX + this.vy * faceY) / moveSpeed, -1, 1);
+    const sideFrac = clamp((-this.vx * faceY + this.vy * faceX) / moveSpeed, -1, 1);
+    const leanRate = Math.min(1, dt * 10);
+    this.leanF += (forwardFrac - this.leanF) * leanRate;
+    this.leanS += (sideFrac - this.leanS) * leanRate;
+    const stepFrac = Math.min(1, Math.hypot(this.vx, this.vy) / moveSpeed);
+    if (this.dashTimer <= 0 && stepFrac > 0.14) {
+      this.stepClock += dt * (4.2 + stepFrac * 5.4);
+      this.footstep -= dt;
+      if (this.footstep <= 0) {
+        this.footstep = 0.22 - stepFrac * 0.075;
+        this.footSide *= -1;
+        const side = this.radius * 0.34 * this.footSide;
+        const back = this.radius * 0.68;
+        ctx.particles.puff(
+          this.x - faceX * back - faceY * side,
+          this.y - faceY * back + faceX * side + this.radius * 0.52,
+          1,
+          '#6f685c',
+          { speed: 8, size: 2.3 + stepFrac * 1.2, life: 0.38, drag: 2.8, grow: 2.3, gravity: -3 },
+        );
+      }
+    } else {
+      this.footstep = Math.min(this.footstep, 0.07);
     }
 
     // ── 手动瞄准（触屏）──
@@ -1488,6 +1530,7 @@ export class Player {
     const coneScale = opts?.cone ?? 1;
     const haloScale = opts?.halo ?? 1;
     const speed = Math.hypot(this.vx, this.vy);
+    const speedFrac = Math.min(1, speed / Math.max(1, this.stats.moveSpeed));
     const bob = this.moving ? Math.sin(time * 14) * 1.5 : Math.sin(time * 3) * 0.8;
     const blink = this.invuln > 0 && Math.floor(time * 20) % 2 === 0;
     const flick = 0.82 + Math.sin(time * 12) * 0.18;
@@ -1605,15 +1648,36 @@ export class Player {
       ctx.save();
       ctx.rotate(back);
       const cape = ctx.createLinearGradient(0, 0, len, 0);
-      cape.addColorStop(0, 'rgba(30,36,66,0.95)');
-      cape.addColorStop(1, 'rgba(16,19,38,0.15)');
+      cape.addColorStop(0, 'rgba(38,45,82,0.96)');
+      cape.addColorStop(0.45, 'rgba(25,30,58,0.8)');
+      cape.addColorStop(1, 'rgba(13,16,33,0.08)');
       ctx.fillStyle = cape;
       ctx.beginPath();
       ctx.moveTo(0, -R * 0.72);
-      ctx.quadraticCurveTo(len * 0.7, -R * 0.5 + flutter, len, -flutter * 0.6);
-      ctx.quadraticCurveTo(len * 0.7, R * 0.5 + flutter, 0, R * 0.72);
+      ctx.quadraticCurveTo(len * 0.48, -R * 0.78 + flutter, len * 0.98, -R * 0.28 + flutter);
+      ctx.lineTo(len * 0.84, -R * 0.02 + flutter * 0.4);
+      ctx.lineTo(len * 1.02, R * 0.13 - flutter * 0.45);
+      ctx.lineTo(len * 0.8, R * 0.28 + flutter * 0.4);
+      ctx.quadraticCurveTo(len * 0.45, R * 0.68 + flutter, 0, R * 0.72);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = 'rgba(5,8,17,0.58)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(9,12,24,0.38)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(R * 0.08, -R * 0.2);
+      ctx.quadraticCurveTo(len * 0.5, -R * 0.06 + flutter * 0.7, len * 0.82, R * 0.02);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.16;
+      ctx.strokeStyle = '#b7c4ee';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(0, -R * 0.7);
+      ctx.quadraticCurveTo(len * 0.48, -R * 0.75 + flutter, len * 0.94, -R * 0.28 + flutter);
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1666,7 +1730,8 @@ export class Player {
 
     // ── 提灯照向瞄准方向的锥形光（加法混合，像"光"而不是半透明色块） ──
     ctx.save();
-    ctx.rotate(this.angle);
+    ctx.rotate(this.angle + this.leanS * 0.055);
+    ctx.translate(this.leanF * R * 0.035, this.leanS * R * 0.035);
     ctx.globalCompositeOperation = 'lighter';
     const coneLen = (130 + 150 * this.brightness) * (0.6 + 0.4 * coneScale);
     const cone = ctx.createLinearGradient(0, 0, this.radius + coneLen, 0);
@@ -1847,6 +1912,12 @@ export class Player {
     ctx.globalCompositeOperation = 'source-over';
 
     // ── 提灯：手臂 + 金属提梁 + 玻璃罩 + 火焰 ──
+    // 摆动绕肩关节，不绕灯心：提梁会先把灯甩出去，玻璃罩和火舌再慢半拍。
+    const lanternSwing = (this.moving ? Math.sin(this.stepClock * 1.28) * (0.018 + speedFrac * 0.052) : Math.sin(time * 2.1) * 0.01) + this.leanS * 0.028;
+    ctx.save();
+    ctx.translate(R * 0.5, R * 0.16);
+    ctx.rotate(lanternSwing);
+    ctx.translate(-R * 0.5, -R * 0.16);
     const lx = R * 1.45;
     ctx.strokeStyle = 'rgba(10,13,24,0.9)';
     ctx.lineWidth = 3.4;
@@ -1945,6 +2016,7 @@ export class Player {
     ctx.strokeStyle = 'rgba(206,164,92,0.45)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
+    ctx.restore();
 
     ctx.restore();
   }
