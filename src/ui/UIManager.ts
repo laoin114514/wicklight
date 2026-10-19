@@ -1222,10 +1222,13 @@ export class UIManager implements UIHost {
       .join('');
     this.show(`
       <div class="panel panel--curse panel--rite">
-        <div class="panel__title">夜咒</div>
-        <div class="subtitle">下一关是「${stage.theme.name}」——向夜借多少，由你开口。</div>
+        <div class="rite-head">
+          <div class="rite-kicker"><span>蜡印</span><i>三择其一</i></div>
+          <div class="panel__title">夜咒</div>
+          <div class="subtitle rite-sub">下一关是「${stage.theme.name}」——向夜借多少，由你开口。</div>
+        </div>
         <div class="curse-grid">${cards}</div>
-        <div class="curse-hint">夜咒不会缺席：挑一条，然后带着它走完这一关。</div>
+        <div class="rite-foot"><span class="curse-hint">夜咒不会缺席：挑一条，然后带着它走完这一关。</span></div>
       </div>
     `);
     this.onAll('[data-curse]', (el) => {
@@ -1248,10 +1251,13 @@ export class UIManager implements UIHost {
       .join('');
     this.show(`
       <div class="panel panel--shrine panel--stone">
-        <div class="panel__title">静默的祭坛</div>
-        <div class="subtitle">灯火之外的馈赠，总要付出点什么。</div>
+        <div class="rite-head">
+          <div class="rite-kicker"><span>冷石</span><i>三择其一</i></div>
+          <div class="panel__title">静默的祭坛</div>
+          <div class="subtitle rite-sub">灯火之外的馈赠，总要付出点什么。</div>
+        </div>
         <div class="shrine-grid">${cards}</div>
-        <div class="row-actions">
+        <div class="row-actions rite-actions">
           <button class="btn" data-act="shrine-leave">原样离开</button>
         </div>
       </div>

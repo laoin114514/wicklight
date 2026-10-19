@@ -7959,3 +7959,265 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--shop .forge { margin-top: 6px; }
   .shop-actions { margin-top: 5px; padding-top: 5px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v161 · 祭坛 / 夜咒：一页真正的抉择仪式
+   v147 已经把牌面做成冷石与蜡光的凹龛，这一版收束整页的读法：
+     · 题头先落一枚“冷石 / 蜡印 · 三择其一”的仪式签，再进入选项
+     · 说明与选项共用一道极淡的分隔线，脚下提示与离开键各归其位
+     · 窄屏不再把三张竖牌叠成一条长卷，改成横排铭牌，眼动一次扫完
+   选项、排序、热键与点击区域都没有动。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.rite-head {
+  margin: -2px 0 13px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(198, 158, 98, 0.16);
+  text-align: center;
+}
+
+.rite-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: rgba(232, 210, 174, 0.42);
+  font-size: 8.5px;
+  letter-spacing: 3px;
+}
+.rite-kicker::before,
+.rite-kicker::after {
+  content: '';
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(198, 158, 98, 0), rgba(198, 158, 98, 0.46));
+}
+.rite-kicker::after { background: linear-gradient(270deg, rgba(198, 158, 98, 0), rgba(198, 158, 98, 0.46)); }
+.rite-kicker span {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.rite-kicker i {
+  position: relative;
+  padding-left: 13px;
+  font-style: normal;
+}
+.rite-kicker i::before {
+  content: '◇';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 211, 132, 0.48);
+  font-size: 9px;
+}
+.panel--stone .rite-kicker span {
+  color: #cfe0ff;
+  text-shadow: 0 0 13px rgba(120, 170, 255, 0.34);
+}
+.panel--rite .rite-kicker span {
+  color: #ddbaff;
+  text-shadow: 0 0 13px rgba(166, 96, 232, 0.35);
+}
+
+.rite-head .panel__title {
+  margin: 2px 0 3px;
+}
+.rite-head .rite-sub {
+  max-width: 620px;
+  margin: 0 auto;
+  color: rgba(226, 220, 208, 0.62);
+  font-size: 11.5px;
+  line-height: 1.55;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.panel--shrine .shrine-grid,
+.panel--curse .curse-grid {
+  margin-top: 0;
+}
+.panel--shrine .shrine-grid { margin-bottom: 9px; }
+.panel--curse .curse-grid { margin-bottom: 8px; }
+
+.curse-card__blurb { flex: 1; }
+.curse-card__gold { margin-top: auto; }
+
+.rite-foot {
+  display: flex;
+  justify-content: center;
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(198, 158, 98, 0.13);
+}
+.panel--rite .rite-foot { border-top-color: rgba(190, 140, 220, 0.14); }
+
+.rite-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 4;
+  margin: 0;
+  padding: 9px 0 1px;
+  border-top: 1px solid rgba(140, 180, 255, 0.14);
+  background: linear-gradient(180deg, rgba(10, 12, 19, 0), rgba(10, 12, 19, 0.96) 42%, #0a0c13 100%);
+}
+.panel--stone .rite-actions .btn {
+  border-color: rgba(150, 190, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(80, 112, 174, 0.16), rgba(13, 18, 31, 0.5)),
+    rgba(13, 17, 28, 0.7);
+  color: rgba(224, 236, 255, 0.84);
+}
+.panel--stone .rite-actions .btn:hover {
+  border-color: rgba(180, 214, 255, 0.54);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34), 0 0 18px rgba(120, 170, 255, 0.12);
+}
+
+@media (max-width: 720px) {
+  .panel--shrine,
+  .panel--curse { padding: 16px 14px 10px; }
+  .rite-head { margin-bottom: 9px; padding-bottom: 7px; }
+  .rite-kicker { gap: 7px; font-size: 8px; letter-spacing: 2.4px; }
+  .rite-kicker::before,
+  .rite-kicker::after { width: 20px; }
+  .rite-head .panel__title { font-size: 18px; letter-spacing: 2.5px; }
+  .rite-head .rite-sub { font-size: 10.5px; line-height: 1.5; letter-spacing: 0.7px; }
+  .shrine-grid,
+  .curse-grid { grid-template-columns: 1fr; gap: 7px; }
+  .panel--shrine .shrine-grid,
+  .panel--curse .curse-grid { margin-bottom: 7px; }
+  .rite-foot { padding-top: 6px; }
+}
+
+/* 横排铭牌：编号、凹龛、名字与代价各占一格，说明在下沿铺开。
+   这样三行只占原来一张竖牌的高度，320px 也不必滚着读选项。 */
+@media (max-width: 560px) {
+  .shrine-card,
+  .curse-card {
+    align-items: center;
+    column-gap: 9px;
+    row-gap: 2px;
+    padding: 10px 12px 10px 8px;
+    text-align: left;
+  }
+  .shrine-card {
+    display: grid;
+    grid-template-columns: auto 44px minmax(0, 1fr);
+    grid-template-areas:
+      'key icon name'
+      'key icon blurb';
+  }
+  .curse-card {
+    display: grid;
+    grid-template-columns: auto 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'key icon name gold'
+      'key icon blurb blurb';
+  }
+  .shrine-card > .hotkey,
+  .curse-card > .hotkey {
+    grid-area: key;
+    align-self: center;
+    margin: 0;
+  }
+  .shrine-card__icon,
+  .curse-card__icon {
+    grid-area: icon;
+    align-self: center;
+    width: 42px;
+    height: 42px;
+    margin: 0;
+    font-size: 24px;
+  }
+  .shrine-card__name,
+  .curse-card__name {
+    grid-area: name;
+    align-self: end;
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .shrine-card__blurb,
+  .curse-card__blurb {
+    grid-area: blurb;
+    align-self: start;
+    min-width: 0;
+    margin: 0;
+    color: rgba(226, 220, 208, 0.66);
+    font-size: 10.5px;
+    line-height: 1.4;
+    text-align: left;
+  }
+  .curse-card__gold {
+    grid-area: gold;
+    align-self: end;
+    margin: 0;
+    padding: 1px 8px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .rite-actions .btn { padding: 9px 18px; font-size: 12.5px; }
+}
+
+@media (max-width: 400px) {
+  .panel--shrine,
+  .panel--curse { padding: 13px 10px 8px; }
+  .rite-head { margin-bottom: 7px; padding-bottom: 6px; }
+  .rite-kicker { gap: 6px; font-size: 7.5px; letter-spacing: 2px; }
+  .rite-kicker::before,
+  .rite-kicker::after { width: 14px; }
+  .rite-kicker i { padding-left: 11px; }
+  .rite-head .panel__title { margin: 1px 0 2px; font-size: 16.5px; letter-spacing: 2px; gap: 9px; }
+  .rite-head .panel__title::before,
+  .rite-head .panel__title::after { flex-basis: 28px; }
+  .rite-head .rite-sub { font-size: 9.8px; line-height: 1.4; letter-spacing: 0.4px; }
+  .shrine-grid,
+  .curse-grid { gap: 5px; }
+  .panel--shrine .shrine-grid,
+  .panel--curse .curse-grid { margin-bottom: 5px; }
+  .shrine-card,
+  .curse-card { column-gap: 7px; padding: 8px 9px 8px 6px; }
+  .shrine-card { grid-template-columns: auto 36px minmax(0, 1fr); }
+  .curse-card { grid-template-columns: auto 36px minmax(0, 1fr) auto; }
+  .shrine-card__icon,
+  .curse-card__icon { width: 34px; height: 34px; font-size: 20px; }
+  .shrine-card__name,
+  .curse-card__name { font-size: 14px; }
+  .shrine-card__blurb,
+  .curse-card__blurb { font-size: 9.6px; line-height: 1.35; }
+  .curse-card__gold { padding: 1px 6px; font-size: 9.2px; letter-spacing: 0.2px; }
+  .rite-foot { padding-top: 5px; }
+  .curse-hint { font-size: 10px; letter-spacing: 0.2px; }
+  .rite-actions { padding-top: 5px; }
+  .rite-actions .btn { padding: 8px 16px; font-size: 11.5px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--shrine,
+  .panel--curse { padding: 11px 14px 7px; }
+  .rite-head { margin-bottom: 5px; padding-bottom: 4px; }
+  .rite-kicker { font-size: 7px; letter-spacing: 2px; }
+  .rite-kicker::before,
+  .rite-kicker::after { width: 15px; }
+  .rite-head .panel__title { margin: 1px 0; font-size: 16px; letter-spacing: 2.6px; }
+  .rite-head .rite-sub { font-size: 9px; line-height: 1.35; letter-spacing: 0.4px; }
+  .shrine-grid,
+  .curse-grid { gap: 8px; }
+  .panel--shrine .shrine-grid,
+  .panel--curse .curse-grid { margin-bottom: 5px; }
+  .shrine-card,
+  .curse-card { gap: 4px; padding: 10px 10px 8px; }
+  .shrine-card__icon,
+  .curse-card__icon { width: 38px; height: 38px; font-size: 22px; }
+  .shrine-card__name,
+  .curse-card__name { font-size: 14.5px; }
+  .shrine-card__blurb,
+  .curse-card__blurb { font-size: 10px; line-height: 1.35; }
+  .curse-hint { font-size: 9.5px; }
+  .rite-foot { padding-top: 5px; }
+  .rite-actions { padding-top: 5px; }
+  .rite-actions .btn { padding: 7px 16px; font-size: 11.5px; }
+}
