@@ -1818,12 +1818,23 @@ export class UIManager implements UIHost {
     }).join('');
     const earned = ACHIEVEMENTS.reduce((n, a) => n + (this.game.save.achievements.includes(a.id) ? a.embers ?? 0 : 0), 0);
     const totalReward = ACHIEVEMENTS.reduce((n, a) => n + (a.embers ?? 0), 0);
+    const earnedPct = totalReward ? Math.min(100, (earned / totalReward) * 100) : 0;
     this.show(`
       <div class="panel panel--list panel--vellum">
-        <div class="panel__title">成就 · ${this.game.save.achievements.length}/${ACHIEVEMENTS.length}</div>
-        <div class="subtitle">已领取成就奖励 ${earned} / ${totalReward} 余烬</div>
+        <header class="ach-head">
+          <div class="ach-head__copy">
+            <span class="ach-head__kicker">守夜火印</span>
+            <div class="panel__title ach-head__title">成就 · ${this.game.save.achievements.length}/${ACHIEVEMENTS.length}</div>
+            <p class="ach-head__sub">已领取成就奖励 ${earned} / ${totalReward} 余烬</p>
+          </div>
+          <div class="ach-head__progress" aria-hidden="true">
+            <span>奖励进度</span>
+            <b>${earnedPct.toFixed(0)}<i>%</i></b>
+            <em><i style="width:${earnedPct.toFixed(1)}%"></i></em>
+          </div>
+        </header>
         <div class="ach-list">${list}</div>
-        <div class="row-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
+        <div class="row-actions ach-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
       </div>
     `);
     this.on('[data-act="back"]', () => this.backToOrigin());
