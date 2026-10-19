@@ -2681,33 +2681,101 @@ export class Game {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const b of this.beams) {
       const t = clamp(b.life / b.maxLife, 0, 1);
-      // 外圈散光 + 内芯白热：让"瞬间一击"看起来比普通子弹重得多
-      ctx.globalAlpha = 0.22 * t;
+      const dx = b.ex - b.x;
+      const dy = b.ey - b.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.01) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      const w = b.width;
+
+      // 外层先铺一条随时间散开的薄雾。原来的三道等宽实线叠在一起，
+      // 多发齐射时会糊成一块手电筒；这里把"宽"和"亮"拆开，宽度只负责氛围。
+      ctx.globalAlpha = 0.1 * t;
       ctx.strokeStyle = b.color;
-      ctx.lineWidth = b.width * 3.4;
+      ctx.lineWidth = w * (3.1 + (1 - t) * 1.5);
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
       ctx.lineTo(b.ex, b.ey);
       ctx.stroke();
-      ctx.globalAlpha = 0.65 * t;
-      ctx.lineWidth = b.width * 1.5;
+
+      // 主光锥从灯口略收、向命中点微张；颜色也由武器的色过渡到白热。
+      const body = ctx.createLinearGradient(b.x, b.y, b.ex, b.ey);
+      body.addColorStop(0, b.color);
+      body.addColorStop(0.7, b.color);
+      body.addColorStop(1, '#fffbe8');
+      const w0 = w * 0.46;
+      const w1 = w * 1.18;
+      ctx.globalAlpha = 0.45 * t;
+      ctx.fillStyle = body;
       ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.ex, b.ey);
-      ctx.stroke();
-      ctx.globalAlpha = 0.95 * t;
+      ctx.moveTo(b.x + nx * w0, b.y + ny * w0);
+      ctx.lineTo(b.ex + nx * w1, b.ey + ny * w1);
+      ctx.lineTo(b.ex - nx * w1, b.ey - ny * w1);
+      ctx.lineTo(b.x - nx * w0, b.y - ny * w0);
+      ctx.closePath();
+      ctx.fill();
+
+      // 两缕不闭口的细丝：沿长度轻微偏移，给光矛一点"被喷出来"的速度感。
+      // 偏移只取现成的 seed，不引入新的逐帧状态。
+      ctx.globalAlpha = 0.32 * t;
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = Math.max(0.65, w * 0.075);
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i += 1) {
+          const u = i / 6;
+          const spread = w * (0.28 + u * 0.72) * side;
+          const wave = i === 0 || i === 6 ? 0 : Math.sin(b.seed * 0.11 + u * 7.5 + side * 2.1) * w * 0.16 * (1 - u);
+          const px = b.x + dx * u + nx * (spread + wave);
+          const py = b.y + dy * u + ny * (spread + wave);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+
+      // 最里面只留一条很窄的白芯，亮度从命中的那一刻往回退。
+      const core0 = w * 0.13;
+      const core1 = w * 0.34;
+      ctx.globalAlpha = 0.94 * t;
       ctx.strokeStyle = '#fffbe8';
-      ctx.lineWidth = Math.max(1.5, b.width * 0.5);
+      ctx.fillStyle = '#fffbe8';
       ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.ex, b.ey);
-      ctx.stroke();
-      ctx.globalAlpha = 0.7 * t;
+      ctx.moveTo(b.x + nx * core0, b.y + ny * core0);
+      ctx.lineTo(b.ex + nx * core1, b.ey + ny * core1);
+      ctx.lineTo(b.ex - nx * core1, b.ey - ny * core1);
+      ctx.lineTo(b.x - nx * core0, b.y - ny * core0);
+      ctx.closePath();
+      ctx.fill();
+
+      // 命中端：一圈扩散的色光包着小白点，既交代"打到这里"，又不增加判定半径。
+      const bloomR = w * (3 + (1 - t) * 2.2);
+      const bloom = ctx.createRadialGradient(b.ex, b.ey, 0, b.ex, b.ey, bloomR);
+      bloom.addColorStop(0, b.color);
+      bloom.addColorStop(0.34, b.color);
+      bloom.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.24 * t;
+      ctx.fillStyle = bloom;
+      ctx.beginPath();
+      ctx.arc(b.ex, b.ey, bloomR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.84 * t;
+      ctx.fillStyle = '#fffbe8';
+      ctx.beginPath();
+      ctx.arc(b.ex, b.ey, Math.max(0.8, w * 0.55), 0, Math.PI * 2);
+      ctx.fill();
+
+      // 灯口只留一枚很小的亮点：多发齐射时若画得太大，会在角色身上叠成一团白球。
+      ctx.globalAlpha = 0.34 * t;
       ctx.fillStyle = b.color;
       ctx.beginPath();
-      ctx.arc(b.ex, b.ey, b.width * (1.2 + (1 - t) * 1.6), 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, Math.max(1, w * 0.34), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
