@@ -50,7 +50,8 @@ function wrap(v: number, span: number): number {
   return m < 0 ? m + span : m;
 }
 
-function frond(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string): void {
+function frond(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string, fade = 1): void {
+  ctx.globalAlpha = fade;
   const sway = Math.sin(time * 0.55 + shape.phase) * 0.035;
   ctx.rotate(shape.angle + sway);
   ctx.strokeStyle = body;
@@ -77,27 +78,28 @@ function frond(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: numb
       ctx.beginPath();
       ctx.ellipse(0, side * leaf * 0.38, leaf, leaf * 0.28, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.16;
+      ctx.globalAlpha = 0.16 * fade;
       ctx.strokeStyle = rim;
       ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = fade;
       ctx.strokeStyle = body;
       ctx.restore();
     }
   }
 
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = 0.34 * fade;
   ctx.strokeStyle = rim;
   ctx.lineWidth = 1.6;
   ctx.beginPath();
   ctx.moveTo(0, -8);
   ctx.quadraticCurveTo(72, -35, 170, 1);
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
 }
 
-function ruin(ctx: CanvasRenderingContext2D, shape: ForegroundShape, body: string, rim: string): void {
+function ruin(ctx: CanvasRenderingContext2D, shape: ForegroundShape, body: string, rim: string, fade = 1): void {
+  ctx.globalAlpha = fade;
   const n = 7 + (shape.variant % 3);
   ctx.fillStyle = body;
   ctx.beginPath();
@@ -112,7 +114,7 @@ function ruin(ctx: CanvasRenderingContext2D, shape: ForegroundShape, body: strin
   ctx.closePath();
   ctx.fill();
 
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = 0.34 * fade;
   ctx.strokeStyle = rim;
   ctx.lineWidth = 1.8;
   ctx.stroke();
@@ -124,10 +126,11 @@ function ruin(ctx: CanvasRenderingContext2D, shape: ForegroundShape, body: strin
   ctx.lineTo(10, -8);
   ctx.lineTo(36, 12);
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
 }
 
-function crag(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string): void {
+function crag(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string, fade = 1): void {
+  ctx.globalAlpha = fade;
   const n = 8;
   ctx.fillStyle = body;
   ctx.beginPath();
@@ -142,7 +145,7 @@ function crag(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: numbe
   ctx.closePath();
   ctx.fill();
 
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = 0.34 * fade;
   ctx.strokeStyle = rim;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
@@ -154,17 +157,18 @@ function crag(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: numbe
   for (let i = 0; i < 3; i += 1) {
     const x = -38 + i * 34;
     const y = -54 - Math.sin(time * 0.6 + shape.phase + i) * 7;
-    ctx.globalAlpha = 0.16 + 0.08 * Math.sin(time * 1.4 + i);
+    ctx.globalAlpha = (0.16 + 0.08 * Math.sin(time * 1.4 + i)) * fade;
     ctx.fillStyle = rim;
     ctx.beginPath();
     ctx.arc(x, y, 1.2 + (i % 2), 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
   ctx.fillStyle = body;
 }
 
-function iron(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string): void {
+function iron(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: number, body: string, rim: string, fade = 1): void {
+  ctx.globalAlpha = fade;
   ctx.strokeStyle = body;
   ctx.lineCap = 'round';
   ctx.lineWidth = 7;
@@ -182,20 +186,21 @@ function iron(ctx: CanvasRenderingContext2D, shape: ForegroundShape, time: numbe
     ctx.lineTo(px + Math.sin(time * 0.32 + shape.phase + i) * 3, py + 34 + (i % 2) * 11);
     ctx.stroke();
   }
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = 0.34 * fade;
   ctx.strokeStyle = rim;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(0, -20);
   ctx.quadraticCurveTo(76, 10, 188, -26);
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
 }
 
 export class Foreground {
   private stageId = '';
   private profile: ForegroundProfile = FALLBACK;
   private shapes: ForegroundShape[] = [];
+  private farShapes: ForegroundShape[] = [];
   private bokeh: Bokeh[] = [];
 
   ensure(theme: StageTheme): void {
@@ -208,6 +213,11 @@ export class Foreground {
       { x: 1.055, y: 0.13, scale: 0.92, angle: Math.PI - 0.2, phase: rand() * 6.28, variant: 2 },
       { x: -0.06, y: 0.96, scale: 1.08, angle: -0.58, phase: rand() * 6.28, variant: 3 },
       { x: 1.05, y: 0.91, scale: 0.9, angle: Math.PI + 0.5, phase: rand() * 6.28, variant: 4 },
+    ];
+    // 远景只补左右中段，固定在边缘外沿；不消耗新的视觉随机数。
+    this.farShapes = [
+      { x: -0.015, y: 0.34, scale: 0.82, angle: 0.12, phase: 1.3, variant: 5 },
+      { x: 1.015, y: 0.67, scale: 0.78, angle: Math.PI - 0.16, phase: 3.9, variant: 6 },
     ];
     this.bokeh = Array.from({ length: 8 }, (_, i) => ({
       x: rand(),
@@ -223,6 +233,24 @@ export class Foreground {
     if (!this.shapes.length) return;
     const spanW = w + 140;
     const spanH = h + 140;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < this.farShapes.length; i += 1) {
+      if (handheld) continue;
+      const shape = this.farShapes[i];
+      const x = shape.x * w - cam.x * 0.014 + Math.sin(time * 0.19 + shape.phase) * 2.5 + cam.shakeX * 0.7;
+      const y = shape.y * h - cam.y * 0.01 + Math.cos(time * 0.17 + shape.phase) * 2 + cam.shakeY * 0.7;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(shape.scale, shape.scale);
+      if (this.profile.kind === 'frond') frond(ctx, shape, time, this.profile.body, this.profile.rim, 0.5);
+      else if (this.profile.kind === 'ruin') ruin(ctx, shape, this.profile.body, this.profile.rim, 0.5);
+      else if (this.profile.kind === 'crag') crag(ctx, shape, time, this.profile.body, this.profile.rim, 0.5);
+      else iron(ctx, shape, time, this.profile.body, this.profile.rim, 0.5);
+      ctx.restore();
+    }
+    ctx.restore();
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
