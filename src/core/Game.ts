@@ -313,7 +313,7 @@ export interface HUDHost {
   tip(title: string, text: string): void;
   /** 新悬赏落到任务追踪栏：让那块牌子自己亮一下，不再往屏幕中央叠一条重复 toast。 */
   pulseBounty(): void;
-  announce(text: string, big?: boolean): void;
+  announce(text: string, big?: boolean, tone?: 'stage' | 'elite' | 'boss'): void;
   /** 底部那行常驻说明换一份（接了手柄就换成手柄那一行；传 null = 换回键盘那一行）。 */
   setHint(text: string | null): void;
   /** 清掉屏幕上挂着的卡片与排队待讲的（新开一局时用）。 */
@@ -1998,7 +1998,7 @@ export class Game {
       },
       aliveCount: () => this.enemies.count,
       spawnPoint: (speed?: number) => this.randomSpawnPoint(speed),
-      announce: (text: string, big?: boolean) => this.hud?.announce(text, big),
+      announce: (text: string, big?: boolean, tone?: 'stage' | 'elite' | 'boss') => this.hud?.announce(text, big, tone),
       hazard: (kind: string) => this.handleHazard(kind),
       onBossSpawn: (defId: string) => {
         this.audio.play('boss');

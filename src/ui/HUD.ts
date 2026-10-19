@@ -669,9 +669,9 @@ export class HUD implements HUDHost {
    * 提示卡退回队头（那句话还得讲完），短公告也退回去（等它讲完公告再讲）。
    * ⚠ 不退让的话就是"公告 + 两张卡片"一起堆下来，正好糊在屏幕正中的自己身上。
    */
-  announce(text: string, big = false): void {
+  announce(text: string, big = false, tone: 'stage' | 'elite' | 'boss' = 'stage'): void {
     this.announceEl.textContent = text;
-    this.announceEl.className = `announce is-show${big ? ' is-big' : ''}`;
+    this.announceEl.className = `announce is-show${big ? ' is-big' : ''}${tone !== 'stage' ? ` is-${tone}` : ''}`;
     this.announceTimer = big ? 2.4 : 1.6;
     this.announceLinger = 0;
     if (!this.feedMode()) return;

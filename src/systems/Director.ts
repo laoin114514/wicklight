@@ -14,7 +14,7 @@ export interface DirectorContext {
    * 普通怪都传，精英 / 首领不传（它们的登场是给玩家看的，不许刷在视野边上）。
    */
   spawnPoint: (speed?: number) => { x: number; y: number };
-  announce: (text: string, big?: boolean) => void;
+  announce: (text: string, big?: boolean, tone?: 'stage' | 'elite' | 'boss') => void;
   hazard: (kind: string) => void;
   onBossSpawn: (defId: string) => void;
   onStageComplete: () => void;
@@ -173,9 +173,9 @@ export class Director {
         names.push(def.name);
       }
       if (count >= 2) {
-        ctx.announce(`第 ${this.round} 轮 · ${names.slice(0, -1).join('、')} 与 ${names[names.length - 1]} 一同苏醒`, true);
+        ctx.announce(`第 ${this.round} 轮 · ${names.slice(0, -1).join('、')} 与 ${names[names.length - 1]} 一同苏醒`, true, 'boss');
       } else {
-        ctx.announce(`${names[0]} 苏醒`, true);
+        ctx.announce(`${names[0]} 苏醒`, true, 'boss');
       }
     } else {
       this.phase = 'spawning';
@@ -194,7 +194,7 @@ export class Director {
           const affix = ctx.spawnEnemy(eliteId, pos.x, pos.y, this.hpMult * 0.85, this.dmgMult);
           lines.push(`${ENEMY_MAP[eliteId].name}${affix ? ' · ' + affix : ''}`);
         }
-        ctx.announce(`精英来袭：${lines.join('、')}${warning}`, true);
+        ctx.announce(`精英来袭：${lines.join('、')}${warning}`, true, 'elite');
       } else {
         ctx.announce(`第 ${this.wave} 波${warning}`);
       }

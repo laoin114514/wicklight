@@ -9967,3 +9967,80 @@ body.is-touch .hud__build::before { display: none; }
   .chip i { min-width: 11px; height: 11px; font-size: 7px; }
   .chip--relic { width: 19px; height: 19px; min-height: 19px; font-size: 10px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v179 · 首领苏醒：把一条大号公告做成一次登场
+   首领波原本和“第 N 波”共用同一条金字横带，玩家只能从内容里读出这次不同。
+   这里给首领与精英各加一层语气：首领是压暗的蜡红横幅、衬线大字与两点火星，
+   精英是更轻的铜色警示。公告的占位、时长与排队逻辑都不变。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.announce.is-boss {
+  padding: clamp(11px, 1.2vw, 17px) clamp(38px, 5vw, 76px);
+  border-radius: 2px;
+  color: #ffe5c2;
+  font-family: var(--font-display), serif;
+  font-size: clamp(24px, 3.05vw, 42px);
+  letter-spacing: clamp(3px, 0.62vw, 9px);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.82),
+    0 0 12px rgba(255, 102, 48, 0.54),
+    0 0 36px rgba(214, 48, 28, 0.36);
+  background:
+    radial-gradient(ellipse 54% 150% at 50% 50%, rgba(178, 46, 27, 0.24), rgba(128, 28, 18, 0) 72%),
+    linear-gradient(90deg, rgba(18, 7, 7, 0), rgba(18, 7, 7, 0.74) 16%, rgba(24, 8, 7, 0.82) 50%, rgba(18, 7, 7, 0.74) 84%, rgba(18, 7, 7, 0));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 178, 100, 0.08),
+    0 0 52px rgba(140, 24, 14, 0.2);
+}
+.announce.is-boss::before,
+.announce.is-boss::after {
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 181, 94, 0.72) 18%, rgba(218, 55, 33, 0.72) 50%, rgba(255, 181, 94, 0.72) 82%, transparent);
+  box-shadow: 0 0 12px rgba(214, 48, 28, 0.4);
+}
+.announce.is-boss::before { top: 0; }
+.announce.is-boss::after { bottom: 0; }
+.announce.is-boss.is-show { animation: boss-declare 0.92s cubic-bezier(0.18, 0.82, 0.28, 1) both; }
+@keyframes boss-declare {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.13); filter: blur(3px); }
+  34% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; }
+}
+
+.announce.is-elite {
+  color: #ffdaa6;
+  font-family: var(--font-display), serif;
+  letter-spacing: clamp(2px, 0.42vw, 6px);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.78),
+    0 0 18px rgba(255, 158, 58, 0.44);
+  background: radial-gradient(ellipse 64% 150% at 50% 50%, rgba(122, 67, 22, 0.17), rgba(122, 67, 22, 0) 74%);
+}
+.announce.is-elite::before,
+.announce.is-elite::after {
+  left: 4%;
+  right: 4%;
+  background: linear-gradient(90deg, transparent, rgba(218, 167, 92, 0.5), transparent);
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  body.is-touch .announce.is-boss {
+    padding: 5px 13px;
+    font-size: clamp(17px, 3vw, 25px);
+    letter-spacing: clamp(1.5px, 0.5vw, 4px);
+  }
+  body.is-touch .announce.is-elite {
+    padding: 4px 10px;
+    font-size: clamp(14px, 2.35vw, 20px);
+    letter-spacing: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announce.is-boss.is-show { animation: none; }
+}
