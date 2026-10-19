@@ -385,6 +385,136 @@ function bossAura(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
   ctx.restore();
 }
 
+/**
+ * 出生成形：敌人不是凭空长出来，而是先从地面的一圈暗痕里收拢。
+ *
+ * 这层只活 0.4 秒，却正好盖住原来"小一号淡入"那段最容易穿帮的时间：
+ * 地面先被压暗、裂出几道朝向身体的黑纹，一圈带刻点的残环从外向内收紧，
+ * 最后几点尘光贴着地面浮起。普通怪只留三笔，精英与首领才展开更多刻点；
+ * 全程用低透明度，不抢灯火，也不改碰撞与出生节奏。
+ */
+function spawnFormation(ctx: CanvasRenderingContext2D, e: Enemy, time: number, birth: number): void {
+  const fade = 1 - birth;
+  if (fade <= 0.001) return;
+  const r = e.radius;
+  const scale = e.boss ? 1.8 : e.elite ? 1.28 : 1;
+  const span = r * scale;
+  const groundY = e.y + r * 0.62;
+  const spin = time * 0.9 + e.wobble * 0.3;
+  ctx.save();
+
+  // 地面先被压出一块不规则的暗痕：越接近成形，外沿摊得越开、中心越沉。
+  ctx.save();
+  ctx.translate(e.x, groundY);
+  ctx.scale(1, 0.42);
+  const stainR = span * (1.02 + birth * 1.15);
+  const stain = ctx.createRadialGradient(0, 0, span * 0.1, 0, 0, stainR);
+  stain.addColorStop(0, `rgba(1,2,5,${0.62 * fade})`);
+  stain.addColorStop(0.52, `rgba(1,2,5,${0.38 * fade})`);
+  stain.addColorStop(0.82, rgba(e.color, 0.1 * fade));
+  stain.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = stain;
+  ctx.beginPath();
+  ctx.arc(0, 0, stainR, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  // 朝向身体的裂纹：普通怪三道，精英五道，首领八道；只画暗面，不发光。
+  const cracks = e.boss ? 8 : e.elite ? 5 : 3;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < cracks; i += 1) {
+    const a = (i / cracks) * TAU + e.wobble * 0.16 + Math.sin(e.id * 1.7 + i) * 0.09;
+    const inner = span * (0.34 + (i % 3) * 0.05);
+    const outer = span * (0.82 + birth * 0.78 + ((i * 7) % 5) * 0.08);
+    const bend = Math.sin(e.id + i * 2.3) * 0.16;
+    const mid = (inner + outer) * 0.55;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a) * 0.42;
+    const c2 = Math.cos(a + bend);
+    const s2 = Math.sin(a + bend) * 0.42;
+    ctx.strokeStyle = `rgba(1,2,5,${0.5 * fade})`;
+    ctx.lineWidth = e.boss ? 1.7 : 1.1;
+    ctx.beginPath();
+    ctx.moveTo(e.x + ca * inner, groundY + sa * inner);
+    ctx.lineTo(e.x + c2 * mid, groundY + s2 * mid);
+    ctx.lineTo(e.x + ca * outer, groundY + sa * outer);
+    ctx.stroke();
+  }
+
+  // 一圈从外向内收紧的残环，断口让"成形"有方向感；首领额外带十二枚刻点。
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = rgba(e.color, 0.86);
+  ctx.lineWidth = e.boss ? 2 : 1.2;
+  ctx.setLineDash(e.boss ? [5, 7] : [3, 6]);
+  const ringX = span * (0.74 + fade * 1.45);
+  const ringY = ringX * 0.42;
+  ctx.globalAlpha = fade * (e.boss ? 0.5 : 0.34);
+  ctx.beginPath();
+  ctx.ellipse(e.x, groundY, ringX, ringY, 0, spin, spin + Math.PI * 1.32);
+  ctx.stroke();
+  ctx.globalAlpha *= 0.62;
+  ctx.beginPath();
+  ctx.ellipse(e.x, groundY, ringX * 0.84, ringY * 0.84, 0, -spin * 1.35 + 2.1, -spin * 1.35 + 3.7);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 向心拖痕：把"从四周收进来"这件事写得比一圈刻度更直白。
+  const pulls = e.boss ? 12 : e.elite ? 7 : 4;
+  for (let i = 0; i < pulls; i += 1) {
+    const a = (i / pulls) * TAU + spin * 0.5;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a) * 0.42;
+    const from = span * (1.14 + fade * 0.82);
+    const to = span * (0.42 + fade * 0.2);
+    ctx.globalAlpha = fade * (e.boss ? 0.26 : 0.17);
+    ctx.strokeStyle = rgba(e.color, 0.92);
+    ctx.lineWidth = e.boss ? 1.25 : 0.85;
+    ctx.beginPath();
+    ctx.moveTo(e.x + ca * from, groundY + sa * from);
+    ctx.lineTo(e.x + ca * to, groundY + sa * to);
+    ctx.stroke();
+  }
+
+  if (e.boss) {
+    for (let i = 0; i < 12; i += 1) {
+      const a = (i / 12) * TAU - spin * 0.42;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a) * 0.42;
+      const inner = span * 0.34;
+      const outer = span * 0.43;
+      ctx.globalAlpha = fade * (0.18 + (i % 3) * 0.05);
+      ctx.strokeStyle = rgba(e.color, 0.9);
+      ctx.lineWidth = 1.05;
+      ctx.beginPath();
+      ctx.moveTo(e.x + ca * inner, groundY + sa * inner);
+      ctx.lineTo(e.x + ca * outer, groundY + sa * outer);
+      ctx.stroke();
+    }
+  }
+
+  // 贴地浮起的尘光：越接近成形升得越高，最后随 fade 一起收掉。
+  const motes = e.boss ? 9 : e.elite ? 5 : 2;
+  for (let i = 0; i < motes; i += 1) {
+    const a = i * 2.399 + e.wobble;
+    const spread = span * (0.16 + ((i * 37) % 11) * 0.055);
+    const lift = span * (0.2 + birth * (0.7 + (i % 3) * 0.16));
+    const drift = Math.sin(time * 3.4 + i * 1.8 + e.wobble) * span * 0.035;
+    ctx.globalAlpha = fade * (0.22 + (i % 3) * 0.055);
+    ctx.fillStyle = i % 4 === 0 ? rgba('#ffe7bc', 0.9) : rgba(e.color, 0.9);
+    ctx.beginPath();
+    ctx.arc(
+      e.x + Math.cos(a) * spread + drift,
+      groundY + Math.sin(a) * spread * 0.42 - lift,
+      e.boss ? 1.8 : e.elite ? 1.35 : 0.95,
+      0,
+      TAU,
+    );
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function shadow(ctx: CanvasRenderingContext2D, e: Enemy): void {
   const r = e.radius;
   ctx.save();
@@ -3111,6 +3241,7 @@ export function drawEnemy(
 
   // 出生弹出
   const spawnT = e.spawnTimer > 0 ? 1 - e.spawnTimer / 0.4 : 1;
+  if (spawnT < 1) spawnFormation(ctx, e, time, spawnT);
   if (spawnT < 1) {
     ctx.save();
     ctx.globalAlpha = Math.max(0, spawnT);
