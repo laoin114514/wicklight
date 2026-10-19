@@ -9819,3 +9819,151 @@ body.is-touch .lvl-actions__hint { display: none; }
   .rotate.is-on::after,
   .rotate__lamp { animation: none; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v178 · 战地灯牌：左下角那排构筑不再是临时标签
+   武器、被动、遗物、共鸣原本共用同一种圆角胶囊，实战里只能靠字义分辨。
+   这里把它们压进一块带黄铜导轨的暗玻璃牌：武器是长铭牌、被动是方章、
+   遗物是圆蜡印、共鸣是带缺口的铜牌；层级仍由原有数据决定，不增一行 DOM。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.hud__build {
+  gap: 3px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid rgba(192, 138, 62, 0.16);
+  border-left: 2px solid rgba(219, 164, 84, 0.48);
+  border-radius: 3px 8px 8px 3px;
+  background:
+    linear-gradient(90deg, rgba(4, 5, 8, 0.82), rgba(7, 7, 10, 0.5) 68%, rgba(7, 7, 10, 0.08)),
+    repeating-linear-gradient(90deg, rgba(255, 224, 176, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 9px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 222, 160, 0.05),
+    0 7px 20px rgba(0, 0, 0, 0.24);
+}
+.hud__build::before {
+  content: '灯火构筑';
+  position: absolute;
+  left: 8px;
+  top: -14px;
+  color: rgba(224, 197, 151, 0.38);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 2.4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.hud__build::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 228, 168, 0.7), rgba(109, 72, 28, 0.5) 58%, transparent 76%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+.build-row { gap: 5px; align-items: center; }
+.build-row + .build-row {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(192, 138, 62, 0.14);
+}
+.chip {
+  position: relative;
+  gap: 5px;
+  min-height: 20px;
+  padding: 2px 8px 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--c, #888) 42%, rgba(192, 138, 62, 0.12));
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--c, #888) 17%, rgba(255, 255, 255, 0.02)), rgba(4, 5, 8, 0.64)),
+    rgba(6, 7, 10, 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.16),
+    0 2px 7px rgba(0, 0, 0, 0.22);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%);
+}
+.chip::before {
+  content: '';
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c, #fff) 80%, #fff), color-mix(in srgb, var(--c, #fff) 44%, transparent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c, #fff) 45%, transparent);
+  opacity: 0.82;
+}
+.build-row:first-child .chip {
+  color: #f1dfc0;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+.chip i {
+  display: inline-grid;
+  min-width: 13px;
+  height: 13px;
+  place-items: center;
+  padding: 0 2px;
+  border: 1px solid color-mix(in srgb, var(--c, #ffd24e) 38%, rgba(192, 138, 62, 0.18));
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(255, 226, 168, 0.13), rgba(0, 0, 0, 0.28));
+  color: color-mix(in srgb, var(--c, #fff) 66%, #ffe1a4);
+  font-size: 8.5px;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 239, 198, 0.1);
+}
+.chip--passive {
+  min-width: 24px;
+  justify-content: center;
+  padding-inline: 5px 4px;
+  border-radius: 3px;
+}
+.chip--passive::before { display: none; }
+.chip--passive i { min-width: 11px; height: 11px; padding: 0 1px; font-size: 7.5px; }
+.chip--relic {
+  width: 23px;
+  height: 23px;
+  min-height: 23px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  background:
+    radial-gradient(circle at 38% 28%, color-mix(in srgb, var(--c, #fff) 24%, rgba(255, 255, 255, 0.12)), rgba(5, 6, 9, 0.86) 72%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--c, #fff) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 0 8px color-mix(in srgb, var(--c, #fff) 11%, transparent);
+  clip-path: none;
+}
+.chip--relic::before { display: none; }
+.chip--tri {
+  padding: 2px 6px 2px 7px;
+  border-color: rgba(216, 165, 87, 0.45);
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, rgba(255, 220, 148, 0.12), rgba(0, 0, 0, 0.24) 52%),
+    rgba(22, 16, 10, 0.72);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+}
+.chip--tri::before {
+  width: 3px;
+  height: 8px;
+  border-radius: 0;
+  rotate: 45deg;
+}
+
+/* 触屏 HUD 本来就紧：保留灯牌，但不让标题和额外留白挤到战场。 */
+body.is-touch .hud__build { padding: 5px 8px 5px 10px; }
+body.is-touch .hud__build::before { display: none; }
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .hud__build { gap: 2px; padding: 4px 7px 4px 9px; }
+  .build-row + .build-row { margin-top: 1px; padding-top: 3px; }
+  .chip { min-height: 17px; padding: 1px 6px 2px 7px; font-size: 9.5px; }
+  .chip i { min-width: 11px; height: 11px; font-size: 7px; }
+  .chip--relic { width: 19px; height: 19px; min-height: 19px; font-size: 10px; }
+}
