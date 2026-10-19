@@ -5375,9 +5375,18 @@ export class Game {
     pattern: CanvasPattern | null,
   ): void {
     const { x, y, w: ww, h: wh } = wall;
-    // 投影：先声明"这是立起来的东西"
+    // 投影：先声明"这是立起来的东西"。边缘再做一层很薄的扩散，避免像一块贴纸。
     ctx.save();
-    ctx.globalAlpha = 0.45;
+    const shadow = ctx.createLinearGradient(x, y + wh, x + 14, y + wh + 16);
+    shadow.addColorStop(0, 'rgba(0,0,0,0.52)');
+    shadow.addColorStop(0.72, 'rgba(0,0,0,0.24)');
+    shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.rect(x + 6, y + 8, ww + 8, wh + 8);
+    ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#000';
     ctx.fillRect(x + 6, y + 8, ww, wh);
     ctx.restore();
@@ -5390,10 +5399,54 @@ export class Game {
     topLight.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = topLight;
     ctx.fillRect(x, y, ww, wh);
+    // 受光侧的暖冷双色边缘：顶部石棱与左侧立面各留一线，墙体因此有"朝向"。
+    const faceLight = ctx.createLinearGradient(x, y, x + Math.min(ww, 54), y);
+    faceLight.addColorStop(0, 'rgba(255,232,191,0.12)');
+    faceLight.addColorStop(0.34, 'rgba(184,204,239,0.045)');
+    faceLight.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = faceLight;
+    ctx.beginPath();
+    ctx.rect(x, y, ww, wh);
+    ctx.fill();
     // 底部与右侧的暗面
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(x, y + wh - Math.min(10, wh * 0.2), ww, Math.min(10, wh * 0.2));
     ctx.fillRect(x + ww - Math.min(10, ww * 0.2), y, Math.min(10, ww * 0.2), wh);
+    // 墙脚的苔藓/尘积：用不规则软斑，不要一条规规矩矩的色带。
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    for (let i = 0; i < 5; i += 1) {
+      const mx = x + ww * (0.1 + i * 0.2) + Math.sin(i * 4.7) * ww * 0.06;
+      const my = y + wh - Math.min(13, wh * 0.22);
+      const mr = Math.min(ww * 0.16, 18 + (i % 3) * 7);
+      const moss = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+      moss.addColorStop(0, 'rgba(126,168,112,0.13)');
+      moss.addColorStop(0.55, 'rgba(103,143,91,0.055)');
+      moss.addColorStop(1, 'rgba(80,120,70,0)');
+      ctx.fillStyle = moss;
+      ctx.beginPath();
+      ctx.ellipse(mx, my, mr, mr * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    // 石棱缺口与细裂纹
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.36)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i += 1) {
+      const cx = x + ww * (0.18 + i * 0.27) + Math.sin(i * 7.1 + x) * 8;
+      const cy = y + 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.sin(i * 5.3) * 5, cy + Math.min(wh * 0.28, 18 + i * 3));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,238,205,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(x + 3, y + 2);
+    ctx.lineTo(x + ww - 3, y + 2);
+    ctx.stroke();
+    ctx.restore();
     // 顶边一小段月光描边
     ctx.strokeStyle = theme.accent;
     ctx.globalAlpha = 0.45;
@@ -5404,7 +5457,11 @@ export class Game {
     ctx.stroke();
     ctx.globalAlpha = 1;
     // 深色轮廓把石块与地面分开
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    const rim = ctx.createLinearGradient(x, y, x + ww, y + wh);
+    rim.addColorStop(0, 'rgba(0,0,0,0.38)');
+    rim.addColorStop(0.52, 'rgba(0,0,0,0.62)');
+    rim.addColorStop(1, 'rgba(0,0,0,0.78)');
+    ctx.strokeStyle = rim;
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, ww, wh);
   }
@@ -5456,6 +5513,30 @@ export class Game {
           /* pattern 不可用就只留渐变 */
         }
       }
+      // 关卡尺度的大块湿痕/矿斑：贴图负责近景颗粒，这一层负责打散平铺重复。
+      // 只在换关时烘一次，不进入逐帧成本。
+      let seed = 0x51f15e;
+      const rand = (): number => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      g.save();
+      g.setTransform(scale, 0, 0, scale, c.width / 2, c.height / 2);
+      for (let i = 0; i < 22; i += 1) {
+        const x = (rand() * 2 - 1) * lvl.halfW * 0.9;
+        const y = (rand() * 2 - 1) * lvl.halfH * 0.9;
+        const rad = 70 + rand() * 250;
+        const dark = rand() < 0.64;
+        const patch = g.createRadialGradient(x, y, 0, x, y, rad);
+        patch.addColorStop(0, dark ? 'rgba(0,0,0,0.1)' : `${theme.accent}18`);
+        patch.addColorStop(0.62, dark ? 'rgba(0,0,0,0.035)' : `${theme.accent}08`);
+        patch.addColorStop(1, dark ? 'rgba(0,0,0,0)' : `${theme.accent}00`);
+        g.fillStyle = patch;
+        g.beginPath();
+        g.ellipse(x, y, rad, rad * (0.45 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
       // 地面网格：横竖 ~36 条线，位置只跟关卡尺寸有关，也一起烘进来。
       // 逐条 stroke 是 144 条命令、合成一条路径 74 条，而真正贵的是那 36 条 2600px 长的描边
       // （软件光栅化下 ~0.3ms/帧）；烘进来之后每帧一次 drawImage 全带上了。
