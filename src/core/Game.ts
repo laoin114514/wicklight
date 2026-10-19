@@ -627,6 +627,11 @@ interface WallfireGlow {
   y: number;
   life: number;
   maxLife: number;
+  /** 外墙法线：火只从墙面向玩家这一侧铺开。 */
+  nx: number;
+  ny: number;
+  /** 这一下壁火真正够到的半径（随面积词条变化），余光形状跟着它走。 */
+  reach: number;
   radius: number;
 }
 
@@ -3737,6 +3742,9 @@ export class Game {
       y: gy,
       life: WALLFIRE.afterglow,
       maxLife: WALLFIRE.afterglow,
+      nx: ux,
+      ny: uy,
+      reach: radius,
       radius: WALLFIRE.glowRadius,
     });
     if (this.wallfireGlows.length > 6) this.wallfireGlows.shift();
@@ -6330,6 +6338,7 @@ export class Game {
     this.drawFloor(ctx, theme);
     this.drawDecals(ctx);
     this.drawGrounds(ctx);
+    this.drawWallfireGlows(ctx);
     // 手动瞄准的落点标记：和滞行雾 / 险境预警同一层（地上的规矩画在地上），
     // 而且在敌人**之前**——一瓢落在人群里，那个圈本来就该被他们盖住。
     this.drawPourAim(ctx);
@@ -6912,6 +6921,171 @@ export class Game {
         const dist = d.r * (0.82 + h(i + 103) * 0.32);
         ctx.beginPath();
         ctx.arc(d.x + Math.cos(a) * dist, d.y + Math.sin(a) * dist, Math.max(0.55, d.r * (0.025 + h(i + 117) * 0.03)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 壁火余光的外形（v259）：真正撞墙的那一瞬只给一次火星，这层负责把“火是沿墙铺开的”
+   * 留在墙脚 0.7 秒。焦痕、裂纹和火舌都夹在墙线与外法线之间，墙后不画任何东西；
+   * 火舌的长度取这一下真正的命中半径，面积词条把壁火撑大时，余光也会一起变宽。
+   */
+  private drawWallfireGlows(ctx: CanvasRenderingContext2D): void {
+    if (!this.wallfireGlows.length) return;
+    const t = this.time;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const g of this.wallfireGlows) {
+      const fade = clamp(g.life / g.maxLife, 0, 1);
+      const age = 1 - fade;
+      const hot = clamp(fade * 1.45, 0, 1);
+      const tx = -g.ny;
+      const ty = g.nx;
+      // g.x/y 是光照中心（墙外 14px）；焦痕要贴回墙线，否则会像飘在半空。
+      const cx = g.x - g.nx * 14;
+      const cy = g.y - g.ny * 14;
+      const reach = g.reach;
+      const turn = Math.atan2(ty, tx);
+      const hash = (k: number): number => {
+        const v = Math.sin(g.x * 0.019 + g.y * 0.023 + k * 12.9898) * 43758.5453;
+        return v - Math.floor(v);
+      };
+
+      // 烟熏：顺着墙面拉长，靠墙中心最深，两端先淡掉。
+      ctx.globalCompositeOperation = 'source-over';
+      for (let i = 0; i < 9; i += 1) {
+        const u = hash(i) * 2 - 1;
+        const along = u * reach * 0.78;
+        const across = 2 + hash(i + 17) * 9;
+        const px = cx + tx * along + g.nx * across;
+        const py = cy + ty * along + g.ny * across;
+        ctx.globalAlpha = (0.055 + hash(i + 31) * 0.075) * hot;
+        ctx.fillStyle = '#170c07';
+        ctx.beginPath();
+        ctx.ellipse(
+          px,
+          py,
+          reach * (0.055 + hash(i + 47) * 0.085),
+          reach * (0.016 + hash(i + 59) * 0.028),
+          turn,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+
+      // 第一口气里的裂纹：只在撞上的前几帧出现，像石头真的被撞开了。
+      if (hot > 0.15) {
+        ctx.strokeStyle = 'rgba(18,9,5,0.8)';
+        ctx.lineWidth = 1.1;
+        for (let i = 0; i < 5; i += 1) {
+          const start = (hash(i + 71) - 0.5) * reach * 0.44;
+          const len = 5 + hash(i + 83) * 13;
+          const skew = (hash(i + 97) - 0.5) * 0.6;
+          ctx.globalAlpha = 0.26 * hot;
+          ctx.beginPath();
+          ctx.moveTo(cx + tx * start, cy + ty * start);
+          ctx.lineTo(cx + tx * (start + len), cy + ty * (start + len) + skew * len);
+          ctx.stroke();
+        }
+      }
+
+      // 火舌：沿墙排开，只往外法线方向探。外焰压低、内芯短亮，不把整面墙提亮。
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.1 * hot;
+      ctx.fillStyle = '#ff5a1a';
+      ctx.beginPath();
+      ctx.ellipse(cx + g.nx * 8, cy + g.ny * 8, reach * 0.82, 18, turn, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 墙沿热线：断成几段，给出“火铺到了哪里”，但不像一条发光的边线。
+      ctx.strokeStyle = '#ff9a44';
+      ctx.lineWidth = 1.3;
+      for (let i = 0; i < 7; i += 1) {
+        const start = (i / 7 - 0.5) * reach * 1.36 + hash(i + 101) * 9;
+        const len = 8 + hash(i + 107) * 19;
+        ctx.globalAlpha = (0.16 + hash(i + 109) * 0.18) * hot;
+        ctx.beginPath();
+        ctx.moveTo(cx + tx * start + g.nx * 1.5, cy + ty * start + g.ny * 1.5);
+        ctx.lineTo(cx + tx * (start + len) + g.nx * 1.5, cy + ty * (start + len) + g.ny * 1.5);
+        ctx.stroke();
+      }
+
+      const tongues = 11;
+      for (let i = 0; i < tongues; i += 1) {
+        const u = i / (tongues - 1) - 0.5;
+        const along = u * reach * 1.42 + Math.sin(t * 5.2 + i * 2.3 + g.x * 0.01) * 1.5;
+        const drift = hash(i + 113) - 0.5;
+        const bx = cx + tx * along + g.nx * 2;
+        const by = cy + ty * along + g.ny * 2;
+        const wide = 3.2 + hash(i + 127) * 4.8;
+        const out = 8 + hash(i + 139) * 17;
+        const high = (13 + hash(i + 149) * 31) * (0.55 + hot * 0.45);
+        // 外推距离里提前吃掉一部分“屏幕向上”：墙在上方时，火尖也必须留在墙外，
+        // 不能因为统一向上飘而折回墙体里面。
+        const push = out + high * 0.42;
+        const tipX = bx + g.nx * push + tx * drift * wide;
+        const tipY = by + g.ny * push + ty * drift * wide - high * 0.55;
+        const flare = 0.72 + 0.28 * Math.sin(t * 6.4 + i * 1.7 + g.x * 0.02);
+        ctx.globalAlpha = (0.28 + hash(i + 157) * 0.22) * hot * flare;
+        ctx.fillStyle = i % 3 === 0 ? '#ffc064' : '#ff7224';
+        ctx.beginPath();
+        ctx.moveTo(bx - tx * wide, by - ty * wide);
+        ctx.quadraticCurveTo(
+          bx - tx * wide * 0.8 + g.nx * push * 0.55,
+          by - ty * wide * 0.8 + g.ny * push * 0.55 - high * 0.22,
+          tipX,
+          tipY,
+        );
+        ctx.quadraticCurveTo(
+          bx + tx * wide * 0.9 + g.nx * push * 0.72,
+          by + ty * wide * 0.9 + g.ny * push * 0.72 - high * 0.18,
+          bx + tx * wide,
+          by + ty * wide,
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        if (i % 2 === 0) {
+          ctx.globalAlpha *= 0.7;
+          ctx.fillStyle = '#fff0bb';
+          ctx.beginPath();
+          ctx.moveTo(bx - tx * wide * 0.28, by - ty * wide * 0.28);
+          ctx.quadraticCurveTo(
+            bx + g.nx * push * 0.38,
+            by + g.ny * push * 0.38 - high * 0.28,
+            tipX,
+            tipY,
+          );
+          ctx.quadraticCurveTo(
+            bx + tx * wide * 0.35 + g.nx * push * 0.56,
+            by + ty * wide * 0.35 + g.ny * push * 0.56 - high * 0.2,
+            bx + tx * wide * 0.28,
+            by + ty * wide * 0.28,
+          );
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // 少量火星沿墙面甩出去，数量比一次爆炸少得多；它们只跟随这一下的余烬寿命。
+      ctx.fillStyle = '#ffbf62';
+      for (let i = 0; i < 7; i += 1) {
+        const cycle = (age * (2.2 + hash(i + 163) * 2.1) + hash(i + 173)) % 1;
+        const along = (hash(i + 179) * 2 - 1) * reach * 0.74;
+        const out = 2 + cycle * (6 + hash(i + 181) * 16);
+        ctx.globalAlpha = (1 - cycle) * hot * 0.34;
+        ctx.beginPath();
+        ctx.arc(
+          cx + tx * along + g.nx * out,
+          cy + ty * along + g.ny * out - cycle * 13,
+          0.55 + hash(i + 191) * 0.7,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
       }
     }
