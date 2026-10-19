@@ -4801,6 +4801,7 @@ export class Game {
     this.light.setScale(r.dpr, this.profile.lightScale);
     this.light.setOccluders(this.level.walls);
     this.light.render(ctx, this.camera, w, h, this.time);
+    this.drawWallBounce(ctx);
     this.drawPyreGlow(ctx, w, h);
     this.drawEmberGlow(ctx, w, h);
     this.drawFrostHaze(ctx, w, h);
@@ -4866,6 +4867,70 @@ export class Game {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 墙脚受光：朝向提灯的那几条墙棱在暗幕之后补一层暖边。
+   *
+   * 墙本身是烘焙好的静态精灵，进了暗幕就只剩一块黑；而玩家手里的灯是活的，
+   * 光落在墙上时，墙的朝向本该读得出来。这里不改墙的整体亮度，只沿着朝向玩家的
+   * 棱留 8~30px 的暖色衰减；拐角处两面自然叠亮，墙的体积也就立起来了。
+   */
+  private drawWallBounce(ctx: CanvasRenderingContext2D): void {
+    const p = this.player;
+    const cam = this.camera;
+    const reach = p.lightRadius + 64;
+    const pulse = 0.88 + Math.sin(this.time * 7.3) * 0.08 + Math.sin(this.time * 3.1 + 1.7) * 0.04;
+    const brightness = clamp(p.brightness, 0, 1) * pulse;
+    if (brightness <= 0.02) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const wall of this.level.walls) {
+      const nx = clamp(p.x, wall.x, wall.x + wall.w);
+      const ny = clamp(p.y, wall.y, wall.y + wall.h);
+      const dx = p.x - nx;
+      const dy = p.y - ny;
+      const d = Math.hypot(dx, dy);
+      if (d > reach) continue;
+      const strength = Math.pow(1 - d / reach, 0.7) * brightness;
+      if (strength <= 0.015) continue;
+      // 被另一面墙挡住的棱不该亮：这道边是"灯照到墙面上"，不是穿墙的光。
+      if (d > 6) {
+        const hit = rayWalls(p.x, p.y, dx / d, dy / d, d - 3, this.level.walls);
+        if (hit < d - 5) continue;
+      }
+      const tl = cam.worldToScreen(wall.x, wall.y);
+      const br = cam.worldToScreen(wall.x + wall.w, wall.y + wall.h);
+      const sx = tl.x;
+      const sy = tl.y;
+      const sw = br.x - tl.x;
+      const sh = br.y - tl.y;
+      const ps = cam.worldToScreen(p.x, p.y);
+      const band = Math.max(8, Math.min(30, Math.min(sw, sh) * 0.24));
+      const edge = (x: number, y: number, ew: number, eh: number, vertical: boolean): void => {
+        const g = vertical
+          ? ctx.createLinearGradient(x, 0, x + ew, 0)
+          : ctx.createLinearGradient(0, y, 0, y + eh);
+        g.addColorStop(0, 'rgba(255,170,88,0)');
+        g.addColorStop(0.42, `rgba(255,178,98,${(0.13 * strength).toFixed(3)})`);
+        g.addColorStop(0.54, `rgba(255,232,184,${(0.22 * strength).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(255,170,88,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, ew, eh);
+      };
+      // 只画朝向玩家的面：墙背后被遮住的那一侧不画。
+      if (ps.x < sx) edge(sx - band * 0.18, sy, band, sh, true);
+      else if (ps.x > sx + sw) edge(sx + sw - band * 0.82, sy, band, sh, true);
+      if (ps.y < sy) edge(sx, sy - band * 0.18, sw, band, false);
+      else if (ps.y > sy + sh) edge(sx, sy + sh - band * 0.82, sw, band, false);
+      // 贴着砖缝的一线亮边：不用整条描边，只在朝向玩家的那面留一笔。
+      ctx.fillStyle = `rgba(255,226,168,${(0.17 * strength).toFixed(3)})`;
+      if (ps.x < sx) ctx.fillRect(sx - 0.5, sy, 1, sh);
+      else if (ps.x > sx + sw) ctx.fillRect(sx + sw - 0.5, sy, 1, sh);
+      if (ps.y < sy) ctx.fillRect(sx, sy - 0.5, sw, 1);
+      else if (ps.y > sy + sh) ctx.fillRect(sx, sy + sh - 0.5, sw, 1);
     }
     ctx.restore();
   }
