@@ -4982,7 +4982,7 @@ export class Game {
       (a, b) => Math.hypot(a.x - cam.x, a.y - cam.y) - Math.hypot(b.x - cam.x, b.y - cam.y),
     );
     ctx.save();
-    ctx.font = '600 12px system-ui, -apple-system, "Noto Sans SC", sans-serif';
+    const labelFont = '600 12px system-ui, -apple-system, "Noto Sans SC", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // 已经放下的标签框：两个目标在同一个方向上时，两个标签会直接压在一起
@@ -5005,30 +5005,42 @@ export class Game {
       ctx.save();
       ctx.translate(ax, ay);
       ctx.rotate(ang);
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = t.color;
+      // 先压一圈暗底再填色：箭头落在浅色地面上时也能保住剪影
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = 'rgba(2,3,6,0.92)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(11, 0);
       ctx.lineTo(-8, -8);
       ctx.lineTo(-8, 8);
       ctx.closePath();
+      ctx.stroke();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = t.color;
       ctx.fill();
       ctx.restore();
-      ctx.globalAlpha = 0.72;
-      ctx.fillStyle = t.color;
       const dist = Math.round(Math.hypot(dx, dy) / cam.zoom / 100) * 100;
       const label = `${t.label} ${dist}`;
-      const tw = ctx.measureText(label).width;
-      const baseX = clamp(ax - Math.cos(ang) * 40, left + 26, w - right - 12);
-      const baseY = clamp(ay - Math.sin(ang) * 40, top, h - bottom);
+      ctx.font = labelFont;
+      const labelW = ctx.measureText(label).width;
+      const padX = 9;
+      const plateH = 21;
+      const tw = padX * 2 + 4 + labelW;
+      // 钳的是整块铭牌的边，而不是文字中心：牌子的左右两翼也要留在 HUD 口袋之外
+      const minX = left + tw / 2 + 4;
+      const maxX = w - right - tw / 2 - 4;
+      const minY = top + plateH / 2 + 2;
+      const maxY = h - bottom - plateH / 2 - 2;
+      const baseX = clamp(ax - Math.cos(ang) * 40, minX, maxX);
+      const baseY = clamp(ay - Math.sin(ang) * 40, minY, maxY);
       // 法线方向（箭头方向转 90°）：沿它左右让开，让开之后仍然贴着箭头，读起来还是一组
       const nx = -Math.sin(ang);
       const ny = Math.cos(ang);
       let tx = baseX;
       let ty = baseY;
       for (const step of [0, 18, -18, 36, -36]) {
-        const cx = clamp(baseX + nx * step, left + 26, w - right - 12);
-        const cy = clamp(baseY + ny * step, top + 8, h - bottom - 8);
+        const cx = clamp(baseX + nx * step, minX, maxX);
+        const cy = clamp(baseY + ny * step, minY, maxY);
         const clash = placed.some((b) => Math.abs(b.x - cx) < (b.w + tw) / 2 + 6 && Math.abs(b.y - cy) < 15);
         if (!clash || step === -36) {
           tx = cx;
@@ -5037,7 +5049,34 @@ export class Game {
         }
       }
       placed.push({ x: tx, y: ty, w: tw });
-      ctx.fillText(label, tx, ty);
+      // 暗玻璃铭牌：左侧一道目标色灯芯，名字与距离共用一行。
+      // 不再是一行飘在暗处的字，边缘和玩家脚下的地面不会互相吃掉。
+      const x0 = tx - tw / 2;
+      const y0 = ty - plateH / 2;
+      ctx.globalAlpha = 0.82;
+      ctx.fillStyle = 'rgba(5,7,11,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(x0 + 5, y0);
+      ctx.lineTo(x0 + tw - 5, y0);
+      ctx.lineTo(x0 + tw, y0 + plateH / 2);
+      ctx.lineTo(x0 + tw - 5, y0 + plateH);
+      ctx.lineTo(x0 + 5, y0 + plateH);
+      ctx.lineTo(x0, y0 + plateH / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.34;
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = t.color;
+      ctx.fillRect(x0 + 3.5, y0 + 5, 1.5, plateH - 10);
+      ctx.globalAlpha = 0.95;
+      ctx.textAlign = 'left';
+      ctx.font = labelFont;
+      ctx.fillStyle = t.color;
+      ctx.fillText(label, x0 + padX + 2, ty + 0.5);
+      ctx.textAlign = 'center';
       ctx.globalAlpha = 1;
     }
     ctx.restore();

@@ -251,8 +251,11 @@ const SCENES = {
     game.newRun('warden', 'normal', false);
     fight(200);
     game.enemies.clear();
-    game.enemies.spawn('wickmother', 170, 40, 1, 1);
-    game.enemies.spawn('darkless', -180, -60, 1, 1);
+    const a = game.enemies.spawn('wickmother', 170, 40, 1, 1);
+    const b = game.enemies.spawn('darkless', -180, -60, 1, 1);
+    // 词缀纹章（v128）：给两只精英各挂一条，截图里能同时看到暖金精英光与冷色词缀环
+    a.affix = 'warded';
+    b.affix = 'haste';
     fight(60, { spawnEvery: 30, spawnCount: 1 });
   },
   lowhp() {

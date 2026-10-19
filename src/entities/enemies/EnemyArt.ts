@@ -269,6 +269,103 @@ function shadow(ctx: CanvasRenderingContext2D, e: Enemy): void {
   ctx.restore();
 }
 
+/**
+ * 精英的「在场感」：一圈随呼吸明灭的薄光，外面巡游四枚菱形刻点。
+ * 精英本来就比杂兵大一圈，但黑暗里只剩剪影时，尺寸差异会先被灯光吃掉；
+ * 这层光不提高亮度，只是让轮廓先被看见——有词缀时直接借词缀的颜色。
+ */
+function eliteHalo(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
+  const r = e.radius;
+  const aff = e.affix ? AFFIX_MAP[e.affix] : null;
+  const color = aff?.color ?? '#ffcf8a';
+  const pulse = 0.5 + 0.5 * Math.sin(time * 2.2 + e.wobble);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  const halo = ctx.createRadialGradient(e.x, e.y, r * 0.72, e.x, e.y, r * 1.56);
+  halo.addColorStop(0, rgba(color, 0));
+  halo.addColorStop(0.62, rgba(color, 0.05 + pulse * 0.035));
+  halo.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.56, 0, TAU);
+  ctx.fill();
+
+  const spin = time * 0.18 + e.wobble * 0.2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.1;
+  ctx.globalAlpha = 0.2 + pulse * 0.12;
+  ctx.setLineDash([2, 9]);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.22, spin, spin + Math.PI * 1.38);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.22, spin + Math.PI, spin + Math.PI * 2.38);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = color;
+  for (let i = 0; i < 4; i += 1) {
+    const a = spin * 1.3 + (i / 4) * TAU;
+    const x = e.x + Math.cos(a) * r * 1.22;
+    const y = e.y + Math.sin(a) * r * 1.22;
+    const s = 1.8 + (i % 2) * 0.9;
+    ctx.globalAlpha = 0.28 + pulse * 0.24;
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 0.72, y);
+    ctx.lineTo(x, y + s);
+    ctx.lineTo(x - s * 0.72, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * 词缀纹章：三段反向旋转的细弧，外面三枚菱刻。
+ * 原来只是一圈虚线，和减速 / 标灯那些状态环混在一起；改成印记之后，
+ * 「这只怪带着词缀」和「这只怪此刻中了什么状态」能分开读。
+ */
+function affixSigil(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
+  const aff = e.affix ? AFFIX_MAP[e.affix] : null;
+  if (!aff) return;
+  const r = e.radius;
+  const spin = time * 0.4 + e.wobble * 0.35;
+  const pulse = 0.5 + 0.5 * Math.sin(time * 3 + e.wobble);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = aff.color;
+  ctx.fillStyle = aff.color;
+  ctx.lineWidth = 1.4;
+  ctx.globalAlpha = 0.4 + pulse * 0.18;
+  for (let i = 0; i < 3; i += 1) {
+    const a = spin + (i / 3) * TAU;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r + 7, a, a + 0.4);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 3; i += 1) {
+    const a = -spin * 0.9 + (i / 3) * TAU + 0.5;
+    const x = e.x + Math.cos(a) * (r + 7);
+    const y = e.y + Math.sin(a) * (r + 7);
+    const s = 2.4 + pulse * 0.5;
+    ctx.globalAlpha = 0.55 + pulse * 0.2;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a + Math.PI / 4);
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s * 0.72, 0);
+    ctx.lineTo(0, s);
+    ctx.lineTo(-s * 0.72, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 /** 朝向灯火的湿润高光与细碎材质反光。只裁在身体里，不改剪影。 */
 function bodySheen(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: number, body: string): void {
   const r = e.radius;
@@ -885,6 +982,7 @@ export function drawEnemy(
   // 回响是"过去的你的影子"，所以整体压成半透明，跟实体敌人区分开
   if (id === 'echo' && e.hitFlash <= 0) ctx.globalAlpha = 0.82;
   shadow(ctx, e);
+  if (e.elite) eliteHalo(ctx, e, time);
   bodyPath(ctx, e, id, time);
   litFill(ctx, e, px, py, body, r);
   bodySheen(ctx, e, id, time, body);
@@ -1047,18 +1145,7 @@ export function drawEnemy(
   }
 
   if (e.affix) {
-    const aff = AFFIX_MAP[e.affix];
-    if (aff) {
-      ctx.globalAlpha = 0.8;
-      ctx.strokeStyle = aff.color;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, r + 8, 0, TAU);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
+    affixSigil(ctx, e, time);
   }
 
   if (e.boss && e.bossCd > 0 && e.bossCd < 0.6) {
@@ -1067,12 +1154,35 @@ export function drawEnemy(
   }
 
   if (e.elite || e.boss) {
-    const bw = e.boss ? 140 : 46;
+    const bw = e.boss ? 140 : 48;
+    const bh = e.boss ? 7 : 5;
     const y = e.y - r - 14;
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(e.x - bw / 2 - 1, y - 1, bw + 2, (e.boss ? 7 : 5) + 2);
+    // 暗玻璃底 + 细金边：血条不再是浮在黑里的一条色块，精英的那条也能在泛光上立住
+    ctx.fillStyle = 'rgba(3,3,8,0.76)';
+    ctx.fillRect(e.x - bw / 2 - 1.5, y - 1.5, bw + 3, bh + 3);
+    ctx.strokeStyle = e.boss ? 'rgba(255,77,109,0.4)' : 'rgba(255,196,120,0.36)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(e.x - bw / 2 - 1.5, y - 1.5, bw + 3, bh + 3);
     ctx.fillStyle = e.boss ? '#ff4d6d' : '#ffb14e';
-    ctx.fillRect(e.x - bw / 2, y, bw * Math.max(0, e.hp / e.maxHp), e.boss ? 7 : 5);
+    ctx.fillRect(e.x - bw / 2, y, bw * Math.max(0, e.hp / e.maxHp), bh);
+    if (e.elite) {
+      const aff = e.affix ? AFFIX_MAP[e.affix] : null;
+      ctx.fillStyle = aff?.color ?? '#ffd9a0';
+      ctx.fillRect(e.x - bw / 2 - 3.5, y, 1.5, bh);
+      // 两端各一枚小小的灯钉，让这条血条像器物上的铭牌，而不是 UI 浮层
+      ctx.beginPath();
+      ctx.moveTo(e.x - bw / 2 - 4.5, y - 4);
+      ctx.lineTo(e.x - bw / 2 - 2, y - 4.5);
+      ctx.lineTo(e.x - bw / 2 - 2, y - 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(e.x + bw / 2 + 4.5, y - 4);
+      ctx.lineTo(e.x + bw / 2 + 2, y - 4.5);
+      ctx.lineTo(e.x + bw / 2 + 2, y - 1.5);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   if (spawnT < 1) ctx.restore();
