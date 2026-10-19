@@ -8221,3 +8221,202 @@ body.is-touch .lvl-actions__hint { display: none; }
   .rite-actions { padding-top: 5px; }
   .rite-actions .btn { padding: 7px 16px; font-size: 11.5px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v162 · 构筑总览：给长卷装一页目录
+   构筑越堆越多以后，手机上一屏只能看见两条武器，回战斗键被埋在几屏之外。
+   这一版把总览拆成可跳转的章节，条目在窄屏改成双列铭牌，
+   目录轨与返回键分别吸在上下边缘；内容、数值与操作都没有删改。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--loadout {
+  width: min(94vw, 1060px);
+  padding-bottom: 12px;
+}
+.panel--loadout .panel__title { margin-bottom: 8px; }
+.panel--loadout .lo-head { margin-top: 0; margin-bottom: 9px; }
+.panel--loadout .stats { margin: 10px 0 8px; }
+
+.lo-sec { min-width: 0; scroll-margin-top: 48px; }
+.lo-sec > h4:first-child { margin-top: 9px; }
+.lo-list--evolutions { display: block; min-width: 0; }
+.lo-sec:target > h4:first-child {
+  color: #ffe3ad;
+  border-bottom-color: rgba(255, 196, 100, 0.34);
+  text-shadow: 0 0 12px rgba(255, 180, 80, 0.26);
+}
+
+.lo-jump {
+  position: sticky;
+  top: -1px;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px -28px 5px;
+  padding: 5px 28px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(192, 138, 62, 0.13);
+  border-bottom: 1px solid rgba(192, 138, 62, 0.2);
+  background:
+    linear-gradient(90deg, rgba(192, 138, 62, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 18px),
+    linear-gradient(180deg, rgba(24, 25, 29, 0.98), rgba(11, 12, 16, 0.99));
+  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.34);
+  scrollbar-width: none;
+}
+.lo-jump::-webkit-scrollbar { display: none; }
+.lo-jump a {
+  flex: 0 0 auto;
+  padding: 3px 9px 4px;
+  border: 1px solid rgba(192, 138, 62, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 222, 160, 0.035);
+  color: rgba(232, 214, 182, 0.68);
+  font-size: 9.5px;
+  letter-spacing: 0.8px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lo-jump a b {
+  margin-left: 2px;
+  color: var(--amber);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+.lo-jump a:hover {
+  border-color: rgba(255, 196, 100, 0.44);
+  color: #ffe3ad;
+}
+
+.lo-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 5;
+  margin: 11px 0 0;
+  padding: 9px 0 1px;
+  border-top: 1px solid rgba(192, 138, 62, 0.16);
+  background: linear-gradient(180deg, rgba(10, 11, 16, 0), rgba(10, 11, 16, 0.97) 38%, #0a0b10 100%);
+}
+
+@media (max-width: 720px) {
+  .panel--loadout { padding: 15px 12px 8px; }
+  .panel--loadout .panel__title { margin-bottom: 5px; font-size: 18px; letter-spacing: 2.5px; }
+  .panel--loadout .lo-head { gap: 4px 8px; margin-bottom: 7px; }
+  .panel--loadout .lo-head b { font-size: 14px; letter-spacing: 1.2px; }
+  .panel--loadout .lo-head span { font-size: 10px; letter-spacing: 0.4px; }
+  .panel--loadout .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 0 6px; }
+  .panel--loadout .stats > div { padding: 6px 7px; }
+  .panel--loadout .stats span { font-size: 10px; letter-spacing: 0.2px; }
+  .panel--loadout .stats b { font-size: 12.5px; }
+
+  .lo-jump {
+    margin: 5px -12px 4px;
+    padding: 5px 12px;
+    gap: 5px;
+  }
+  .lo-jump a {
+    padding: 3px 8px 4px;
+    font-size: 9px;
+  }
+  .lo-jump a b {
+    font-size: 9px;
+  }
+
+  .lo-grid { grid-template-columns: 1fr; gap: 0; margin-top: 2px; }
+  .lo-sec > h4,
+  .lo-col h4 { margin: 9px 0 5px; padding-bottom: 4px; font-size: 10.5px; letter-spacing: 1.5px; }
+  .lo-col h4 b { font-size: 10.5px; }
+  .lo-attrs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+  .lo-attrs > div { padding: 5px 8px; font-size: 10.5px; }
+  .lo-actions { margin-top: 7px; padding-top: 6px; }
+  .lo-actions .btn { padding: 9px 18px; font-size: 12px; }
+}
+
+@media (max-width: 560px) {
+  .lo-list--weapons,
+  .lo-list--passives,
+  .lo-list--relics,
+  .lo-list--tribes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 5px;
+  }
+  .lo-list--weapons .lo-row,
+  .lo-list--passives .lo-row,
+  .lo-list--relics .lo-row { margin-bottom: 0; }
+  .lo-list .lo-empty { grid-column: 1 / -1; }
+  .lo-row { gap: 1px 7px; padding: 6px 8px; }
+  .lo-row--tight { padding: 5px 8px; }
+  .lo-row__name { overflow: hidden; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .lo-row__lv { font-size: 10px; }
+  .lo-row__blurb { font-size: 10px; line-height: 1.42; }
+  .lo-tag { margin-left: 4px; padding: 0 4px; font-size: 8.5px; letter-spacing: 0.5px; }
+  .lo-tri { padding: 6px 8px; }
+  .lo-tri__head { align-items: center; gap: 4px; }
+  .lo-tri__head b { font-size: 11.5px; }
+  .lo-tri__head i { font-size: 9.5px; }
+  .lo-tri__body { margin-top: 2px; font-size: 9.8px; line-height: 1.38; }
+  .lo-evo { padding: 7px 9px 6px; margin-bottom: 5px; }
+  .lo-evo__head { gap: 6px; }
+  .lo-evo__head b { font-size: 12px; }
+  .lo-evo__head em { padding-inline: 5px; font-size: 11px; }
+  .lo-evo__need { gap: 4px; margin-top: 4px; padding-left: 14px; }
+  .lo-evo__req { padding: 1px 6px; font-size: 9.5px; }
+  .lo-evo__req.is-met { padding-right: 17px; }
+  .lo-curse,
+  .lo-bounty,
+  .lo-pact { padding: 6px 8px; }
+  .lo-curse b,
+  .lo-bounty b { font-size: 12px; }
+  .lo-curse span,
+  .lo-bounty span,
+  .lo-pact span { font-size: 10px; line-height: 1.4; }
+  .lo-pact b { font-size: 11.5px; }
+  .lo-pact__sum { margin-top: 4px; font-size: 10.5px; }
+  .dmg-block { margin-top: 6px; padding: 7px 9px; }
+  .dmg-block__title { margin-bottom: 5px; font-size: 10.5px; letter-spacing: 2px; }
+  .dmg-row { grid-template-columns: 72px 1fr auto; gap: 7px; font-size: 10.5px; }
+}
+
+@media (max-width: 400px) {
+  .panel--loadout { padding: 12px 8px 7px; }
+  .panel--loadout .panel__title { font-size: 16.5px; }
+  .panel--loadout .lo-head b { font-size: 13px; }
+  .panel--loadout .lo-head span { font-size: 9.2px; }
+  .panel--loadout .stats > div { padding: 5px 6px; }
+  .panel--loadout .stats span { font-size: 9.2px; }
+  .panel--loadout .stats b { font-size: 11.5px; }
+  .lo-jump { margin-inline: -8px; padding-inline: 8px; gap: 4px; }
+  .lo-jump a { padding: 2px 6px 3px; font-size: 8.4px; }
+  .lo-jump a b { font-size: 8.4px; }
+  .lo-row { padding: 5px 6px; }
+  .lo-row__name { font-size: 11.5px; }
+  .lo-row__lv { font-size: 9px; }
+  .lo-row__blurb { font-size: 9.2px; line-height: 1.36; }
+  .lo-tri { padding: 5px 6px; }
+  .lo-tri__head b { font-size: 10.8px; }
+  .lo-tri__body { font-size: 9.1px; }
+  .lo-attrs > div { padding: 4px 6px; font-size: 9.5px; }
+  .lo-actions .btn { padding: 8px 15px; font-size: 11px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--loadout { padding: 11px 14px 7px; }
+  .panel--loadout .panel__title { margin-bottom: 4px; font-size: 16px; letter-spacing: 2.5px; }
+  .panel--loadout .lo-head { gap: 4px 8px; margin-bottom: 5px; }
+  .panel--loadout .lo-head b { font-size: 13px; }
+  .panel--loadout .lo-head span { font-size: 9.5px; }
+  .panel--loadout .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; margin: 7px 0 4px; }
+  .panel--loadout .stats > div { padding: 5px 8px; }
+  .panel--loadout .stats span { font-size: 9.5px; }
+  .panel--loadout .stats b { font-size: 12px; }
+  .lo-jump { margin: 4px -14px 4px; padding: 4px 14px; }
+  .lo-jump a { padding: 2px 7px 3px; font-size: 8.5px; }
+  .lo-grid { gap: 6px 14px; margin-top: 1px; }
+  .lo-sec > h4,
+  .lo-col h4 { margin: 7px 0 4px; padding-bottom: 3px; font-size: 10px; }
+  .lo-actions { margin-top: 6px; padding-top: 5px; }
+  .lo-actions .btn { padding: 7px 16px; font-size: 11.5px; }
+}

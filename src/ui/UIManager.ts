@@ -726,38 +726,59 @@ export class UIManager implements UIHost {
           <div><span>造成伤害</span><b>${num(s.damageDealt)}</b></div>
           <div><span>最高连击</span><b>${s.bestCombo}</b></div>
         </div>
+        <nav class="lo-jump" aria-label="构筑目录">
+          <a href="#lo-weapons">武器 <b>${p.weapons.size}</b></a>
+          <a href="#lo-relics">遗物 <b>${p.relics.size}</b></a>
+          <a href="#lo-evolution">进化</a>
+          <a href="#lo-status">战况</a>
+          <a href="#lo-trail">足迹</a>
+        </nav>
         <div class="lo-grid">
           <section class="lo-col">
-            <h4>武器 <b>${p.weapons.size}</b></h4>
-            ${weapons || '<div class="lo-empty">还没有武器</div>'}
-            <h4>被动 <b>${p.passives.size}</b></h4>
-            ${passives || '<div class="lo-empty">还没有被动</div>'}
-            <h4>进化路线</h4>
-            ${evoRows}
-            ${this.damageBlock()}
+            <div class="lo-sec" id="lo-weapons">
+              <h4>武器 <b>${p.weapons.size}</b></h4>
+              <div class="lo-list lo-list--weapons">${weapons || '<div class="lo-empty">还没有武器</div>'}</div>
+            </div>
+            <div class="lo-sec">
+              <h4>被动 <b>${p.passives.size}</b></h4>
+              <div class="lo-list lo-list--passives">${passives || '<div class="lo-empty">还没有被动</div>'}</div>
+            </div>
+            <div class="lo-sec" id="lo-evolution">
+              <h4>进化路线</h4>
+              <div class="lo-list lo-list--evolutions">${evoRows}</div>
+            </div>
+            <div class="lo-sec">${this.damageBlock()}</div>
           </section>
           <section class="lo-col">
-            <h4>遗物 <b>${p.relics.size}</b></h4>
-            ${relics || '<div class="lo-empty">还没有遗物</div>'}
-            <h4>灯火共鸣</h4>
-            ${tribeRows}
-            <h4>灯火</h4>
-            ${this.lightBlock()}
-            <h4>夜咒</h4>
-            ${curse}
-            <h4>深宵之约</h4>
-            ${this.pactBlock()}
-            <h4>悬赏</h4>
-            ${bounty}
-            <h4>掠影</h4>
-            ${graze}
-            ${mineBlock ? `<h4>伏灯</h4>${mineBlock}` : ''}
-            ${vortexBlock ? `<h4>旋灯</h4>${vortexBlock}` : ''}
-            ${lampBlock ? `<h4>弃灯</h4>${lampBlock}` : ''}
+            <div class="lo-sec" id="lo-relics">
+              <h4>遗物 <b>${p.relics.size}</b></h4>
+              <div class="lo-list lo-list--relics">${relics || '<div class="lo-empty">还没有遗物</div>'}</div>
+            </div>
+            <div class="lo-sec">
+              <h4>灯火共鸣</h4>
+              <div class="lo-list lo-list--tribes">${tribeRows}</div>
+            </div>
+            <div class="lo-sec" id="lo-status">
+              <h4>灯火</h4>
+              ${this.lightBlock()}
+              <h4>夜咒</h4>
+              ${curse}
+              <h4>深宵之约</h4>
+              ${this.pactBlock()}
+              <h4>悬赏</h4>
+              ${bounty}
+            </div>
+            <div class="lo-sec" id="lo-trail">
+              <h4>掠影</h4>
+              ${graze}
+              ${mineBlock ? `<h4>伏灯</h4>${mineBlock}` : ''}
+              ${vortexBlock ? `<h4>旋灯</h4>${vortexBlock}` : ''}
+              ${lampBlock ? `<h4>弃灯</h4>${lampBlock}` : ''}
+            </div>
           </section>
         </div>
         <div class="lo-attrs">${attrs}</div>
-        <div class="row-actions"><button class="btn btn--primary" data-act="sheet-close">返回战斗 <span class="key">Tab</span></button></div>
+        <div class="row-actions lo-actions"><button class="btn btn--primary" data-act="sheet-close">返回战斗 <span class="key">Tab</span></button></div>
       </div>
     `);
     this.on('[data-act="sheet-close"]', () => this.game.toggleSheet());
