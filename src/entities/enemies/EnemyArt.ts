@@ -636,6 +636,75 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
   const w = e.wobble;
   switch (id) {
     case 'nightfall': {
+      const breath = 0.5 + Math.sin(time * 1.3 + w) * 0.5;
+
+      // 月面上留几块被夜色浸透的月海，以及被擦掉一半的环形山。
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const maria: Array<[number, number, number, number, number]> = [
+        [-0.46, -0.2, 0.23, 0.16, -0.38],
+        [-0.22, -0.47, 0.17, 0.11, 0.32],
+        [-0.38, 0.34, 0.19, 0.13, 0.66],
+      ];
+      for (const [mx, my, rx, ry, angle] of maria) {
+        ctx.fillStyle = 'rgba(20,14,55,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(e.x + mx * r, e.y + my * r, rx * r, ry * r, angle, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(190,177,242,0.09)';
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+
+      const craters: Array<[number, number, number]> = [
+        [-0.43, -0.08, 0.095],
+        [-0.25, -0.37, 0.062],
+        [-0.54, 0.23, 0.07],
+        [-0.2, 0.27, 0.052],
+        [-0.5, -0.44, 0.045],
+      ];
+      for (const [cx, cy, rad] of craters) {
+        const px = e.x + cx * r;
+        const py = e.y + cy * r;
+        const rr = rad * r;
+        ctx.fillStyle = 'rgba(15,11,43,0.3)';
+        ctx.beginPath();
+        ctx.arc(px, py, rr, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(210,200,255,0.2)';
+        ctx.lineWidth = 0.75;
+        ctx.beginPath();
+        ctx.arc(px, py, rr, Math.PI * 0.68, Math.PI * 1.46);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(8,5,25,0.36)';
+        ctx.beginPath();
+        ctx.arc(px + rr * 0.06, py + rr * 0.05, rr * 0.92, Math.PI * 1.62, Math.PI * 0.48);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = `rgba(196,182,247,${0.12 + breath * 0.05})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.62, e.y - r * 0.7);
+      ctx.quadraticCurveTo(e.x - r * 0.5, e.y - r * 0.48, e.x - r * 0.58, e.y - r * 0.27);
+      ctx.stroke();
+      ctx.restore();
+
+      // 被啃掉的那一口也有一条冷边：不只是空白，而是夜蚀过的断面。
+      ctx.save();
+      ctx.strokeStyle = 'rgba(8,5,24,0.48)';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.arc(e.x + r * 0.34, e.y - r * 0.18, r * 0.88, Math.PI * 0.56, Math.PI * 1.44);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(218,207,255,${0.18 + breath * 0.07})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(e.x + r * 0.34, e.y - r * 0.18, r * 0.88, Math.PI * 0.58, Math.PI * 1.42);
+      ctx.stroke();
+      ctx.restore();
+
       // 环月的星屑：缓慢绕着本体转，让它看起来"正在笼罩这片地方"
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
