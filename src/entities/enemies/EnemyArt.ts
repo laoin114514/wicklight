@@ -1083,28 +1083,94 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'bulwark': {
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(e.x - r * 0.55, e.y - r * 0.2);
-      ctx.lineTo(e.x, e.y + r * 0.1);
-      ctx.lineTo(e.x + r * 0.5, e.y - r * 0.3);
+      const vertices = Array.from({ length: 6 }, (_, index) => {
+        const angle = Math.PI / 6 + (index / 6) * TAU;
+        return { x: e.x + Math.cos(angle) * r, y: e.y + Math.sin(angle) * r };
+      });
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      for (let panel = 0; panel < 3; panel += 1) {
+        const first = vertices[panel * 2];
+        const second = vertices[panel * 2 + 1];
+        ctx.fillStyle = panel === 1 ? 'rgba(255,244,220,0.055)' : 'rgba(5,8,14,0.1)';
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(first.x, first.y);
+        ctx.lineTo(second.x, second.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(7,10,16,0.36)';
+      ctx.lineWidth = 1.5;
+      for (let seam = 0; seam < 6; seam += 2) {
+        const vertex = vertices[seam];
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(vertex.x, vertex.y);
+        ctx.stroke();
+      }
+
+      const plate = ctx.createLinearGradient(e.x - r * 0.55, e.y - r * 0.62, e.x + r * 0.42, e.y + r * 0.58);
+      plate.addColorStop(0, 'rgba(255,247,228,0.13)');
+      plate.addColorStop(0.5, 'rgba(187,198,211,0.035)');
+      plate.addColorStop(1, 'rgba(3,6,11,0.2)');
+      ctx.fillStyle = plate;
+      poly(ctx, e.x, e.y, r * 0.62, 6, Math.PI / 6, 1);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(9,13,20,0.48)';
+      ctx.lineWidth = 1.8;
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.strokeStyle = 'rgba(232,241,250,0.12)';
+      ctx.lineWidth = 0.8;
+      poly(ctx, e.x - r * 0.025, e.y - r * 0.04, r * 0.54, 6, Math.PI / 6, 1);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(5,8,13,0.58)';
+      ctx.lineWidth = 2.1;
       ctx.beginPath();
-      ctx.moveTo(e.x - r * 0.58, e.y - r * 0.46);
-      ctx.lineTo(e.x - r * 0.05, e.y - r * 0.66);
-      ctx.lineTo(e.x + r * 0.12, e.y - r * 0.18);
-      ctx.lineTo(e.x - r * 0.34, e.y + r * 0.02);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.moveTo(e.x - r * 0.72, e.y - r * 0.12);
+      ctx.lineTo(e.x - r * 0.29, e.y + r * 0.02);
+      ctx.lineTo(e.x - r * 0.38, e.y + r * 0.34);
+      ctx.lineTo(e.x - r * 0.08, e.y + r * 0.58);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(226,237,246,0.14)';
+      ctx.lineWidth = 0.7;
       ctx.beginPath();
-      ctx.moveTo(e.x + r * 0.1, e.y + r * 0.16);
-      ctx.lineTo(e.x + r * 0.62, e.y - r * 0.08);
-      ctx.lineTo(e.x + r * 0.5, e.y + r * 0.5);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(e.x - r * 0.68, e.y - r * 0.15);
+      ctx.lineTo(e.x - r * 0.26, e.y - r * 0.02);
+      ctx.lineTo(e.x - r * 0.34, e.y + r * 0.3);
+      ctx.lineTo(e.x - r * 0.04, e.y + r * 0.54);
+      ctx.stroke();
+
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(199,225,243,0.23)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(e.x + r * 0.2, e.y - r * 0.52);
+      ctx.lineTo(e.x + r * 0.1, e.y - r * 0.18);
+      ctx.lineTo(e.x + r * 0.36, e.y + r * 0.04);
+      ctx.lineTo(e.x + r * 0.27, e.y + r * 0.32);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(222,240,252,0.28)';
+      for (const [gx, gy, gr] of [[0.1, -0.18, 0.065], [0.36, 0.04, 0.045]] as const) {
+        ctx.beginPath();
+        ctx.arc(e.x + r * gx, e.y + r * gy, Math.max(0.55, r * gr), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.fillStyle = 'rgba(8,10,15,0.34)';
+      for (const [vx, vy] of [[0.77, -0.44], [-0.7, 0.5]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(e.x + r * vx, e.y + r * vy);
+        ctx.lineTo(e.x + r * (vx - 0.15), e.y + r * (vy + 0.02));
+        ctx.lineTo(e.x + r * (vx - 0.04), e.y + r * (vy + 0.18));
+        ctx.closePath();
+        ctx.fill();
+      }
       break;
     }
     case 'oilsapper': {
