@@ -1334,16 +1334,27 @@ export class UIManager implements UIHost {
       return;
     }
     const section = CODEX_SECTIONS.find((s) => s.kind === entry.kind);
+    const sectionEntries = this.game.codex.entries.filter((e) => e.kind === entry.kind);
+    const ordinal = Math.max(1, sectionEntries.findIndex((e) => e.id === entry.id) + 1);
+    const number = String(ordinal).padStart(2, '0');
+    const count = String(sectionEntries.length).padStart(2, '0');
     const rows = (entry.rows ?? [])
       .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`)
       .join('');
     this.show(`
-      <div class="panel panel--detail panel--vellum" style="--c:${entry.color ?? '#8fa7ff'}">
+      <div class="panel panel--detail panel--vellum cx-sheet" style="--c:${entry.color ?? '#8fa7ff'}">
+        <div class="cx-sheet__rail" aria-hidden="true">
+          <span>${section?.title ?? '档案'}</span>
+          <b>${number}</b>
+          <i>/${count}</i>
+        </div>
+        <div class="cx-sheet__seal" aria-hidden="true"><span>已收录</span><i>WL</i></div>
         <div class="cx-head">
           <div class="cx-head__icon">${entry.icon ?? '●'}</div>
-          <div>
+          <div class="cx-head__text">
+            <div class="cx-head__eyebrow">${section?.title ?? '档案'} · 第 ${number} 号</div>
             <div class="cx-head__name">${entry.name}${entry.tag ? `<i class="cx__tag">${entry.tag}</i>` : ''}</div>
-            <div class="cx-head__kind">${section?.title ?? ''}</div>
+            <div class="cx-head__kind">${section?.hint ?? '已收录'} · 共 ${count} 份记录</div>
           </div>
         </div>
         <p class="cx-blurb">${entry.blurb}</p>

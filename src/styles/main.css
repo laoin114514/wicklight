@@ -4715,3 +4715,273 @@ body.is-touch .key { display: none; }
     white-space: nowrap;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v148 · 图鉴详情：一页真正的标本档案
+
+   目录已经是一格格标本签，详情页却还像一张临时弹窗。
+   这一版把详情收进"档案页"：左缘一条竖排索引轨，右上盖一枚收录章，
+   图标进入黄铜标本框，数值改成带行号的账页，附注压成馆长的补记。
+   条目、数值、标签与返回动作都没有变，只换读它的方式。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--detail {
+  width: min(92vw, 700px);
+  padding-left: 78px;
+}
+.cx-sheet .cx-head {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 15px;
+  padding-right: 70px;
+}
+.cx-sheet .cx-head__icon {
+  position: relative;
+  flex: 0 0 66px;
+  width: 66px;
+  height: 66px;
+  border-radius: 7px;
+  font-size: 31px;
+  background:
+    radial-gradient(circle at 38% 28%, rgba(255, 241, 213, 0.14), rgba(255, 255, 255, 0) 52%),
+    linear-gradient(145deg, color-mix(in srgb, var(--c, #ffb14e) 18%, rgba(37, 27, 16, 0.9)), rgba(15, 11, 8, 0.96));
+  border-color: color-mix(in srgb, var(--c, #ffb14e) 48%, rgba(198, 158, 98, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 216, 0.18),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.18),
+    inset 0 -12px 20px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(0, 0, 0, 0.42),
+    0 0 24px color-mix(in srgb, var(--c, #ffb14e) 18%, transparent);
+  outline: 1px solid rgba(227, 188, 126, 0.13);
+  outline-offset: 4px;
+}
+.cx-sheet .cx-head__icon::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(255, 225, 176, 0.12);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.cx-head__text { min-width: 0; }
+.cx-head__eyebrow {
+  margin-bottom: 4px;
+  color: rgba(227, 203, 166, 0.55);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+.cx-sheet .cx-head__name {
+  flex-wrap: wrap;
+  font-size: 24px;
+  line-height: 1.18;
+  letter-spacing: 1px;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--c, #ffb14e) 20%, transparent);
+}
+.cx-sheet .cx-head__kind {
+  margin-top: 5px;
+  color: rgba(227, 203, 166, 0.52);
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+}
+
+.cx-sheet__rail {
+  position: absolute;
+  top: 25px;
+  bottom: 25px;
+  left: 17px;
+  width: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding-top: 3px;
+  border-right: 1px solid rgba(198, 158, 98, 0.2);
+  color: rgba(227, 203, 166, 0.5);
+  pointer-events: none;
+}
+.cx-sheet__rail span {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+.cx-sheet__rail b {
+  margin-top: auto;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--c, #ffb14e) 72%, #f3d8aa);
+}
+.cx-sheet__rail i {
+  margin-bottom: 8px;
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(227, 203, 166, 0.4);
+}
+
+.cx-sheet__seal {
+  position: absolute;
+  top: 27px;
+  right: 25px;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  color: color-mix(in srgb, var(--c, #ffb14e) 58%, #f3d8aa);
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--c, #ffb14e) 38%, rgba(198, 158, 98, 0.28));
+  border-radius: 4px;
+  transform: rotate(4deg);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.cx-sheet__seal::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px dashed currentColor;
+  border-radius: 2px;
+  opacity: 0.48;
+}
+.cx-sheet__seal span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  line-height: 1.2;
+}
+.cx-sheet__seal i {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-size: 8px;
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
+
+.cx-sheet .cx-blurb {
+  margin: 0 0 16px;
+  padding: 4px 0 4px 14px;
+  border-left: 2px solid color-mix(in srgb, var(--c, #ffb14e) 34%, rgba(198, 158, 98, 0.24));
+  color: #ddcfb7;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.panel--detail .cx-rows {
+  counter-reset: cxrow;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+  margin-bottom: 16px;
+  border-top: 1px solid rgba(198, 158, 98, 0.22);
+}
+.panel--detail .cx-rows > div {
+  display: grid;
+  grid-template-columns: 22px minmax(64px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 7px;
+  padding: 8px 2px 7px;
+  border: 0;
+  border-bottom: 1px dashed rgba(198, 158, 98, 0.22);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.panel--detail .cx-rows > div::before {
+  counter-increment: cxrow;
+  content: counter(cxrow, decimal-leading-zero);
+  color: rgba(227, 203, 166, 0.34);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+.panel--detail .cx-rows span {
+  color: rgba(228, 210, 178, 0.62);
+  font-size: 11.5px;
+  letter-spacing: 0.5px;
+}
+.panel--detail .cx-rows b {
+  min-width: 0;
+  color: color-mix(in srgb, var(--c, #ffb14e) 42%, #ffe4b0);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.panel--detail .cx-extra {
+  position: relative;
+  margin: 0 0 4px;
+  padding: 8px 10px 8px 38px;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--c, #ffb14e) 34%, rgba(198, 158, 98, 0.24));
+  border-radius: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c, #ffb14e) 7%, transparent), rgba(0, 0, 0, 0));
+  box-shadow: none;
+  color: #eedbb8;
+}
+.panel--detail .cx-extra::before {
+  content: '补记';
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  padding-right: 7px;
+  border-right: 1px solid rgba(198, 158, 98, 0.22);
+  color: rgba(227, 203, 166, 0.42);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  writing-mode: vertical-rl;
+}
+
+.panel--detail .row-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(198, 158, 98, 0.14);
+}
+
+@media (max-width: 560px) {
+  .panel--detail { padding: 22px 18px 20px 58px; }
+  .cx-sheet .cx-head { gap: 12px; padding-right: 0; }
+  .cx-sheet .cx-head__icon { flex-basis: 54px; width: 54px; height: 54px; font-size: 26px; }
+  .cx-sheet .cx-head__name { font-size: 21px; }
+  .cx-sheet .cx-head__eyebrow { letter-spacing: 2px; }
+  .cx-sheet__rail { top: 20px; bottom: 20px; left: 8px; width: 36px; }
+  .cx-sheet__rail span { font-size: 9.5px; letter-spacing: 3px; }
+  .cx-sheet__rail b { font-size: 17px; }
+  .cx-sheet__seal { display: none; }
+  .cx-sheet .cx-blurb { font-size: 13px; }
+  .panel--detail .cx-rows { grid-template-columns: 1fr; gap: 0; }
+  .panel--detail .row-actions { justify-content: center; }
+}
+
+/* 掌上横屏只有 390px 高：普通条目应该一屏读完，别让返回键先掉到折线下面。 */
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--detail { padding-top: 18px; padding-bottom: 16px; }
+  .cx-sheet .cx-head { margin-bottom: 10px; padding-right: 58px; }
+  .cx-sheet .cx-head__icon { flex-basis: 56px; width: 56px; height: 56px; font-size: 27px; }
+  .cx-sheet .cx-head__name { font-size: 21px; }
+  .cx-sheet .cx-blurb { margin-bottom: 10px; padding-top: 2px; padding-bottom: 2px; line-height: 1.55; }
+  .panel--detail .cx-rows { margin-bottom: 10px; }
+  .panel--detail .cx-rows > div { padding-top: 5px; padding-bottom: 4px; }
+  .panel--detail .cx-extra { padding-top: 6px; padding-bottom: 6px; }
+  .panel--detail .cx-extra::before { top: 7px; }
+  .panel--detail .row-actions { margin-top: 9px; padding-top: 8px; }
+  .cx-sheet__seal { top: 21px; right: 21px; width: 50px; height: 50px; }
+}
+
+/* 320px 级的竖屏：一条账目分成"标签 / 数值"两行，长说明不再是右边一条窄缝。 */
+@media (max-width: 360px) {
+  .panel--detail .cx-rows > div {
+    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-areas:
+      'num label'
+      'num value';
+    row-gap: 2px;
+  }
+  .panel--detail .cx-rows > div::before { grid-area: num; align-self: start; margin-top: 1px; }
+  .panel--detail .cx-rows span { grid-area: label; }
+  .panel--detail .cx-rows b { grid-area: value; text-align: left; }
+}
