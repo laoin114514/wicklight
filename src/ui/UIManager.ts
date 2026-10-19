@@ -1548,23 +1548,90 @@ export class UIManager implements UIHost {
     const plan = buildDailyPlan();
     const d = this.game.dailySave();
     const lantern = LANTERN_MAP[plan.lantern];
-    const rows: [string, string][] = [
-      ['灯火', `${lantern?.name ?? plan.lantern}（${lantern?.title ?? ''}）`],
-      ['难度', DIFFICULTIES[plan.difficulty].label],
-      ['夜咒', plan.curses.map((id, i) => `${i + 1}关 ${id ? CURSE_MAP[id]?.name ?? id : '无'}`).join(' · ')],
-      ['悬赏', plan.bounties.map((id, i) => `${i + 1}关 ${BOUNTY_MAP[id]?.name ?? id}`).join(' · ')],
-      ['随机种子', `${plan.seed}`],
-    ];
-    const best = d.bestScore > 0
-      ? `<div class="daily-best">今日最佳 <b>${d.bestScore}</b> 分 · 第 ${d.bestStage} 关 · 击杀 ${d.bestKills}${d.cleared ? ' · 已通关' : ''} · 尝试 ${d.attempts} 次</div>`
-      : `<div class="daily-best daily-best--none">今天还没有人举起灯 · 尝试 <b>${d.attempts}</b> 次</div>`;
+    const difficulty = DIFFICULTIES[plan.difficulty];
+    const lanternName = lantern?.name ?? plan.lantern;
+    const lanternTitle = lantern?.title ?? '';
+    const lanternColor = lantern?.color ?? '#ffb14e';
+    const diffTone = plan.difficulty === 'relaxed' ? '#7fd8b5' : plan.difficulty === 'nightmare' ? '#e38181' : '#ffd28a';
+    const diffRank = DIFFICULTY_ORDER.indexOf(plan.difficulty) + 1;
+    const diffMeter = [1, 2, 3]
+      .map((step) => `<i class="${step <= diffRank ? 'is-lit' : ''}"></i>`)
+      .join('');
+    const legs = STAGES.map((stage, i) => {
+      const curse = plan.curses[i] ? CURSE_MAP[plan.curses[i] as string] : null;
+      const bounty = BOUNTY_MAP[plan.bounties[i]];
+      return `<article class="daily-leg${i === STAGES.length - 1 ? ' is-final' : ''}">
+        <div class="daily-leg__head">
+          <span class="daily-leg__no">${String(i + 1).padStart(2, '0')}</span>
+          <div class="daily-leg__stage"><b>${stage.theme.name}</b><span>${stage.theme.subtitle}</span></div>
+          <i class="daily-leg__pin" style="--accent:${stage.theme.accent}" aria-hidden="true"></i>
+        </div>
+        <div class="daily-leg__rows">
+          <div class="daily-leg__row${curse ? '' : ' is-calm'}" style="--accent:${curse?.color ?? '#9ba48f'}">
+            <span>夜咒</span><b>${curse?.name ?? '无'}</b>
+          </div>
+          <div class="daily-leg__row" style="--accent:${bounty?.color ?? '#ffd24e'}">
+            <span>悬赏</span><b>${bounty?.name ?? plan.bounties[i]}</b>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+    const tallyKind = d.cleared ? 'is-clear' : d.bestScore > 0 ? 'is-open' : 'is-empty';
+    const tallyStamp = d.cleared ? '通' : d.bestScore > 0 ? '行' : '待';
+    const bestScore = d.bestScore > 0 ? `${d.bestScore}` : '未出手';
+    const bestDetail = d.bestScore > 0
+      ? `第 ${d.bestStage} 关 · 击杀 ${d.bestKills}${d.cleared ? ' · 已通关' : ''} · 尝试 ${d.attempts} 次`
+      : `今天还没有人举起灯 · 尝试 ${d.attempts} 次`;
     this.show(`
       <div class="panel panel--daily panel--vellum">
-        <div class="panel__title">今日灯芯 · ${plan.key}</div>
-        <div class="subtitle">同一个夜晚，同一套条件——比的只是谁打得更远。</div>
-        <div class="cx-rows">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
-        ${best}
-        <div class="row-actions">
+        <header class="daily-mast">
+          <div class="daily-mast__copy">
+            <span class="daily-mast__kicker">每日夜报 · 同一夜</span>
+            <div class="panel__title daily-mast__title">今日灯芯 <span>·</span> <b>${plan.key}</b></div>
+            <p class="subtitle daily-mast__sub">同一个夜晚，同一套条件——比的只是谁打得更远。</p>
+          </div>
+          <div class="daily-seal" role="img" aria-label="今日同题，共 ${STAGES.length} 关">
+            <span>同题</span><b>${STAGES.length}</b><i>关</i>
+          </div>
+        </header>
+
+        <section class="daily-brief">
+          <article class="daily-fact daily-fact--lamp" style="--accent:${lanternColor}">
+            <div class="daily-fact__label"><span>灯火</span></div>
+            <div class="daily-fact__main">
+              <i class="daily-fact__glyph" aria-hidden="true">${lanternName.slice(0, 1)}</i>
+              <div class="daily-fact__text"><b>${lanternName}</b><span>${lanternTitle}</span></div>
+            </div>
+            <p>${lantern?.blurb ?? ''}</p>
+          </article>
+          <article class="daily-fact daily-fact--risk" style="--accent:${diffTone}">
+            <div class="daily-fact__label"><span>难度</span></div>
+            <div class="daily-fact__main daily-fact__main--risk">
+              <div class="daily-fact__text"><b>${difficulty.label}</b><span>${difficulty.blurb}</span></div>
+              <span class="daily-meter" aria-label="危险刻度 ${diffRank} / 3">${diffMeter}</span>
+            </div>
+            <div class="daily-riskstats">
+              <span>敌血 <b>${Math.round(difficulty.hpMult * 100)}%</b></span>
+              <span>敌伤 <b>${Math.round(difficulty.dmgMult * 100)}%</b></span>
+              <span>余烬 <b>${Math.round(difficulty.emberMult * 100)}%</b></span>
+            </div>
+          </article>
+        </section>
+
+        <section class="daily-route">
+          <div class="daily-route__head"><h4>今夜行程 <b>${STAGES.length} 关</b></h4><span>随机种子 ${plan.seed}</span></div>
+          <div class="daily-legs">${legs}</div>
+        </section>
+
+        <section class="daily-tally">
+          <div class="daily-tally__best">
+            <span>今日最佳</span><b>${bestScore}</b>${d.bestScore > 0 ? '<em>分</em>' : ''}
+            <i>${bestDetail}</i>
+          </div>
+          <div class="daily-tally__stamp ${tallyKind}" aria-hidden="true">${tallyStamp}</div>
+        </section>
+
+        <div class="row-actions daily-actions">
           <button class="btn" data-act="back">返回</button>
           <button class="btn btn--primary" data-act="daily-start">点燃今日灯芯</button>
         </div>
