@@ -1228,22 +1228,114 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'siphon': {
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const backX = -facingX;
+      const backY = -facingY;
+      const sideX = -facingY;
+      const sideY = facingX;
+      const spin = Math.PI / 6 + w * 0.05;
+      const pull = 0.4 + Math.sin(time * 5 + w) * 0.22;
+
+      // 暗玻璃罩住被夺来的火，六根灯框再从中心向外撑住剪影。
+      ctx.fillStyle = 'rgba(19,8,30,0.44)';
+      poly(ctx, e.x, e.y, r * 0.64, 6, spin, 1.06);
+      ctx.fill();
+
       // 空芯里的"被抽走的火"：越亮说明它抽得越起劲
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const pull = 0.4 + Math.sin(time * 5 + w) * 0.22;
-      const sg = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 0.9);
-      sg.addColorStop(0, `rgba(255,240,200,${0.5 * pull})`);
-      sg.addColorStop(1, 'rgba(201,143,232,0)');
+      const sg = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 0.78);
+      sg.addColorStop(0, `rgba(255,243,209,${0.58 * pull})`);
+      sg.addColorStop(0.34, `rgba(223,174,255,${0.4 * pull})`);
+      sg.addColorStop(1, 'rgba(164,95,214,0)');
       ctx.fillStyle = sg;
       ctx.beginPath();
-      ctx.arc(e.x, e.y, r * 0.9, 0, TAU);
+      ctx.arc(e.x, e.y, r * 0.78, 0, TAU);
       ctx.fill();
       ctx.restore();
+
       ctx.strokeStyle = 'rgba(20,10,30,0.8)';
       ctx.lineWidth = 2.4;
-      poly(ctx, e.x, e.y, r * 0.62, 6, Math.PI / 6, 1.06);
+      poly(ctx, e.x, e.y, r * 0.64, 6, spin, 1.06);
       ctx.stroke();
+
+      // 六根铜紫灯骨：深框 + 内侧冷光，近景能读出灯的结构。
+      for (let rib = 0; rib < 6; rib += 1) {
+        const a = spin + (rib / 6) * TAU;
+        const innerX = e.x + Math.cos(a) * r * 0.6;
+        const innerY = e.y + Math.sin(a) * r * 0.6;
+        const outerX = e.x + Math.cos(a) * r * 0.9;
+        const outerY = e.y + Math.sin(a) * r * 0.9;
+        ctx.strokeStyle = 'rgba(24,12,36,0.72)';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(innerX, innerY);
+        ctx.lineTo(outerX, outerY);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(249,225,255,0.28)';
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(innerX - sideX * r * 0.025, innerY - sideY * r * 0.025);
+        ctx.lineTo(outerX - sideX * r * 0.025, outerY - sideY * r * 0.025);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(27,13,41,0.86)';
+        ctx.beginPath();
+        ctx.arc(outerX, outerY, Math.max(1.2, r * 0.065), 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(249,224,255,0.44)';
+        ctx.beginPath();
+        ctx.arc(outerX - sideX * r * 0.015, outerY - sideY * r * 0.015, Math.max(0.55, r * 0.024), 0, TAU);
+        ctx.fill();
+      }
+
+      // 侧后拖出的短链：让“提灯”不只靠六边形，也有悬挂物的重量。
+      const chainX = backX * 0.5 + sideX * 0.86;
+      const chainY = backY * 0.5 + sideY * 0.86;
+      const chainAngle = Math.atan2(chainY, chainX);
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(201,143,232,0.18)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(e.x + chainX * r * 0.86, e.y + chainY * r * 0.86);
+      ctx.lineTo(e.x + chainX * r * 1.92, e.y + chainY * r * 1.92);
+      ctx.stroke();
+      for (let link = 0; link < 4; link += 1) {
+        const distance = r * (0.98 + link * 0.22);
+        const cx = e.x + chainX * distance;
+        const cy = e.y + chainY * distance;
+        const sway = Math.sin(time * 1.7 + w + link * 0.7) * r * 0.025;
+        ctx.save();
+        ctx.translate(cx - sideX * sway, cy - sideY * sway);
+        ctx.rotate(chainAngle + (link % 2 === 0 ? 0 : Math.PI / 2));
+        ctx.strokeStyle = 'rgba(24,12,36,0.78)';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 0.16, r * 0.09, 0, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(201,143,232,0.18)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(249,225,255,0.38)';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.018, -r * 0.014, r * 0.13, r * 0.062, 0, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.strokeStyle = 'rgba(201,143,232,0.34)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(
+        e.x + chainX * r * 1.95 - sideX * r * 0.06,
+        e.y + chainY * r * 1.95 - sideY * r * 0.06,
+        r * 0.1,
+        chainAngle - Math.PI * 0.8,
+        chainAngle + Math.PI * 0.45,
+      );
+      ctx.stroke();
+      ctx.restore();
       break;
     }
     case 'crawler': {
