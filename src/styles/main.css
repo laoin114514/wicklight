@@ -9130,3 +9130,41 @@ body.is-touch .lvl-actions__hint { display: none; }
   .daily-actions { margin-top: 4px; }
   .daily-actions .btn { padding-top: 6px; padding-bottom: 6px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v171 · 中等横屏：给余烬树留出最后一排按钮
+   1024×768 与 1280×720 这类横屏仍沿用桌面的 92vh 面板上限，余烬树会把
+   底部「清空存档 / 返回」压到折线以下。这里只给这两块宽面板多放一点高度，
+   720p 再轻轻收紧节点与页脚；桌面高屏和手机横屏都不受影响。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (min-width: 721px) and (min-height: 600px) and (max-height: 820px) {
+  .panel--select,
+  .panel--meta { max-height: 96vh; }
+}
+
+@media (orientation: landscape) and (min-width: 721px) and (min-height: 680px) and (max-height: 740px) {
+  .panel--select,
+  .panel--meta { max-height: 97vh; }
+
+  .panel--select { padding-top: 16px; padding-bottom: 9px; }
+  .panel--select .select-head { margin-bottom: 7px; padding-bottom: 6px; }
+  .panel--select .lantern-grid { gap: 7px; }
+  .panel--select .lantern { row-gap: 5px; padding: 10px 12px 9px; }
+  .panel--select .diff-row { margin-top: 8px; }
+  .panel--select .diff { padding: 9px 10px 8px; }
+  .panel--select .pact-block { margin-top: 8px; }
+  .panel--select .pact { padding: 6px 7px; }
+  .select-actions { margin-top: 7px; padding-top: 6px; }
+
+  .panel--meta { padding-top: 14px; padding-bottom: 9px; }
+  .panel--meta .panel__title { margin-bottom: 7px; }
+  .panel--meta .node-grid { gap: 6px; }
+  .panel--meta .node { padding: 8px 10px 7px; }
+  .panel--meta .node__cost { margin-top: 4px; }
+  .panel--meta .fire-block { margin-top: 8px; padding-top: 7px; }
+  .panel--meta .fire-grid { gap: 6px; }
+  .panel--meta .fire { padding: 7px 9px 6px; }
+  .meta-actions { margin-top: 7px; padding-top: 7px; }
+}
