@@ -1640,12 +1640,15 @@ export class Player {
       ctx.restore();
     }
 
-    // ── 拖尾披风（跟随移动方向向后飘） ──
-    if (speed > 20) {
-      const back = Math.atan2(-this.vy, -this.vx);
-      const len = R * (1.0 + Math.min(1, speed / 240) * 1.5);
-      const flutter = Math.sin(time * 10) * R * 0.16;
+    // ── 披风尾：跑起来顺着速度拖长，站定时也留一截搭在背后 ──
+    // 静止时也有尾巴，俯视剪影才不会缩成一颗蓝球；停下来时它只是垂着慢慢晃。
+    {
+      const trailing = speed > 20;
+      const back = trailing ? Math.atan2(-this.vy, -this.vx) : this.angle + Math.PI;
+      const len = trailing ? R * (1.0 + Math.min(1, speed / 240) * 1.5) : R * 1.28;
+      const flutter = Math.sin(time * (trailing ? 10 : 2.2)) * R * (trailing ? 0.16 : 0.075);
       ctx.save();
+      ctx.globalAlpha = trailing ? 1 : 0.82;
       ctx.rotate(back);
       const cape = ctx.createLinearGradient(0, 0, len, 0);
       cape.addColorStop(0, 'rgba(38,45,82,0.96)');
@@ -1655,7 +1658,9 @@ export class Player {
       ctx.beginPath();
       ctx.moveTo(0, -R * 0.72);
       ctx.quadraticCurveTo(len * 0.48, -R * 0.78 + flutter, len * 0.98, -R * 0.28 + flutter);
-      ctx.lineTo(len * 0.84, -R * 0.02 + flutter * 0.4);
+      ctx.lineTo(len * 0.79, -R * 0.01 + flutter * 0.4);
+      ctx.lineTo(len * 0.9, R * 0.07 - flutter * 0.2);
+      ctx.lineTo(len * 0.76, R * 0.16 + flutter * 0.2);
       ctx.lineTo(len * 1.02, R * 0.13 - flutter * 0.45);
       ctx.lineTo(len * 0.8, R * 0.28 + flutter * 0.4);
       ctx.quadraticCurveTo(len * 0.45, R * 0.68 + flutter, 0, R * 0.72);
@@ -1821,8 +1826,16 @@ export class Player {
     ctx.fillStyle = cloth;
     ctx.beginPath();
     ctx.moveTo(-R * 1.0, R * 0.05);
-    ctx.quadraticCurveTo(-R * 1.06, R * 0.9, 0, R * 1.2);
-    ctx.quadraticCurveTo(R * 1.06, R * 0.9, R * 1.0, R * 0.05);
+    ctx.quadraticCurveTo(-R * 1.06, R * 0.76, -R * 0.86, R * 0.98);
+    ctx.lineTo(-R * 0.67, R * 0.93);
+    ctx.lineTo(-R * 0.51, R * 1.12);
+    ctx.lineTo(-R * 0.31, R * 1.0);
+    ctx.lineTo(-R * 0.08, R * 1.18);
+    ctx.lineTo(R * 0.14, R * 1.01);
+    ctx.lineTo(R * 0.35, R * 1.14);
+    ctx.lineTo(R * 0.56, R * 0.97);
+    ctx.lineTo(R * 0.77, R * 1.05);
+    ctx.quadraticCurveTo(R * 1.07, R * 0.76, R * 1.0, R * 0.05);
     ctx.quadraticCurveTo(R * 0.9, -R * 1.06, 0, -R * 1.04);
     ctx.quadraticCurveTo(-R * 0.9, -R * 1.06, -R * 1.0, R * 0.05);
     ctx.closePath();
@@ -1866,6 +1879,37 @@ export class Player {
       ctx.beginPath();
       ctx.moveTo(-R * 0.72 + i * R * 0.26, R * 0.26);
       ctx.quadraticCurveTo(i * R * 0.19, R * 0.72, R * 0.36 + i * R * 0.14, R * 1.04);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ── 斗篷下露出的短靴：只露两个靴尖，但走起来一前一后，身形立刻像个人 ──
+    const stride = this.moving ? Math.sin(this.stepClock * 1.03) : 0;
+    ctx.save();
+    for (const side of [-1, 1] as const) {
+      const lift = Math.max(0, stride * side) * R * 0.13;
+      const bx = side * R * 0.31 + stride * side * R * 0.04;
+      const by = R * 1.04 - lift;
+      ctx.fillStyle = 'rgba(1,2,7,0.46)';
+      ctx.beginPath();
+      ctx.ellipse(bx + 1.3, by + R * 0.31, R * 0.25, R * 0.09, 0.08, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = this.hitFlash > 0 ? '#7c3232' : blink ? '#dfe4ff' : '#12131f';
+      ctx.beginPath();
+      ctx.moveTo(bx - R * 0.22, by - R * 0.24);
+      ctx.quadraticCurveTo(bx - R * 0.3, by + R * 0.2, bx - R * 0.13, by + R * 0.34);
+      ctx.quadraticCurveTo(bx + R * 0.16, by + R * 0.39, bx + R * 0.23, by + R * 0.18);
+      ctx.quadraticCurveTo(bx + R * 0.22, by - R * 0.2, bx + R * 0.08, by - R * 0.28);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(4,6,14,0.78)';
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(222,184,123,0.22)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(bx - R * 0.14, by - R * 0.1);
+      ctx.quadraticCurveTo(bx, by - R * 0.24, bx + R * 0.14, by - R * 0.09);
       ctx.stroke();
     }
     ctx.restore();
