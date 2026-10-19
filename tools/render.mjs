@@ -172,6 +172,37 @@ const SCENES = {
     b.bossCd = 0.35;
     fight(120, { spawnEvery: 400 });
   },
+  bosstelegraph() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 40; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [id, x, y, cd] of [
+      ['thornlord', -210, -108, 0.24],
+      ['extinguisher', 208, -112, 0.31],
+      ['emberwake', -196, 132, 0.37],
+      ['nightfall', 206, 134, 0.43],
+    ]) {
+      const b = game.enemies.spawn(id, x, y, 1, 0);
+      b.hp = b.maxHp * 0.55;
+      b.speed = 0;
+      b.damage = 0;
+      b.bossCd = cd;
+    }
+  },
   stage4() {
     game.newRun('warden', 'normal', false);
     game.loadStage(STAGES[3], 3, false);

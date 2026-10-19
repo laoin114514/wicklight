@@ -34,6 +34,87 @@ function rgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+function bossTelegraph(ctx: CanvasRenderingContext2D, e: Enemy, time: number, t: number): void {
+  const r = e.radius;
+  const color = e.defId === 'thornlord' ? '#a8e05f' : e.defId === 'extinguisher' ? '#b7a5ff' : e.defId === 'emberwake' ? '#ff8a3c' : '#9fa8ff';
+  const count = e.defId === 'thornlord' ? 9 + e.phase * 3 : e.defId === 'extinguisher' ? 8 + e.phase * 3 : e.defId === 'nightfall' ? 13 + e.phase * 4 : 12 + e.phase * 4;
+  const ring = r * (1.18 + t * 1.65);
+  const spin = time * 0.55 + e.wobble * 0.16;
+  const pulse = 0.5 + 0.5 * Math.sin(time * 22 + e.wobble);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = color;
+
+  ctx.globalAlpha = 0.2 + t * 0.3;
+  ctx.lineWidth = 1.2 + t * 1.2;
+  ctx.setLineDash([4, 8]);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.04, spin, spin + Math.PI * 1.55);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.04, spin + Math.PI, spin + Math.PI * 2.5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.globalAlpha = 0.45 + t * 0.42;
+  ctx.lineWidth = 2 + t * 2.6;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, ring, 0, TAU);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.34 + t * 0.46;
+  ctx.lineWidth = 1.3 + t * 0.8;
+  for (let i = 0; i < count; i += 1) {
+    const a = spin + (i / count) * TAU;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const inner = ring + 2 + t * 2;
+    const outer = ring + 7 + t * 9 + (i % 3) * 2;
+    if (e.defId === 'thornlord') {
+      const spread = 0.045;
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a - spread) * inner, e.y + Math.sin(a - spread) * inner);
+      ctx.lineTo(e.x + c * outer, e.y + s * outer);
+      ctx.lineTo(e.x + Math.cos(a + spread) * inner, e.y + Math.sin(a + spread) * inner);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (e.defId === 'nightfall') {
+      ctx.beginPath();
+      ctx.arc(e.x + c * outer, e.y + s * outer, 1.5 + t * 1.4, 0, TAU);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(e.x + c * inner, e.y + s * inner);
+      ctx.lineTo(e.x + c * (outer - 2), e.y + s * (outer - 2));
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(e.x + c * inner, e.y + s * inner);
+      ctx.lineTo(e.x + c * outer, e.y + s * outer);
+      ctx.stroke();
+      if (e.defId === 'emberwake') {
+        ctx.beginPath();
+        ctx.arc(e.x + c * (outer + 2), e.y + s * (outer + 2), 1.3 + pulse * 1.2, 0, TAU);
+        ctx.fillStyle = '#ffd08a';
+        ctx.fill();
+      }
+    }
+  }
+
+  ctx.globalAlpha = 0.24 + t * 0.34;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i += 1) {
+    const a = -spin * 1.4 + (i / 3) * TAU;
+    ctx.moveTo(e.x + Math.cos(a) * r * 0.84, e.y + Math.sin(a) * r * 0.84);
+    ctx.lineTo(e.x + Math.cos(a + 0.42) * r * 0.98, e.y + Math.sin(a + 0.42) * r * 0.98);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function blob(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, points: number, amp: number, phase: number): void {
   ctx.beginPath();
   for (let i = 0; i <= points; i += 1) {
@@ -982,15 +1063,7 @@ export function drawEnemy(
 
   if (e.boss && e.bossCd > 0 && e.bossCd < 0.6) {
     const t = 1 - e.bossCd / 0.6;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.5 + 0.4 * t;
-    ctx.strokeStyle = '#ff5a6d';
-    ctx.lineWidth = 3 + 3 * t;
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, r * (1.2 + t * 1.6), 0, TAU);
-    ctx.stroke();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
+    bossTelegraph(ctx, e, time, t);
   }
 
   if (e.elite || e.boss) {
