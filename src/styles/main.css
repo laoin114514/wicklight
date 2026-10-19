@@ -9254,3 +9254,111 @@ body.is-touch .lvl-actions__hint { display: none; }
 @media (orientation: landscape) and (max-height: 430px) and (max-width: 720px) {
   .panel--shop .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v174 · 小横屏抉择：祭坛与夜咒改成三行横排铭牌
+   568×320 到 667×375 上，三张竖牌仍各占近百像素，最后一张连同离开键
+   一起掉出首屏。这里把已有的横排铭牌规则补到 720px 宽的短横屏：编号、
+   凹龛、名称、说明与金币回报仍各就各位，三张牌压成三行。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 720px) {
+  .shrine-grid,
+  .curse-grid { gap: 4px; }
+  .panel--shrine .shrine-grid,
+  .panel--curse .curse-grid { margin-bottom: 3px; }
+  .shrine-card,
+  .curse-card {
+    align-items: center;
+    column-gap: 7px;
+    row-gap: 1px;
+    padding: 5px 8px 5px 6px;
+    text-align: left;
+  }
+  .shrine-card {
+    display: grid;
+    grid-template-columns: auto 30px minmax(0, 1fr);
+    grid-template-areas:
+      'key icon name'
+      'key icon blurb';
+  }
+  .curse-card {
+    display: grid;
+    grid-template-columns: auto 30px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'key icon name gold'
+      'key icon blurb blurb';
+  }
+  .shrine-card > .hotkey,
+  .curse-card > .hotkey {
+    grid-area: key;
+    align-self: center;
+    margin: 0;
+  }
+  .shrine-card__icon,
+  .curse-card__icon {
+    grid-area: icon;
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    font-size: 16px;
+  }
+  .shrine-card__name,
+  .curse-card__name {
+    grid-area: name;
+    align-self: end;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+  .shrine-card__blurb,
+  .curse-card__blurb {
+    grid-area: blurb;
+    align-self: start;
+    min-width: 0;
+    margin: 0;
+    font-size: 8.8px;
+    line-height: 1.25;
+    text-align: left;
+  }
+  .curse-card__gold {
+    grid-area: gold;
+    align-self: end;
+    margin: 0;
+    padding: 0 6px 1px;
+    font-size: 8.5px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+  .rite-foot { padding-top: 3px; }
+  .curse-hint { font-size: 8.5px; line-height: 1.3; }
+  .rite-actions { padding-top: 3px; }
+  .rite-actions .btn { padding: 5px 14px; font-size: 11px; }
+}
+
+@media (orientation: landscape) and (max-height: 340px) and (max-width: 720px) {
+  .panel--pause { padding-top: 7px; padding-bottom: 6px; }
+  .pause-head { margin-bottom: 4px; }
+  .pause-actions .pause-act:first-child { grid-column: auto; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 720px) {
+  .result-head { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+  .result-pay {
+    grid-column: auto;
+    grid-row: auto;
+    grid-auto-flow: row;
+    justify-content: end;
+    align-items: baseline;
+    justify-self: end;
+    min-width: 76px;
+    padding: 0 0 0 9px;
+    border-top: 0;
+    border-left: 1px solid rgba(198, 158, 98, 0.2);
+  }
+  .result-pay b { font-size: 19px; }
+  .result-column--stats .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
