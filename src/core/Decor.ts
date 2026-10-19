@@ -1518,19 +1518,71 @@ function leafLitter(ctx: CanvasRenderingContext2D, d: Decor): void {
 }
 
 function puddle(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
-  const shimmer = 0.36 + Math.sin(time * 1.4 + d.x * 0.02) * 0.12;
-  ctx.fillStyle = 'rgba(19,25,43,0.62)';
+  const phase = time * 1.15 + d.x * 0.019 + d.y * 0.013;
+  const mirror = Math.sin(d.x * 0.017 + d.y * 0.021) < 0 ? -1 : 1;
+  const shimmer = 0.38 + Math.sin(phase) * 0.1;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(7,11,20,0.3)';
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y, d.r * 0.96, d.r * 0.48, d.kind * 0.3, 0, TAU);
+  ctx.ellipse(d.x + d.r * 0.03 * mirror, d.y + d.r * 0.15, d.r * 1.03, d.r * 0.36, -0.02 * mirror, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = `rgba(142,170,235,${0.05 + shimmer * 0.05})`;
+  ctx.fillStyle = 'rgba(21,29,48,0.66)';
   ctx.beginPath();
-  ctx.ellipse(d.x - d.r * 0.14, d.y - d.r * 0.08, d.r * 0.58, d.r * 0.22, -0.2, 0, TAU);
+  ctx.ellipse(px(-0.06), py(0), d.r * 0.91, d.r * 0.45, -0.03 * mirror, 0, TAU);
+  ctx.ellipse(px(0.34), py(0.04), d.r * 0.38, d.r * 0.22, 0.03 * mirror, 0, TAU);
+  ctx.ellipse(px(-0.46), py(0.07), d.r * 0.27, d.r * 0.16, -0.04 * mirror, 0, TAU);
   ctx.fill();
-  ctx.strokeStyle = `rgba(170,195,255,${0.1 + shimmer * 0.08})`;
-  ctx.lineWidth = 0.8;
+
+  ctx.fillStyle = `rgba(128,158,220,${0.045 + shimmer * 0.035})`;
   ctx.beginPath();
-  ctx.ellipse(d.x + d.r * 0.12, d.y + d.r * 0.02, d.r * 0.44, d.r * 0.16, -0.16, 0, TAU);
+  ctx.ellipse(px(-0.13), py(-0.09), d.r * 0.5, d.r * 0.18, -0.12 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(3,7,13,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(px(0.08), py(0.12), d.r * 0.57, d.r * 0.14, 0.02 * mirror, 0, TAU);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(145,174,232,${0.14 + shimmer * 0.08})`;
+  ctx.lineWidth = Math.max(0.55, d.r * 0.04);
+  ctx.beginPath();
+  ctx.ellipse(px(-0.06), py(0), d.r * 0.91, d.r * 0.45, -0.03 * mirror, Math.PI * 1.04, Math.PI * 1.93);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(170,198,255,${0.08 + shimmer * 0.05})`;
+  ctx.beginPath();
+  ctx.ellipse(px(0.015), py(-0.01), d.r * 0.045, d.r * 0.23, 0.04 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(184,210,255,${0.11 + shimmer * 0.07})`;
+  ctx.beginPath();
+  ctx.ellipse(px(-0.16), py(-0.13), d.r * 0.2, d.r * 0.035, -0.1 * mirror, 0, TAU);
+  ctx.fill();
+
+  const ripple = (offset: number, scale: number, alpha: number): void => {
+    ctx.strokeStyle = `rgba(176,201,255,${alpha})`;
+    ctx.lineWidth = 0.55;
+    ctx.beginPath();
+    ctx.ellipse(px(offset), py(0.015), d.r * scale, d.r * scale * 0.22, -0.03 * mirror, 0, TAU);
+    ctx.stroke();
+  };
+  ripple(0.05 + Math.sin(phase * 0.55) * 0.02, 0.22 + Math.sin(phase * 0.7) * 0.025, 0.09);
+  ripple(-0.24, 0.12, 0.07);
+  ctx.fillStyle = `rgba(189,214,255,${0.09 + shimmer * 0.05})`;
+  ctx.beginPath();
+  ctx.arc(px(0.3), py(-0.03), Math.max(0.45, d.r * 0.025), 0, TAU);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+
+  ctx.fillStyle = 'rgba(43,48,68,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(px(0.73), py(0.13), d.r * 0.11, d.r * 0.055, 0.18 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(145,168,216,0.15)';
+  ctx.lineWidth = Math.max(0.45, d.r * 0.022);
+  ctx.beginPath();
+  ctx.ellipse(px(0.73), py(0.13), d.r * 0.08, d.r * 0.03, 0.18 * mirror, Math.PI * 1.08, Math.PI * 1.9);
   ctx.stroke();
 }
 
