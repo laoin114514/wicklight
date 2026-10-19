@@ -121,6 +121,16 @@ export class PickupSystem {
       ctx.ellipse(p.x, p.y + p.radius * 0.88 + 2, p.radius * (p.kind === 'chest' ? 1.15 : 0.9), p.radius * 0.31, 0, 0, TAU);
       ctx.fill();
 
+      // 落物贴地的一圈反光：暗幕里先让人看见"地上有东西"，再看清是什么。
+      // 只按现成的 kind / radius 推导，不增加寿命、引力和收集半径。
+      const contact = p.kind === 'xp' ? '#7dffc7' : p.kind === 'oil' ? '#ffc44f' : p.kind === 'gold' ? '#ffd766' : p.kind === 'heart' ? '#ff7b91' : '#ffc97a';
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = p.kind === 'xp' ? 0.075 : 0.11;
+      ctx.fillStyle = contact;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + p.radius * 0.94 + 3, p.radius * (p.kind === 'chest' ? 1.08 : 0.82), p.radius * 0.24, 0, 0, TAU);
+      ctx.fill();
+
       if (p.kind === 'xp') {
         drawXp(ctx, p.x, y, p.radius, p.phase);
       } else if (p.kind === 'oil') {
@@ -211,6 +221,18 @@ function drawXp(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, 
   ctx.beginPath();
   ctx.arc(x - r * 0.2, y - r * 0.3, Math.max(0.65, r * 0.12), 0, TAU);
   ctx.fill();
+
+  // 两粒沿晶体外缘缓行的碎光：让静置的经验也有一点"活着"的层次。
+  // 角度直接取已有的 phase，不另存随机数，也不影响任何更新逻辑。
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#d9fff0';
+  for (let i = 0; i < 2; i += 1) {
+    const a = phase * 0.24 + i * Math.PI;
+    const sx = x + Math.cos(a) * r * 1.48;
+    const sy = y + Math.sin(a) * r * 0.7 - r * 0.12;
+    const s = Math.max(0.75, r * (i === 0 ? 0.13 : 0.09));
+    ctx.fillRect(sx - s * 0.5, sy - s * 0.5, s, s);
+  }
 }
 
 function oilDropPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
@@ -259,6 +281,19 @@ function drawOil(ctx: CanvasRenderingContext2D, x: number, y: number, r: number)
   ctx.beginPath();
   ctx.ellipse(x - r * 0.28, y - r * 0.58, Math.max(0.8, r * 0.16), Math.max(1.3, r * 0.34), -0.38, 0, TAU);
   ctx.fill();
+
+  // 液面与底缘：把油滴从"发光图标"拉回有厚度的小物件。
+  ctx.globalAlpha = 0.42;
+  ctx.strokeStyle = '#ffd35b';
+  ctx.lineWidth = Math.max(0.55, r * 0.08);
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.22, r * 0.43, 0.18, Math.PI - 0.18);
+  ctx.stroke();
+  ctx.globalAlpha = 0.44;
+  ctx.fillStyle = '#8c4907';
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.26, y + r * 0.62, r * 0.18, r * 0.1, 0.35, 0, TAU);
+  ctx.fill();
 }
 
 function drawGold(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, phase: number): void {
@@ -274,6 +309,20 @@ function drawGold(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
 
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
+  // 主币后面压着两枚错位的旧币：轮廓更像一小摞钱，而不是单颗黄点。
+  for (const [ox, oy, scale, edge] of [
+    [-r * 0.42, r * 0.38, 0.78, '#6b4307'],
+    [r * 0.36, r * 0.25, 0.84, '#8b5608'],
+  ] as const) {
+    ctx.fillStyle = '#3c2405';
+    ctx.beginPath();
+    ctx.ellipse(x + ox, y + oy + 1.6, r * scale, r * scale * 0.86, -0.12, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = edge;
+    ctx.beginPath();
+    ctx.ellipse(x + ox, y + oy, r * scale * 0.9, r * scale * 0.76, -0.12, 0, TAU);
+    ctx.fill();
+  }
   ctx.fillStyle = '#5c3a07';
   ctx.beginPath();
   ctx.ellipse(x, y + 2.3, r * 0.98, r * 0.88, 0, 0, TAU);
@@ -306,6 +355,13 @@ function drawGold(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
     ctx.lineTo(x + Math.cos(a) * r * 0.94, y + Math.sin(a) * r * 0.94);
     ctx.stroke();
   }
+
+  ctx.globalAlpha = 0.54;
+  ctx.strokeStyle = '#ffe79a';
+  ctx.lineWidth = Math.max(0.5, r * 0.065);
+  ctx.beginPath();
+  ctx.ellipse(x, y + r * 0.42, r * 0.82, r * 0.24, 0, 0.08, Math.PI - 0.08);
+  ctx.stroke();
 
   ctx.globalAlpha = 0.64;
   ctx.fillStyle = '#80500c';
@@ -364,6 +420,15 @@ function drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
   ctx.strokeStyle = '#ffc3ca';
   ctx.lineWidth = Math.max(0.65, r * 0.085);
   heartPath(ctx, x, y, r);
+  ctx.stroke();
+
+  // 一道很浅的中缝与右下暗面，给心形一点软塑料/封蜡般的体积。
+  ctx.globalAlpha = 0.24;
+  ctx.strokeStyle = '#660d22';
+  ctx.lineWidth = Math.max(0.55, r * 0.075);
+  ctx.beginPath();
+  ctx.moveTo(x + r * 0.04, y - r * 0.2);
+  ctx.quadraticCurveTo(x + r * 0.16, y + r * 0.2, x, y + r * 0.63);
   ctx.stroke();
 
   ctx.globalAlpha = 0.82;
@@ -461,4 +526,22 @@ function drawChest(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
   ctx.beginPath();
   ctx.arc(x - w * 0.03, y + h * 0.07, Math.max(0.5, r * 0.055), 0, TAU);
   ctx.fill();
+
+  // 四角包铁与铆钉：默认视距下不抢眼，但放大后能看出是做过的一只箱子。
+  ctx.globalAlpha = 0.76;
+  ctx.fillStyle = '#b98a42';
+  for (const sx of [-1, 1]) {
+    ctx.fillRect(x + sx * w * 0.82 - w * 0.08, y - h * 0.05, w * 0.16, h * 0.18);
+    ctx.fillRect(x + sx * w * 0.7 - w * 0.06, y + h * 0.62, w * 0.12, h * 0.2);
+  }
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#f1cf78';
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(x + sx * w * 0.82, y + h * 0.04, Math.max(0.55, r * 0.055), 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + sx * w * 0.7, y + h * 0.7, Math.max(0.45, r * 0.045), 0, TAU);
+    ctx.fill();
+  }
 }
