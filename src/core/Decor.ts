@@ -925,19 +925,160 @@ function crack(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
 }
 
 function bones(ctx: CanvasRenderingContext2D, d: Decor, themeId: string): void {
-  ctx.strokeStyle = themeId === 'nightcity' ? 'rgba(204,180,240,0.48)' : 'rgba(206,196,170,0.55)';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 3; i += 1) {
-    const a = i * 2.2;
+  const night = themeId === 'nightcity';
+  const variant = Math.sin(d.x * 0.017 + d.y * 0.013);
+  const mirror = variant < 0 ? -1 : 1;
+  const bone = night ? '#958aa8' : '#8a8067';
+  const boneLit = night ? '#c1b5d7' : '#b5aa8d';
+  const boneDark = night ? '#51475f' : '#4d4739';
+  const socket = night ? 'rgba(8,6,14,0.82)' : 'rgba(20,13,9,0.8)';
+  const dust = night ? 'rgba(105,78,145,0.14)' : 'rgba(108,83,54,0.15)';
+  const sx = d.x + mirror * d.r * 0.018;
+  const sy = d.y - d.r * 0.035;
+  const px = (v: number): number => sx + v * d.r * mirror;
+  const py = (v: number): number => sy + v * d.r;
+  const limb = (x1: number, y1: number, cx: number, cy: number, x2: number, y2: number, width: number): void => {
+    ctx.strokeStyle = boneDark;
+    ctx.lineWidth = width * 1.55;
     ctx.beginPath();
-    ctx.moveTo(d.x + Math.cos(a) * d.r * 0.4, d.y + Math.sin(a) * d.r * 0.3);
-    ctx.lineTo(d.x - Math.cos(a) * d.r * 0.4, d.y - Math.sin(a) * d.r * 0.3);
+    ctx.moveTo(px(x1), py(y1));
+    ctx.quadraticCurveTo(px(cx), py(cy), px(x2), py(y2));
+    ctx.stroke();
+    ctx.strokeStyle = bone;
+    ctx.lineWidth = width;
+    ctx.stroke();
+  };
+  const knob = (x: number, y: number, rx: number, ry: number, rot: number): void => {
+    ctx.fillStyle = boneDark;
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), rx * 1.24, ry * 1.3, rot * mirror, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = bone;
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), rx, ry, rot * mirror, 0, TAU);
+    ctx.fill();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + d.r * 0.26, d.r * 0.44, d.r * 0.12, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = dust;
+  ctx.beginPath();
+  ctx.ellipse(d.x - d.r * 0.02, d.y + d.r * 0.22, d.r * 0.47, d.r * 0.09, -0.05 * mirror, 0, TAU);
+  ctx.fill();
+
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = boneDark;
+  ctx.lineWidth = Math.max(1.3, d.r * 0.032);
+  for (let i = 0; i < 3; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(px(-0.34 + i * 0.025), py(0.11 + i * 0.012));
+    ctx.quadraticCurveTo(px(-0.2 + i * 0.03), py(-0.04 + i * 0.04), px(-0.05 + i * 0.055), py(0.08 + i * 0.04));
     ctx.stroke();
   }
-  ctx.fillStyle = themeId === 'nightcity' ? 'rgba(218,198,248,0.62)' : 'rgba(214,206,182,0.7)';
+  ctx.strokeStyle = bone;
+  ctx.lineWidth = Math.max(0.9, d.r * 0.018);
+  for (let i = 0; i < 3; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(px(-0.34 + i * 0.025), py(0.11 + i * 0.012));
+    ctx.quadraticCurveTo(px(-0.2 + i * 0.03), py(-0.04 + i * 0.04), px(-0.05 + i * 0.055), py(0.08 + i * 0.04));
+    ctx.stroke();
+  }
+
+  limb(-0.5, 0.14, -0.18, 0.02, 0.38, 0.25, Math.max(1.7, d.r * 0.046));
+  knob(-0.5, 0.14, d.r * 0.051, d.r * 0.031, -0.35 + variant * 0.1);
+  knob(0.38, 0.25, d.r * 0.045, d.r * 0.028, 0.24 + variant * 0.1);
+  limb(-0.31, 0.31, 0.02, 0.24, 0.46, 0.12, Math.max(1.5, d.r * 0.038));
+  knob(-0.31, 0.31, d.r * 0.043, d.r * 0.026, 0.22);
+  knob(0.46, 0.12, d.r * 0.038, d.r * 0.024, -0.3);
+
+  ctx.save();
+  ctx.translate(sx, sy - d.r * 0.01);
+  ctx.rotate((-0.17 + variant * 0.045) * mirror);
+  ctx.fillStyle = boneDark;
   ctx.beginPath();
-  ctx.arc(d.x, d.y, d.r * 0.16, 0, TAU);
+  ctx.ellipse(0, 0, d.r * 0.195, d.r * 0.168, -0.05 * mirror, 0, TAU);
   ctx.fill();
+  ctx.fillStyle = bone;
+  ctx.beginPath();
+  ctx.moveTo(-d.r * 0.19, 0);
+  ctx.bezierCurveTo(-d.r * 0.19, -d.r * 0.115, -d.r * 0.115, -d.r * 0.17, -d.r * 0.01, -d.r * 0.17);
+  ctx.bezierCurveTo(d.r * 0.1, -d.r * 0.17, d.r * 0.185, -d.r * 0.1, d.r * 0.185, 0);
+  ctx.bezierCurveTo(d.r * 0.18, d.r * 0.055, d.r * 0.135, d.r * 0.09, d.r * 0.09, d.r * 0.105);
+  ctx.lineTo(d.r * 0.068, d.r * 0.19);
+  ctx.quadraticCurveTo(0, d.r * 0.215, -d.r * 0.066, d.r * 0.19);
+  ctx.lineTo(-d.r * 0.088, d.r * 0.105);
+  ctx.bezierCurveTo(-d.r * 0.13, d.r * 0.09, -d.r * 0.18, d.r * 0.055, -d.r * 0.19, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(31,24,17,0.2)';
+  ctx.beginPath();
+  ctx.moveTo(d.r * 0.04, d.r * 0.09);
+  ctx.lineTo(d.r * 0.068, d.r * 0.19);
+  ctx.quadraticCurveTo(0, d.r * 0.215, -d.r * 0.066, d.r * 0.19);
+  ctx.lineTo(-d.r * 0.078, d.r * 0.135);
+  ctx.quadraticCurveTo(d.r * 0.01, d.r * 0.155, d.r * 0.04, d.r * 0.09);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = socket;
+  ctx.beginPath();
+  ctx.ellipse(-d.r * 0.073, -d.r * 0.042, d.r * 0.046, d.r * 0.04, 0.12 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(30,22,15,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(d.r * 0.084, -d.r * 0.035, d.r * 0.014, d.r * 0.03, -0.22 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = socket;
+  ctx.beginPath();
+  ctx.moveTo(-d.r * 0.018, d.r * 0.038);
+  ctx.lineTo(d.r * 0.018, d.r * 0.038);
+  ctx.lineTo(d.r * 0.004, d.r * 0.082);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = socket;
+  ctx.lineWidth = Math.max(0.5, d.r * 0.008);
+  for (const at of [-0.03, 0.004]) {
+    ctx.beginPath();
+    ctx.moveTo(d.r * at, d.r * 0.15);
+    ctx.lineTo(d.r * (at + 0.006), d.r * 0.19);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(30,24,18,0.34)';
+  ctx.lineWidth = Math.max(0.55, d.r * 0.01);
+  ctx.beginPath();
+  ctx.moveTo(d.r * 0.03, -d.r * 0.16);
+  ctx.lineTo(d.r * 0.052, -d.r * 0.09);
+  ctx.lineTo(d.r * 0.032, -d.r * 0.03);
+  ctx.moveTo(d.r * 0.15, -d.r * 0.07);
+  ctx.lineTo(d.r * 0.115, 0);
+  ctx.stroke();
+  ctx.strokeStyle = boneLit;
+  ctx.globalAlpha = 0.2;
+  ctx.lineWidth = Math.max(0.65, d.r * 0.011);
+  ctx.beginPath();
+  ctx.moveTo(-d.r * 0.15, -d.r * 0.075);
+  ctx.quadraticCurveTo(-d.r * 0.075, -d.r * 0.155, d.r * 0.01, -d.r * 0.155);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  limb(-0.29, 0.2, 0.01, 0.14, 0.3, 0.27, Math.max(1.2, d.r * 0.028));
+  knob(-0.29, 0.2, d.r * 0.034, d.r * 0.021, 0.24);
+  knob(0.3, 0.27, d.r * 0.031, d.r * 0.019, -0.2);
+
+  ctx.fillStyle = bone;
+  for (const [x, y, rx, ry, rot] of [
+    [-0.42, 0.29, 0.038, 0.021, 0.45],
+    [0.31, 0.32, 0.033, 0.018, -0.28],
+    [0.48, 0.3, 0.026, 0.015, 0.3],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror, 0, TAU);
+    ctx.fill();
+  }
+  ctx.lineCap = 'butt';
 }
 
 // ─────────────────────────── 细碎地面装饰 ───────────────────────────
