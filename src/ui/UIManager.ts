@@ -501,14 +501,61 @@ export class UIManager implements UIHost {
   }
 
   private paused(): void {
+    const g = this.game;
+    const s = g.runStats();
+    const lantern = LANTERN_MAP[g.lanternId];
+    const stage = STAGES[Math.min(g.stageIndex, STAGES.length - 1)];
+    const diff = DIFFICULTIES[g.difficulty];
+    const mode = g.endless ? '无尽之夜' : g.dailyPlan ? '今日灯芯' : diff.label;
+    const where = g.endless ? `无尽 · 第 ${s.wave} 波` : `第 ${s.stage} 关 · ${stage.theme.name} · 波次 ${s.wave}`;
+    const curse = g.curse;
+    const bounty = g.bounties.state;
     this.show(`
-      <div class="panel panel--small panel--board">
-        <div class="panel__title">暂停</div>
-        <div class="menu-buttons">
-          <button class="btn btn--primary" data-act="resume">继续</button>
-          <button class="btn" data-act="sheet">构筑总览 <span class="key">Tab</span></button>
-          <button class="btn" data-act="settings">设置</button>
-          <button class="btn" data-act="quit">放弃本次冒险</button>
+      <div class="panel panel--pause panel--board">
+        <header class="pause-head">
+          <div class="pause-head__copy">
+            <span class="pause-head__kicker">夜巡暂歇 · 灯火未熄</span>
+            <div class="panel__title pause-head__title">暂停</div>
+          </div>
+          <div class="pause-clock"><span>本夜已守</span><b>${UIManager.clock(s.time)}</b><i>${where}</i></div>
+        </header>
+
+        <div class="pause-body">
+          <section class="pause-brief">
+            <div class="pause-brief__label"><span>当前局</span><i>${mode}</i></div>
+            <div class="pause-ident" style="--accent:${lantern?.color ?? '#ffb14e'}">
+              <i class="pause-ident__glyph" aria-hidden="true">${(lantern?.name ?? '灯').slice(0, 1)}</i>
+              <div class="pause-ident__text">
+                <b>${lantern?.name ?? g.lanternId}</b>
+                <span>${diff.label} · ${stage.theme.name} · 波次 ${s.wave}</span>
+              </div>
+            </div>
+            <div class="pause-stats">
+              <div><span>击杀</span><b>${s.kills}</b></div>
+              <div><span>等级</span><b>Lv ${s.level}</b></div>
+              <div><span>最高连杀</span><b>${s.bestCombo}</b></div>
+              <div><span>首领</span><b>${s.bossKills}</b></div>
+            </div>
+            <div class="pause-threats">
+              <span class="pause-chip${curse ? '' : ' is-calm'}" style="--accent:${curse?.color ?? '#9ba48f'}"><i>夜咒</i><b>${curse?.name ?? '无'}</b></span>
+              ${bounty ? `<span class="pause-chip${bounty.done ? ' is-done' : ''}" style="--accent:${bounty.def.color}"><i>悬赏</i><b>${bounty.def.name}</b></span>` : ''}
+            </div>
+          </section>
+
+          <section class="pause-actions">
+            <button class="btn btn--primary pause-act" data-act="resume">
+              <b>继续</b><span>回到灯火里</span><span class="key pause-act__key">Esc</span>
+            </button>
+            <button class="btn pause-act" data-act="sheet">
+              <b>构筑总览</b><span>武器 · 遗物 · 夜咒</span><span class="key pause-act__key">Tab</span>
+            </button>
+            <button class="btn pause-act" data-act="settings">
+              <b>设置</b><span>声音 · 画面 · 手感</span><span class="key pause-act__key">⚙</span>
+            </button>
+            <button class="btn pause-act pause-act--danger" data-act="quit">
+              <b>放弃本次冒险</b><span>这一夜的收获不会结算</span><span class="pause-act__mark" aria-hidden="true">熄</span>
+            </button>
+          </section>
         </div>
       </div>
     `);

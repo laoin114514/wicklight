@@ -6434,3 +6434,322 @@ body.is-touch .key { display: none; }
   .set-foot__hint { font-size: 8px; }
   .panel--settings .set-foot .btn { padding: 6px 18px; font-size: 12px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v154 · 暂停：夜巡暂歇
+   先把"这一局此刻是什么样"摊在左边，再把四件事收进右边四枚键里。
+   时间、关卡、击杀与威胁全部来自 runStats() / 当前局，不写任何新统计。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel--pause {
+  width: min(94vw, 820px);
+  padding: 20px 22px 18px;
+}
+
+.pause-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 13px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(192, 138, 62, 0.22);
+  text-align: left;
+}
+.pause-head__copy { min-width: 0; }
+.pause-head__kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(232, 207, 166, 0.42);
+  font-size: 8.5px;
+  letter-spacing: 2.8px;
+}
+.pause-head__kicker::before {
+  content: '';
+  width: 17px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0.12), var(--brass-hi));
+}
+.pause-head__title {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 2px 0 0;
+  font-size: 22px;
+  letter-spacing: 6px;
+}
+.pause-head__title::before { display: none; }
+.pause-head__title::after { flex: 0 0 64px; }
+.pause-clock {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  text-align: right;
+}
+.pause-clock span { color: rgba(232, 207, 166, 0.42); font-size: 8.5px; letter-spacing: 2px; }
+.pause-clock b {
+  color: #ffe0a0;
+  font-family: var(--font-display);
+  font-size: 27px;
+  line-height: 1.05;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 16px rgba(255, 180, 80, 0.22);
+}
+.pause-clock i {
+  color: rgba(228, 210, 178, 0.42);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.4;
+  letter-spacing: 0.7px;
+}
+
+.pause-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
+  align-items: stretch;
+  gap: 12px;
+}
+.pause-brief {
+  position: relative;
+  min-width: 0;
+  padding: 10px 12px 11px;
+  border: 1px solid rgba(192, 138, 62, 0.2);
+  border-left: 2px solid rgba(205, 152, 74, 0.52);
+  border-radius: 4px;
+  background:
+    radial-gradient(110% 70% at 50% -18%, rgba(255, 190, 96, 0.06), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(43, 44, 50, 0.44), rgba(10, 11, 15, 0.48));
+  box-shadow: inset 0 1px 0 rgba(255, 226, 168, 0.04);
+}
+.pause-brief::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(192, 138, 62, 0), rgba(255, 211, 128, 0.32), rgba(192, 138, 62, 0));
+  pointer-events: none;
+}
+.pause-brief__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(192, 138, 62, 0.2);
+  color: rgba(232, 207, 166, 0.5);
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+.pause-brief__label i {
+  padding: 1px 6px 2px;
+  border: 1px solid rgba(255, 210, 138, 0.2);
+  border-radius: 2px;
+  color: rgba(255, 215, 146, 0.54);
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 1.2px;
+}
+.pause-ident { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
+.pause-ident__glyph {
+  flex: 0 0 31px;
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent, #ffd28a) 40%, rgba(198, 158, 98, 0.18));
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 32%, color-mix(in srgb, var(--accent, #ffd28a) 22%, transparent), rgba(0, 0, 0, 0.3) 72%);
+  color: color-mix(in srgb, var(--accent, #ffd28a) 72%, #f4dfb7);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-style: normal;
+  box-shadow: inset 0 1px 0 rgba(255, 238, 198, 0.1), 0 0 12px color-mix(in srgb, var(--accent, #ffd28a) 8%, transparent);
+}
+.pause-ident__text { min-width: 0; }
+.pause-ident__text b {
+  display: block;
+  color: #f1dcb8;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.2;
+  letter-spacing: 1.4px;
+}
+.pause-ident__text span {
+  display: block;
+  margin-top: 2px;
+  color: rgba(228, 210, 178, 0.46);
+  font-size: 9.5px;
+  line-height: 1.4;
+  letter-spacing: 0.45px;
+}
+.pause-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 8px;
+  padding: 6px 0;
+  border-top: 1px dashed rgba(192, 138, 62, 0.18);
+  border-bottom: 1px dashed rgba(192, 138, 62, 0.18);
+}
+.pause-stats div { min-width: 0; padding: 0 8px; border-right: 1px solid rgba(192, 138, 62, 0.12); }
+.pause-stats div:first-child { padding-left: 0; }
+.pause-stats div:last-child { padding-right: 0; border-right: 0; }
+.pause-stats span { display: block; color: rgba(228, 210, 178, 0.42); font-size: 8px; letter-spacing: 1.2px; }
+.pause-stats b {
+  display: block;
+  margin-top: 2px;
+  color: #ffd88e;
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1.1;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.pause-threats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.pause-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 7px 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent, #ffd28a) 22%, rgba(192, 138, 62, 0.12));
+  border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #ffd28a) 7%, transparent), rgba(0, 0, 0, 0.08));
+  line-height: 1.3;
+}
+.pause-chip i { flex: 0 0 auto; color: rgba(228, 210, 178, 0.36); font-size: 7.5px; font-style: normal; letter-spacing: 1px; }
+.pause-chip b {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--accent, #ffd28a) 44%, #e8d2ab);
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pause-chip.is-calm { border-color: rgba(192, 138, 62, 0.12); background: none; }
+.pause-chip.is-calm b { color: rgba(228, 210, 178, 0.42); }
+.pause-chip.is-done { border-color: rgba(138, 255, 193, 0.28); background: rgba(30, 68, 49, 0.2); }
+.pause-chip.is-done i, .pause-chip.is-done b { color: rgba(185, 247, 212, 0.7); }
+
+.pause-actions { display: grid; align-content: start; gap: 6px; }
+.pause-act {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'main key'
+    'note key';
+  align-items: center;
+  gap: 0 8px;
+  min-height: 42px;
+  padding: 6px 10px 7px;
+  border-radius: 5px;
+  text-align: left;
+}
+.pause-act b {
+  grid-area: main;
+  color: inherit;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  line-height: 1.2;
+  letter-spacing: 1.2px;
+}
+.pause-act > span:not(.pause-act__key):not(.pause-act__mark) {
+  grid-area: note;
+  overflow: hidden;
+  color: rgba(228, 210, 178, 0.38);
+  font-size: 8.5px;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pause-act__key {
+  grid-area: key;
+  align-self: center;
+  padding: 1px 5px;
+  font-size: 9px;
+}
+.pause-act__mark {
+  grid-area: key;
+  align-self: center;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 160, 132, 0.22);
+  border-radius: 50%;
+  color: rgba(255, 160, 132, 0.46);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-style: normal;
+}
+.pause-act.btn--primary > span:not(.pause-act__key):not(.pause-act__mark) { color: rgba(42, 21, 3, 0.62); }
+.pause-act.btn--primary .pause-act__key { color: rgba(42, 21, 3, 0.68); }
+.pause-act--danger {
+  border-left: 2px solid rgba(190, 70, 52, 0.5);
+  background:
+    linear-gradient(90deg, rgba(100, 26, 20, 0.16), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(60, 54, 46, 0.96), rgba(20, 17, 13, 0.97));
+}
+.pause-act--danger b { color: #e4b8a7; }
+.pause-act--danger:hover { border-color: rgba(255, 135, 100, 0.5); }
+
+@media (max-width: 720px) {
+  .panel--pause { padding: 17px 15px 15px; }
+  .pause-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .pause-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pause-actions .pause-act:first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 400px) {
+  .pause-head__kicker { font-size: 8px; letter-spacing: 2px; }
+  .pause-head__title { font-size: 19px; letter-spacing: 5px; }
+  .pause-head__title::after { display: none; }
+  .pause-clock b { font-size: 23px; }
+  .pause-brief { padding: 8px 9px 9px; }
+  .pause-stats div { padding: 0 5px; }
+  .pause-stats span { font-size: 7.5px; letter-spacing: 0.7px; }
+  .pause-stats b { font-size: 12.5px; }
+  .pause-act { min-height: 44px; padding: 5px 8px 6px; }
+  .pause-act b { font-size: 11.5px; letter-spacing: 0.8px; }
+  .pause-act > span:not(.pause-act__key):not(.pause-act__mark) { font-size: 8px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--pause { padding: 9px 14px 8px; }
+  .pause-head { margin-bottom: 6px; padding-bottom: 5px; }
+  .pause-head__kicker { font-size: 7.5px; letter-spacing: 2px; }
+  .pause-head__title { font-size: 17px; letter-spacing: 4px; }
+  .pause-head__title::after { flex-basis: 44px; }
+  .pause-clock span { font-size: 7.5px; }
+  .pause-clock b { font-size: 21px; }
+  .pause-clock i { font-size: 8px; }
+  .pause-body { gap: 8px; }
+  .pause-brief { padding: 7px 9px 8px; }
+  .pause-brief__label { padding-bottom: 4px; font-size: 8px; }
+  .pause-ident { gap: 7px; margin-top: 5px; }
+  .pause-ident__glyph { flex-basis: 25px; width: 25px; height: 25px; font-size: 12px; }
+  .pause-ident__text b { font-size: 12.5px; }
+  .pause-ident__text span { font-size: 8.5px; }
+  .pause-stats { margin-top: 5px; padding: 4px 0; }
+  .pause-stats span { font-size: 7px; }
+  .pause-stats b { font-size: 12px; }
+  .pause-threats { gap: 4px; margin-top: 4px; }
+  .pause-chip { padding: 2px 6px 2px 5px; }
+  .pause-chip i { font-size: 6.5px; }
+  .pause-chip b { font-size: 8.5px; }
+  .pause-actions { gap: 4px; }
+  .pause-act { min-height: 33px; padding: 4px 8px 5px; gap: 0 6px; }
+  .pause-act b { font-size: 11px; }
+  .pause-act > span:not(.pause-act__key):not(.pause-act__mark) { font-size: 7.5px; }
+  .pause-act__key { font-size: 8px; padding: 0 4px; }
+  .pause-act__mark { width: 18px; height: 18px; font-size: 8px; }
+}
