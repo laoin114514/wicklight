@@ -4085,6 +4085,19 @@ export class Game {
         const hc = h.kind === 'meteor' ? '#ff7a2f' : h.kind === 'thorn' ? '#9fd45a' : '#8fa7ff';
         this.particles.shockwave(h.x, h.y, hc, h.r, 0.5);
         this.particles.burst(h.x, h.y, 20, hc, { speed: 260, size: 4, life: 0.6 });
+        this.particles.sparks(h.x, h.y, h.kind === 'meteor' ? 16 : 9, hc, {
+          speed: 270,
+          size: 2.1,
+          life: 0.52,
+          stretch: 1.5,
+        });
+        this.particles.puff(h.x, h.y, h.kind === 'collapse' ? 7 : 4, h.kind === 'meteor' ? '#332017' : '#252329', {
+          speed: Math.max(38, h.r * 0.42),
+          size: Math.max(9, h.r * 0.18),
+          life: 0.9,
+          grow: 2.5,
+        });
+        this.particles.debris(h.x, h.y, 6, hc, { speed: 195, size: 2.7, life: 0.58, stretch: 1.3 });
         this.camera.addTrauma(0.35, this.settings.data.shake * this.settings.motionScale);
         const dx = this.player.x - h.x;
         const dy = this.player.y - h.y;
@@ -6149,17 +6162,158 @@ export class Game {
   }
 
   private drawHazards(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
     for (const hz of this.hazards) {
+      ctx.save();
       const t = 1 - clamp(hz.timer / 1.5, 0, 1);
-      ctx.globalAlpha = 0.35 + 0.4 * t;
-      ctx.strokeStyle = hz.kind === 'meteor' ? '#ff9d2e' : hz.kind === 'thorn' ? '#a8e05f' : '#8fa7ff';
-      ctx.lineWidth = 3;
+      const meteor = hz.kind === 'meteor';
+      const thorn = hz.kind === 'thorn';
+      const color = meteor ? '#ff9d2e' : thorn ? '#a8e05f' : '#8fa7ff';
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 17 + hz.x * 0.03 + hz.y * 0.02);
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.09 + t * 0.16;
+      ctx.fillStyle = meteor ? '#180b05' : thorn ? '#0d1608' : '#090c17';
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.36 + t * 0.46;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5 + t * 1.8;
+      ctx.setLineDash(meteor ? [7, 9] : thorn ? [11, 7] : [3, 8]);
       ctx.beginPath();
       ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      const inner = hz.r * Math.max(0.17, 1 - t * 0.84);
+      ctx.globalAlpha = 0.42 + t * 0.46;
+      ctx.lineWidth = 2.2 + t * 2.3;
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, inner, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.28 + t * 0.38;
+      ctx.lineWidth = 1.3;
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2 + this.time * 0.08;
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        ctx.beginPath();
+        ctx.moveTo(hz.x + c * hz.r * 0.89, hz.y + s * hz.r * 0.89);
+        ctx.lineTo(hz.x + c * hz.r * (1.02 + t * 0.06), hz.y + s * hz.r * (1.02 + t * 0.06));
+        ctx.stroke();
+      }
+
+      if (meteor) {
+        ctx.globalAlpha = 0.46 + t * 0.4;
+        ctx.lineWidth = 1.8 + t * 0.9;
+        const cross = inner * 0.72;
+        ctx.beginPath();
+        ctx.moveTo(hz.x - cross, hz.y);
+        ctx.lineTo(hz.x - inner * 0.16, hz.y);
+        ctx.moveTo(hz.x + inner * 0.16, hz.y);
+        ctx.lineTo(hz.x + cross, hz.y);
+        ctx.moveTo(hz.x, hz.y - cross);
+        ctx.lineTo(hz.x, hz.y - inner * 0.16);
+        ctx.moveTo(hz.x, hz.y + inner * 0.16);
+        ctx.lineTo(hz.x, hz.y + cross);
+        ctx.stroke();
+
+        const corner = inner * 0.88;
+        const arm = inner * 0.16;
+        ctx.globalAlpha = 0.32 + t * 0.36;
+        ctx.lineWidth = 1.2 + t * 0.7;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i += 1) {
+          const a = Math.PI / 4 + (i / 4) * Math.PI * 2;
+          const c = Math.cos(a);
+          const s = Math.sin(a);
+          const px = hz.x + c * corner;
+          const py = hz.y + s * corner;
+          ctx.moveTo(px - s * arm, py + c * arm);
+          ctx.lineTo(px, py);
+          ctx.lineTo(px - c * arm, py - s * arm);
+        }
+        ctx.stroke();
+
+        ctx.globalAlpha = 0.72 + pulse * 0.2;
+        ctx.fillStyle = '#fff1c8';
+        ctx.beginPath();
+        ctx.arc(hz.x, hz.y, 1.6 + t * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        const fallX = hz.x + Math.sin(this.time * 2.2 + hz.x * 0.01) * hz.r * 0.16;
+        const fallY = hz.y - hz.r * (2.05 - t * 1.38);
+        const trail = hz.r * (0.3 + pulse * 0.08);
+        ctx.globalAlpha = 0.24 + t * 0.3;
+        ctx.strokeStyle = '#ff9d2e';
+        ctx.lineWidth = 4.2 + t * 2;
+        ctx.beginPath();
+        ctx.moveTo(fallX + hz.r * 0.08, fallY + trail);
+        ctx.lineTo(fallX, fallY);
+        ctx.stroke();
+        ctx.globalAlpha = 0.46 + t * 0.42 + pulse * 0.1;
+        ctx.strokeStyle = '#ffd7a0';
+        ctx.lineWidth = 1.5 + t * 1.2;
+        ctx.beginPath();
+        ctx.moveTo(fallX + hz.r * 0.08, fallY + trail);
+        ctx.lineTo(fallX, fallY);
+        ctx.stroke();
+        ctx.fillStyle = '#fff1c8';
+        ctx.beginPath();
+        ctx.arc(fallX, fallY, 2.4 + t * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (thorn) {
+        ctx.globalAlpha = 0.38 + t * 0.38;
+        ctx.fillStyle = color;
+        const teeth = 16;
+        const spread = (Math.PI / teeth) * 0.62;
+        for (let i = 0; i < teeth; i += 1) {
+          const a = (i / teeth) * Math.PI * 2 + 0.12;
+          const rootR = hz.r * (0.84 + (i % 2) * 0.035);
+          const tipR = hz.r * (1.05 + (i % 3) * 0.025);
+          ctx.beginPath();
+          ctx.moveTo(hz.x + Math.cos(a - spread) * rootR, hz.y + Math.sin(a - spread) * rootR);
+          ctx.lineTo(hz.x + Math.cos(a) * tipR, hz.y + Math.sin(a) * tipR);
+          ctx.lineTo(hz.x + Math.cos(a + spread) * rootR, hz.y + Math.sin(a + spread) * rootR);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2 + 0.4 + (i % 2 ? 0.1 : -0.05);
+          const c = Math.cos(a);
+          const s = Math.sin(a);
+          const midA = a + (i % 2 ? -0.14 : 0.12);
+          const midR = hz.r * (0.42 + (i % 3) * 0.06);
+          const endA = a + (i % 3 === 0 ? -0.08 : 0.04);
+          const mx = hz.x + Math.cos(midA) * midR;
+          const my = hz.y + Math.sin(midA) * midR;
+          ctx.moveTo(hz.x + c * inner * 0.25, hz.y + s * inner * 0.25);
+          ctx.lineTo(mx, my);
+          ctx.lineTo(hz.x + Math.cos(endA) * hz.r * (0.76 + (i % 2) * 0.13), hz.y + Math.sin(endA) * hz.r * (0.7 + (i % 2) * 0.12));
+          if (i % 2 === 0) {
+            const branchA = midA + 0.38;
+            ctx.moveTo(mx, my);
+            ctx.lineTo(hz.x + Math.cos(branchA) * hz.r * 0.2, hz.y + Math.sin(branchA) * hz.r * 0.17);
+          }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.58;
+        ctx.strokeStyle = '#05070d';
+        ctx.lineWidth = 4.6;
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.38 + t * 0.42;
+        ctx.strokeStyle = '#c7d8ff';
+        ctx.lineWidth = 1.25 + t * 0.55;
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   get xpFrac(): number {

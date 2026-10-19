@@ -574,6 +574,34 @@ const SCENES = {
     game.blast(176, -18, 118, 1, { ring: '#ff9d2e', spark: '#ffd9a0', sparkCount: 24 });
     for (let i = 0; i < 7; i += 1) step();
   },
+  // 险境预警（v123）：三种落点预警同屏，分别停在外圈、中段与压线三拍。
+  hazardfx() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 50; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.hp = p.stats.maxHp;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    game.hazards.push(
+      { kind: 'meteor', timer: 1.16, x: -164, y: -38, r: 96 },
+      { kind: 'collapse', timer: 0.72, x: 142, y: -54, r: 120 },
+      { kind: 'thorn', timer: 0.34, x: 12, y: 136, r: 54 },
+    );
+  },
 };
 
 const scene = arg('scene', 'play');
