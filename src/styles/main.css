@@ -8997,10 +8997,51 @@ body.is-touch .lvl-actions__hint { display: none; }
    分类、搜索与条目内容都不动。
    ════════════════════════════════════════════════════════════════════════════ */
 
-@media (min-width: 721px) {
+@media (min-width: 721px) and (min-height: 431px) {
   .panel--codex .cx-tabs { margin-inline: -28px; padding-inline: 28px; }
 }
 
 @media (max-width: 360px) {
   .panel--detail .cx-rows > div { padding-top: 5px; padding-bottom: 4px; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v169 · 小横屏：360px 高也把一屏交还给玩家
+   740×360 这类窄横屏上，余烬树会从四列掉成三列，图鉴索引条又沿用桌面的
+   负边距；选灯火与今日灯芯也被顶出十余像素。这里只补这一档的列数与间距，
+   不改任何选项、条目或按钮顺序。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .panel--meta .node-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (orientation: landscape) and (max-height: 380px) {
+  .panel--select { padding-top: 6px; padding-bottom: 3px; }
+  .select-head { margin-bottom: 2px; }
+  .panel--select .diff-row { margin-top: 5px; }
+  .panel--select .pact-block { margin-top: 4px; }
+  .select-actions { margin-top: 3px; padding-top: 2px; }
+  .select-actions .btn { padding-top: 7px; padding-bottom: 7px; }
+
+  .panel--daily { padding-bottom: 5px; }
+  .daily-mast { margin-bottom: 5px; }
+  .daily-brief { margin-bottom: 5px; }
+  .daily-route__head { margin-bottom: 3px; }
+  .daily-leg { padding-top: 4px; padding-bottom: 5px; }
+  .daily-tally { margin-top: 5px; }
+  .daily-actions { margin-top: 4px; }
+
+  .panel--meta { padding-top: 7px; padding-bottom: 3px; }
+  .panel--meta .panel__title { margin-bottom: 1px; font-size: 14px; line-height: 1.05; }
+  .meta-tabs { margin-top: 1px; margin-bottom: 3px; padding-top: 1px; padding-bottom: 2px; }
+  .meta-tab { padding-top: 1px; padding-bottom: 1px; }
+  .panel--meta .node-grid { gap: 2px 4px; }
+  .panel--meta .node { padding: 2px 6px 2px; }
+  .panel--meta .node__name { font-size: 10px; line-height: 1.25; }
+  .panel--meta .node__blurb { font-size: 8px; line-height: 1.25; }
+  .panel--meta .node__cost { margin-top: 1px; padding: 0 3px; font-size: 7.8px; }
+  .meta-actions { margin-top: 2px; padding-top: 3px; }
+  .meta-actions .btn { padding-top: 6px; padding-bottom: 6px; font-size: 10.5px; }
 }
