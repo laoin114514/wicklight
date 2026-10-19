@@ -43,6 +43,18 @@ function bossTelegraph(ctx: CanvasRenderingContext2D, e: Enemy, time: number, t:
   const pulse = 0.5 + 0.5 * Math.sin(time * 22 + e.wobble);
 
   ctx.save();
+
+  // 蓄力不是一圈静止的刻度：先在外环内侧压一层暗雾，把地面的亮光往里收，
+  // 再用错速的细弧和向心丝线表现"空气正在被抽进首领身体"。
+  const press = ctx.createRadialGradient(e.x, e.y, r * 0.78, e.x, e.y, ring * 1.08);
+  press.addColorStop(0, 'rgba(2,3,8,0)');
+  press.addColorStop(0.58, `rgba(2,3,8,${0.08 + t * 0.16})`);
+  press.addColorStop(1, 'rgba(2,3,8,0)');
+  ctx.fillStyle = press;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, ring * 1.08, 0, TAU);
+  ctx.fill();
+
   ctx.globalCompositeOperation = 'lighter';
   ctx.strokeStyle = color;
 
@@ -62,6 +74,45 @@ function bossTelegraph(ctx: CanvasRenderingContext2D, e: Enemy, time: number, t:
   ctx.beginPath();
   ctx.arc(e.x, e.y, ring, 0, TAU);
   ctx.stroke();
+
+  const innerRing = r * (1.08 + t * 0.14);
+  ctx.globalAlpha = 0.12 + t * 0.26;
+  ctx.lineWidth = 0.9 + t * 0.7;
+  ctx.setLineDash([2 + t * 2, 5 - t * 2]);
+  ctx.lineDashOffset = -time * (10 + t * 8);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, innerRing, 0, TAU);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+
+  ctx.lineCap = 'round';
+  for (const [dir, phase, span] of [[1, 0.12, 1.34], [-1, 2.28, 0.92]] as const) {
+    ctx.globalAlpha = 0.12 + t * 0.2;
+    ctx.lineWidth = 0.9 + t * 0.55;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, innerRing + r * 0.1, dir * time * (0.9 + t * 0.9) + phase, dir * time * (0.9 + t * 0.9) + phase + span);
+    ctx.stroke();
+  }
+
+  // 向心丝线随蓄力伸长，外端贴在警示环内侧，内端逐渐逼近首领轮廓。
+  ctx.globalAlpha = 0.14 + t * 0.28;
+  ctx.lineWidth = 0.75 + t * 0.55;
+  for (let i = 0; i < 6; i += 1) {
+    const a = -spin * 1.9 + (i / 6) * TAU;
+    const bend = 0.075 + (i % 2) * 0.035;
+    const outer = ring - 2.5;
+    const inner = innerRing + (1 - t) * r * (0.3 + (i % 3) * 0.05);
+    ctx.beginPath();
+    ctx.moveTo(e.x + Math.cos(a + bend) * outer, e.y + Math.sin(a + bend) * outer);
+    ctx.quadraticCurveTo(
+      e.x + Math.cos(a + bend * 0.35) * (outer * 0.7 + inner * 0.3),
+      e.y + Math.sin(a + bend * 0.35) * (outer * 0.7 + inner * 0.3),
+      e.x + Math.cos(a) * inner,
+      e.y + Math.sin(a) * inner,
+    );
+    ctx.stroke();
+  }
 
   ctx.globalAlpha = 0.34 + t * 0.46;
   ctx.lineWidth = 1.3 + t * 0.8;
