@@ -13,11 +13,15 @@ export interface FloatText {
   size: number;
   crit: boolean;
   kind: 'damage' | 'crit' | 'label';
+  /** 同一个目标的短时间连击合成一条，避免怪群上叠出一堵字墙。 */
+  key: string | null;
+  value: number;
 }
 
 const MAX_ACTIVE = 140;
 
 export class FloatingTextSystem {
+  private thinTick = 0;
   private pool = new Pool<FloatText>(() => ({
     active: false,
     x: 0,
@@ -31,6 +35,8 @@ export class FloatingTextSystem {
     size: 14,
     crit: false,
     kind: 'damage',
+    key: null,
+    value: 0,
   }), 128);
 
   private spawn(
@@ -42,8 +48,8 @@ export class FloatingTextSystem {
     crit: boolean,
     life: number,
     kind: 'damage' | 'crit' | 'label',
-  ): void {
-    if (this.pool.activeCount > MAX_ACTIVE) return;
+  ): FloatText | null {
+    if (this.pool.activeCount > MAX_ACTIVE) return null;
     const f = this.pool.acquire();
     f.x = x + (Math.random() * 2 - 1) * 10;
     f.y = y;
@@ -56,13 +62,59 @@ export class FloatingTextSystem {
     f.size = size;
     f.crit = crit;
     f.kind = kind;
+    f.key = null;
+    f.value = 0;
+    return f;
   }
 
-  damage(x: number, y: number, amount: number, crit: boolean): void {
-    const shown = amount >= 100 ? Math.round(amount) : Math.round(amount * 10) / 10;
-    const text = crit ? `${shown}!!` : `${shown}`;
-    if (crit) this.spawn(x, y, text, '#fff0a8', 20, true, 0.9, 'crit');
-    else this.spawn(x, y, text, '#ffe6c0', 13, false, 0.7, 'damage');
+  private shown(value: number, crit: boolean): string {
+    const n = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+    return crit ? `${n}!!` : `${n}`;
+  }
+
+  damage(x: number, y: number, amount: number, crit: boolean, key?: string): void {
+    // 同一目标在 0.24 秒内的连续命中并成一条：数字累加、停留时间续满，
+    // 暴击则把这一条升级成暴击样式。这样环形火环、喷射和燎灯打在同一只身上时，
+    // 玩家读到的是"这一阵总共掉了多少"，而不是满屏互相踩踏的个位数。
+    if (key) {
+      for (const f of this.pool.all) {
+        if (!f.active || f.key !== key || f.kind === 'label') continue;
+        if (f.maxLife - f.life > 0.24) continue;
+        f.value += amount;
+        f.life = f.maxLife;
+        f.text = this.shown(f.value, f.crit || crit);
+        if (crit && !f.crit) {
+          f.crit = true;
+          f.kind = 'crit';
+          f.color = '#fff0a8';
+          f.size = 20;
+          f.maxLife = 0.9;
+          f.life = 0.9;
+        } else if (!f.crit) {
+          f.size = 13 + Math.min(2, f.value / 90);
+        }
+        return;
+      }
+    }
+    // 画面已经被伤害字塞满时，普通数字只抽样显示三分之一；暴击与标签从不抽样。
+    // 这个门槛只在极端怪群里触发，普通战斗的每一下仍会照常报数。
+    if (!crit && this.pool.activeCount > 76) {
+      this.thinTick = (this.thinTick + 1) % 3;
+      if (this.thinTick !== 0) return;
+    }
+    const f = this.spawn(
+      x,
+      y,
+      this.shown(amount, crit),
+      crit ? '#fff0a8' : '#ffe6c0',
+      crit ? 20 : 13,
+      crit,
+      crit ? 0.9 : 0.7,
+      crit ? 'crit' : 'damage',
+    );
+    if (!f) return;
+    f.key = key ?? null;
+    f.value = amount;
   }
 
   label(x: number, y: number, text: string, color: string, size = 15): void {
@@ -155,6 +207,7 @@ export class FloatingTextSystem {
 
   clear(): void {
     this.pool.clear();
+    this.thinTick = 0;
   }
 
   get count(): number {

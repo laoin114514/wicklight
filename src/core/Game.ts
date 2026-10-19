@@ -3051,7 +3051,7 @@ export class Game {
     const killed = this.enemies.damage(e, reduced, this.lightCtx(), kx, ky, knockback);
     this.creditDamage(source, reduced);
     if (reduced > this.maxHit) this.maxHit = reduced;
-    this.floaters.damage(e.x, e.y - e.radius - 6, reduced, crit);
+    this.floaters.damage(e.x, e.y - e.radius - 6, reduced, crit, String(e.id));
     // 「暗火」：拨着芯时每次命中都为敌人添一层灼烧。
     // 为什么要挂在这一层（而不是某一件武器里）：拨芯拨的是**这盏灯**，它该跟着"你打出去的每一下"，
     // 而不是某一根枪管；而且灼烧那条账本来就在这一层（`opts.burn`）——同一句话写在一个地方，
