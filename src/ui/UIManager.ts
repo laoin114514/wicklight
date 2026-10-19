@@ -1098,6 +1098,7 @@ export class UIManager implements UIHost {
     const price = g.forgePrice;
     const used = g.forgeUsed;
     const poor = g.gold < price;
+    const foot = used ? '炉门已经冷了' : poor ? '金币不足，炉门打不开' : '投入一件已有遗物';
     const chips = owned
       .map((id) => {
         const d = RELIC_MAP[id];
@@ -1107,12 +1108,14 @@ export class UIManager implements UIHost {
     const note = used ? '本店已熔铸过' : poor ? `还差 ${price - g.gold} 金币` : `换掉哪一件？`;
     return `
       <div class="forge ${used || poor ? 'is-off' : ''}">
+        <div class="forge__sigil" aria-hidden="true">🔥</div>
         <div class="forge__head">
-          <b>🔥 熔铸台</b>
+          <b>熔铸台</b>
           <span>${note}</span>
           <i>${price} 🪙</i>
         </div>
         <div class="forge__row">${chips}</div>
+        <div class="forge__foot"><span>${foot}</span><i>回炉重铸为一件随机遗物 · 每店一次</i></div>
       </div>`;
   }
 
