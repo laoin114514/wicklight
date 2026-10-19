@@ -55,6 +55,8 @@ export class UIManager implements UIHost {
   private codexQuery = '';
   /** 图鉴当前展开的分类；搜索时会让所有命中的分类同时展开。 */
   private codexTab: CodexKind = 'enemy';
+  /** 成就册当前展开的分组；`全部`仍保留整册视图。 */
+  private achTab: string = ACHIEVEMENT_GROUPS[0] ?? '全部';
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -1862,7 +1864,7 @@ export class UIManager implements UIHost {
       if (!items.length) return '';
       const got = items.filter((a) => this.game.save.achievements.includes(a.id)).length;
       const progress = (got / items.length) * 100;
-      return `<div class="ach-group">
+      return `<div class="ach-group" data-ach-group="${group}">
         <div class="ach-group__title">
           <span>${group}</span>
           <i class="ach-group__rule" style="--ach-progress:${progress.toFixed(1)}%" aria-hidden="true"><span></span></i>
@@ -1874,6 +1876,13 @@ export class UIManager implements UIHost {
     const earned = ACHIEVEMENTS.reduce((n, a) => n + (this.game.save.achievements.includes(a.id) ? a.embers ?? 0 : 0), 0);
     const totalReward = ACHIEVEMENTS.reduce((n, a) => n + (a.embers ?? 0), 0);
     const earnedPct = totalReward ? Math.min(100, (earned / totalReward) * 100) : 0;
+    const tabs = ['全部', ...ACHIEVEMENT_GROUPS].map((group) => {
+      const items = group === '全部' ? ACHIEVEMENTS : ACHIEVEMENTS.filter((a) => a.group === group);
+      const got = items.filter((a) => this.game.save.achievements.includes(a.id)).length;
+      return `<button class="ach-tab${group === this.achTab ? ' is-on' : ''}" data-ach-tab="${group}" role="tab" aria-selected="${group === this.achTab}">
+        <span>${group}</span><b>${got}/${items.length}</b>
+      </button>`;
+    }).join('');
     this.show(`
       <div class="panel panel--list panel--vellum">
         <header class="ach-head">
@@ -1888,10 +1897,30 @@ export class UIManager implements UIHost {
             <em><i style="width:${earnedPct.toFixed(1)}%"></i></em>
           </div>
         </header>
+        <div class="ach-tabs" role="tablist" aria-label="成就分组">${tabs}</div>
         <div class="ach-list">${list}</div>
         <div class="row-actions ach-actions"><button class="btn btn--primary" data-act="back">返回</button></div>
       </div>
     `);
+    const panel = this.screen.querySelector('.panel--list') as HTMLElement | null;
+    const tabList = [...this.screen.querySelectorAll<HTMLElement>('[data-ach-tab]')];
+    const groups = [...this.screen.querySelectorAll<HTMLElement>('[data-ach-group]')];
+    const showGroup = (group: string) => {
+      this.achTab = group;
+      tabList.forEach((tab) => {
+        const on = tab.dataset.achTab === group;
+        tab.classList.toggle('is-on', on);
+        tab.setAttribute('aria-selected', String(on));
+      });
+      groups.forEach((section) => {
+        section.hidden = group !== '全部' && section.dataset.achGroup !== group;
+      });
+    };
+    showGroup(this.achTab);
+    this.onAll('[data-ach-tab]', (el) => {
+      showGroup(el.dataset.achTab as string);
+      panel?.scrollTo({ top: 0, behavior: 'auto' });
+    });
     this.on('[data-act="back"]', () => this.backToOrigin());
   }
 

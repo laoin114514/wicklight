@@ -8575,3 +8575,130 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--codex .row-actions { margin-top: 6px; padding-top: 5px; }
   .panel--codex .row-actions .btn { padding: 7px 16px; font-size: 11px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v164 · 成就：四组火印，各翻各的一页
+   五十八枚火印同时摊开时，题头的奖励进度和尾页的返回键都离得太远。
+   这一版加一排分组索引，默认只翻当前一组，`全部`仍可整册通看；
+   手机条目改成双列火印签，奖励移到说明下方，返回键继续吸底。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.ach-group[hidden] { display: none !important; }
+
+.ach-tabs {
+  position: sticky;
+  top: -1px;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin: 7px -22px 9px;
+  padding: 6px 22px 7px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(198, 158, 98, 0.13);
+  border-bottom: 1px solid rgba(198, 158, 98, 0.25);
+  background:
+    repeating-linear-gradient(96deg, rgba(255, 224, 176, 0.018) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, rgba(33, 27, 19, 0.985), rgba(17, 13, 9, 0.995));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  scrollbar-width: none;
+}
+.ach-tabs::-webkit-scrollbar { display: none; }
+.ach-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 8px 4px;
+  border: 1px solid rgba(198, 158, 98, 0.2);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(255, 228, 178, 0.035), rgba(0, 0, 0, 0.13));
+  color: rgba(226, 207, 174, 0.56);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 194, 0.035);
+}
+.ach-tab b {
+  color: rgba(232, 195, 130, 0.46);
+  font-size: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.ach-tab:hover {
+  border-color: rgba(255, 202, 112, 0.42);
+  color: rgba(255, 226, 177, 0.84);
+}
+.ach-tab.is-on {
+  border-color: rgba(255, 205, 119, 0.54);
+  background:
+    linear-gradient(180deg, rgba(255, 206, 111, 0.18), rgba(80, 44, 8, 0.24)),
+    rgba(255, 220, 154, 0.035);
+  color: #ffe1a6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 242, 208, 0.14),
+    0 0 12px rgba(255, 169, 59, 0.09);
+}
+.ach-tab.is-on b { color: #ffc96b; }
+.ach-tab:focus-visible {
+  outline: 1px solid rgba(255, 206, 116, 0.7);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .ach-tabs {
+    justify-content: flex-start;
+    gap: 4px;
+    margin: 5px -12px 7px;
+    padding: 5px 12px;
+  }
+  .ach-tab { gap: 4px; padding: 3px 7px 4px; font-size: 8.6px; letter-spacing: 0.7px; }
+  .ach-tab b { font-size: 7.8px; }
+  .panel--vellum .ach-group .ach-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 5px;
+  }
+  .panel--vellum .ach {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-areas:
+      'mark body'
+      'mark reward';
+    align-items: start;
+    column-gap: 5px;
+    row-gap: 2px;
+    padding: 5px 7px 6px;
+  }
+  .ach__mark { grid-area: mark; flex-basis: 20px; width: 20px; height: 20px; margin-top: 1px; font-size: 9px; }
+  .ach__body { grid-area: body; }
+  .ach__name { font-size: 11px; line-height: 1.25; }
+  .ach__blurb { font-size: 8.8px; line-height: 1.32; }
+  .ach__reward {
+    grid-area: reward;
+    justify-self: start;
+    padding: 1px 4px 2px;
+    font-size: 8px;
+  }
+  .ach-group__title { margin-bottom: 4px; }
+}
+
+@media (max-width: 400px) {
+  .ach-tabs { margin-inline: -9px; padding-inline: 9px; gap: 3px; }
+  .ach-tab { padding: 2px 6px 3px; font-size: 8.1px; }
+  .ach-tab b { font-size: 7.4px; }
+  .panel--vellum .ach { column-gap: 4px; padding: 4px 5px 5px; }
+  .ach__mark { flex-basis: 18px; width: 18px; height: 18px; font-size: 8px; }
+  .ach__name { font-size: 10.5px; }
+  .ach__blurb { font-size: 8.4px; line-height: 1.3; }
+  .ach__reward { font-size: 7.6px; padding-inline: 3px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .ach-tabs { justify-content: flex-start; margin: 4px -14px 5px; padding: 4px 14px; }
+  .ach-tab { padding: 2px 6px 3px; font-size: 8.2px; }
+  .panel--list .ach-actions { margin-top: 5px; padding-top: 5px; }
+}
