@@ -1,5 +1,6 @@
 import { Camera } from './Camera';
 import { Atmosphere } from './Atmosphere';
+import { Foreground } from './Foreground';
 import { distanceToRect, visibilityPolygon, type VisibilityPoint } from './Visibility';
 import { isLitAt } from './LightRules';
 import { PostFX } from './PostFX';
@@ -326,6 +327,7 @@ export class Game {
   readonly audio: AudioEngine;
   readonly light = new LightSystem();
   readonly atmosphere = new Atmosphere();
+  readonly foreground = new Foreground();
   readonly postfx: PostFX;
   readonly events = new EventBus<GameEvents>();
   readonly rng = new Random();
@@ -4776,6 +4778,7 @@ export class Game {
     r.begin();
     const theme = this.currentStage().theme;
     this.atmosphere.ensure(theme);
+    this.foreground.ensure(theme);
     r.clear(theme.fog);
     const ctx = r.ctx;
     const w = r.width;
@@ -4812,12 +4815,12 @@ export class Game {
       this.player.lightRadius,
       this.profile.handheld,
     );
-
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
     // 暖色分级 + 泛光：两件都是加法叠加，合成一趟做（手机上省一次整屏读改写）
     this.postfx.applyGlow(ctx, w, h, { px: this.renderer.width / 2, py: this.renderer.height / 2, strength: 1 });
     this.postfx.applyMain(ctx, w, h);
+    this.foreground.draw(ctx, w, h, this.time, this.camera, this.profile.handheld);
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(255,242,214,${this.flash.toFixed(3)})`;
       ctx.fillRect(0, 0, w, h);

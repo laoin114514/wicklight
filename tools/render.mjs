@@ -85,6 +85,11 @@ const SCENES = {
     game.newRun('warden', 'normal', false);
     fight(420);
   },
+  stage2() {
+    game.newRun('warden', 'normal', false);
+    game.loadStage(STAGES[1], 1, false);
+    fight(460);
+  },
   // 灯影（v94）：固定的一间靶房，只看"光停在墙的哪一面"。
   // 两堵竖墙在左侧留一道缝，右上方留一只可见的靶、墙后放一只看不见的靶。
   wallshadow() {
