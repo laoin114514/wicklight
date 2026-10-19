@@ -417,6 +417,41 @@ function bossAura(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
       ctx.fill();
     }
   }
+
+  // 最终相位：脚下半圈暗裂随着呼吸一开一合。它压在光晕之上、身体之下，
+  // 让第三相位像在把地面一起拖进黑暗，而不是只多几枚装饰刻点。
+  if (e.phase >= 3) {
+    const groundY = e.y + r * 0.6;
+    const breath = 0.24 + (Math.sin(time * 1.55 + e.wobble) * 0.5 + 0.5) * 0.1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(1,2,4,0.92)';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 7; i += 1) {
+      const a = (i / 7) * TAU + e.wobble * 0.14;
+      const reach = r * (0.88 + (i % 3) * 0.19);
+      const midA = a + Math.sin(e.id * 0.9 + i) * 0.09;
+      ctx.globalAlpha = breath * (0.7 + (i % 2) * 0.22);
+      ctx.lineWidth = 1.15 + (i % 2) * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a) * r * 0.48, groundY + Math.sin(a) * r * 0.2);
+      ctx.lineTo(e.x + Math.cos(midA) * reach * 0.7, groundY + Math.sin(midA) * reach * 0.31);
+      ctx.lineTo(e.x + Math.cos(a - 0.035) * reach, groundY + Math.sin(a - 0.035) * reach * 0.43);
+      ctx.stroke();
+      ctx.globalAlpha = breath * 0.34;
+      ctx.strokeStyle = rgba(e.color, 0.7);
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i += 1) {
+      const a = 0.5 + i * 2.1 + time * 0.08;
+      ctx.globalAlpha = breath * 0.62;
+      ctx.fillStyle = i === 1 ? '#ffe2b0' : rgba(e.color, 0.9);
+      ctx.beginPath();
+      ctx.arc(e.x + Math.cos(a) * r * 1.18, groundY + Math.sin(a) * r * 0.46 - 1.5, 0.85, 0, TAU);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
