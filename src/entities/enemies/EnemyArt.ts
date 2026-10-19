@@ -1406,25 +1406,92 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'splinter': {
-      // 内部裂纹 + 三个小碎面
-      ctx.strokeStyle = shade(body, 0.45);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(e.x - r * 0.55, e.y - r * 0.2);
-      ctx.lineTo(e.x, e.y + r * 0.1);
-      ctx.lineTo(e.x + r * 0.5, e.y - r * 0.35);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(e.x, e.y + r * 0.1);
-      ctx.lineTo(e.x + r * 0.15, e.y + r * 0.62);
-      ctx.stroke();
-      ctx.fillStyle = shade(body, 0.25);
-      for (let i = 0; i < 3; i += 1) {
-        const a = e.wobble * 0.3 + (i / 3) * TAU;
+      const rot = e.angle + w * 0.08;
+      const vertices = Array.from({ length: 5 }, (_, index) => {
+        const angle = rot + (index / 5) * TAU;
+        return { x: e.x + Math.cos(angle) * r * 1.05, y: e.y + Math.sin(angle) * r * 1.05 * 0.94 };
+      });
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      for (let facet = 0; facet < 5; facet += 1) {
+        const first = vertices[facet];
+        const second = vertices[(facet + 1) % 5];
+        ctx.fillStyle = facet % 2 === 0 ? 'rgba(196,225,255,0.09)' : 'rgba(9,28,58,0.1)';
         ctx.beginPath();
-        ctx.arc(e.x + Math.cos(a) * r * 0.42, e.y + Math.sin(a) * r * 0.42, r * 0.12, 0, TAU);
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(first.x, first.y);
+        ctx.lineTo(second.x, second.y);
+        ctx.closePath();
         ctx.fill();
       }
+
+      ctx.strokeStyle = 'rgba(13,31,62,0.36)';
+      ctx.lineWidth = 1.1;
+      for (let seam = 0; seam < 5; seam += 1) {
+        const vertex = vertices[seam];
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(vertex.x, vertex.y);
+        ctx.stroke();
+      }
+
+      ctx.globalCompositeOperation = 'lighter';
+      const core = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 0.72);
+      core.addColorStop(0, 'rgba(228,245,255,0.28)');
+      core.addColorStop(0.42, 'rgba(125,181,243,0.14)');
+      core.addColorStop(1, 'rgba(57,91,158,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 0.72, 0, TAU);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(226,243,255,0.5)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.58, e.y - r * 0.18);
+      ctx.lineTo(e.x - r * 0.1, e.y + r * 0.02);
+      ctx.lineTo(e.x + r * 0.14, e.y + r * 0.27);
+      ctx.lineTo(e.x + r * 0.5, e.y + r * 0.42);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.1, e.y + r * 0.02);
+      ctx.lineTo(e.x - r * 0.18, e.y - r * 0.48);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(16,36,73,0.5)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(e.x - r * 0.56, e.y - r * 0.14);
+      ctx.lineTo(e.x - r * 0.08, e.y + r * 0.06);
+      ctx.lineTo(e.x + r * 0.16, e.y + r * 0.31);
+      ctx.lineTo(e.x + r * 0.52, e.y + r * 0.46);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let shard = 0; shard < 3; shard += 1) {
+        const angle = time * 0.38 + w * 0.12 + (shard / 3) * TAU;
+        const orbit = r * (1.3 + Math.sin(time * 1.4 + shard * 1.7 + w) * 0.07);
+        const cx = e.x + Math.cos(angle) * orbit;
+        const cy = e.y + Math.sin(angle) * orbit * 0.9;
+        const shardAngle = angle + 0.65 + shard * 0.3;
+        const length = r * (0.2 + shard * 0.025);
+        const width = length * 0.48;
+        ctx.fillStyle = rgba(body, 0.58);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(shardAngle) * length, cy + Math.sin(shardAngle) * length);
+        ctx.lineTo(cx + Math.cos(shardAngle + Math.PI / 2) * width, cy + Math.sin(shardAngle + Math.PI / 2) * width);
+        ctx.lineTo(cx - Math.cos(shardAngle) * length, cy - Math.sin(shardAngle) * length);
+        ctx.lineTo(cx + Math.cos(shardAngle - Math.PI / 2) * width, cy + Math.sin(shardAngle - Math.PI / 2) * width);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(207,235,255,0.28)';
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+      ctx.restore();
       break;
     }
     case 'darkless': {
