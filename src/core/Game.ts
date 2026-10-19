@@ -6496,22 +6496,256 @@ export class Game {
     // "地上放了一盏灯"。它是这一版的招牌，得读成"地上真有一摊正在烧的油"（见 drawOilFire）。
     for (const g of this.grounds) {
       if (g.ignites) this.drawOilFire(ctx, g);
+      else if (g.kind === 'fire') this.drawFireGround(ctx, g);
       else if (g.kind === 'poison') this.drawPoisonGround(ctx, g);
       else if (g.kind === 'mud') this.drawMudGround(ctx, g);
       else if (g.kind === 'frost') this.drawFrostGround(ctx, g);
     }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'lighter';
-    for (const g of this.grounds) {
-      if (g.ignites || (g.kind && g.kind !== 'fire')) continue;
-      const g2 = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-      g2.addColorStop(0, 'rgba(255,120,40,0.5)');
-      g2.addColorStop(1, 'rgba(255,60,20,0)');
-      ctx.fillStyle = g2;
+    ctx.restore();
+  }
+
+  private drawFireGround(ctx: CanvasRenderingContext2D, g: Ground): void {
+    const fade = clamp(g.life / 1.2, 0, 1);
+    const ph = g.phase || (g.x * 0.011 - g.y * 0.017);
+    const t = this.time;
+    const breath = 0.84 + 0.16 * Math.sin(t * 5.1 + ph * 1.7);
+    const hash = (k: number): number => {
+      const s = Math.sin(k * 12.9898 + ph * 78.233) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    const soot = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
+    soot.addColorStop(0, `rgba(19,11,7,${0.72 * fade})`);
+    soot.addColorStop(0.62, `rgba(15,9,6,${0.56 * fade})`);
+    soot.addColorStop(1, 'rgba(9,6,4,0)');
+    ctx.fillStyle = soot;
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.y + g.r * 0.03, g.r * 0.98, g.r * 0.86, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 7; i += 1) {
+      const angle = ph + i * 2.39996;
+      const distance = g.r * (0.2 + 0.12 * ((i * 3) % 3));
+      const blob = g.r * (0.24 + 0.045 * ((i * 5) % 4));
+      ctx.globalAlpha = (0.18 + 0.06 * ((i * 3) % 3)) * fade;
+      ctx.fillStyle = i % 3 === 0 ? '#090604' : '#120b07';
       ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+      ctx.ellipse(
+        g.x + Math.cos(angle) * distance,
+        g.y + Math.sin(angle) * distance * 0.72,
+        blob * 1.35,
+        blob * 0.7,
+        angle,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
+
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 7; i += 1) {
+      const angle = ph + i * 0.8976 + 0.18;
+      const inner = g.r * (0.16 + 0.05 * (i % 3));
+      const outer = g.r * (0.64 + 0.14 * ((i * 3) % 3));
+      const bend = (hash(i + 91) - 0.5) * g.r * 0.24;
+      const mx = g.x + Math.cos(angle) * inner;
+      const my = g.y + Math.sin(angle) * inner;
+      const ex = g.x + Math.cos(angle) * outer;
+      const ey = g.y + Math.sin(angle) * outer;
+      ctx.globalAlpha = (0.28 + 0.08 * (i % 3)) * fade;
+      ctx.strokeStyle = '#080403';
+      ctx.lineWidth = 1.2 + (i % 2) * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.quadraticCurveTo(
+        g.x + Math.cos(angle - 0.22) * outer * 0.58 + Math.cos(angle + 1.57) * bend,
+        g.y + Math.sin(angle - 0.22) * outer * 0.58 + Math.sin(angle + 1.57) * bend,
+        ex,
+        ey,
+      );
+      ctx.stroke();
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    const outerGlow = ctx.createRadialGradient(g.x, g.y, g.r * 0.04, g.x, g.y, g.r);
+    outerGlow.addColorStop(0, `rgba(255,148,64,${0.44 * breath * fade})`);
+    outerGlow.addColorStop(0.42, `rgba(255,88,26,${0.25 * breath * fade})`);
+    outerGlow.addColorStop(0.76, 'rgba(255,58,18,0.08)');
+    outerGlow.addColorStop(1, 'rgba(255,48,12,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    const fireBed = ctx.createRadialGradient(
+      g.x - g.r * 0.04,
+      g.y - g.r * 0.02,
+      0,
+      g.x,
+      g.y,
+      g.r * 0.66,
+    );
+    fireBed.addColorStop(0, `rgba(255,221,132,${0.46 * breath * fade})`);
+    fireBed.addColorStop(0.32, `rgba(255,142,48,${0.34 * breath * fade})`);
+    fireBed.addColorStop(0.7, 'rgba(255,66,18,0.14)');
+    fireBed.addColorStop(1, 'rgba(255,52,15,0)');
+    ctx.fillStyle = fireBed;
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.y + g.r * 0.02, g.r * 0.66, g.r * 0.54, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 6; i += 1) {
+      const angle = ph + i * 1.0472 + 0.24;
+      const inner = g.r * (0.18 + 0.04 * (i % 2));
+      const outer = g.r * (0.68 + 0.15 * ((i * 3) % 3));
+      const bend = (hash(i + 127) - 0.5) * g.r * 0.2;
+      ctx.globalAlpha = (0.1 + 0.07 * (0.5 + 0.5 * Math.sin(t * 3.9 + i * 1.7 + ph))) * fade;
+      ctx.strokeStyle = i % 2 === 0 ? '#ff8a2c' : '#ffb14a';
+      ctx.lineWidth = 0.75 + (i % 3) * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(g.x + Math.cos(angle) * inner, g.y + Math.sin(angle) * inner);
+      ctx.quadraticCurveTo(
+        g.x + Math.cos(angle - 0.18) * outer * 0.58 + Math.cos(angle + 1.57) * bend,
+        g.y + Math.sin(angle - 0.18) * outer * 0.58 + Math.sin(angle + 1.57) * bend,
+        g.x + Math.cos(angle) * outer,
+        g.y + Math.sin(angle) * outer,
+      );
+      ctx.stroke();
+    }
+
+    const paintTongue = (
+      baseX: number,
+      baseY: number,
+      height: number,
+      width: number,
+      lean: number,
+      alpha: number,
+      hot: boolean,
+    ): void => {
+      const traceFlame = (): void => {
+        const tipX = baseX + lean;
+        const tipY = baseY - height;
+        ctx.beginPath();
+        ctx.moveTo(baseX - width, baseY);
+        ctx.bezierCurveTo(
+          baseX - width * 1.03,
+          baseY - height * 0.2,
+          baseX - width * 0.88 + lean * 0.08,
+          baseY - height * 0.34,
+          baseX - width * 0.58 + lean * 0.18,
+          baseY - height * 0.4,
+        );
+        ctx.quadraticCurveTo(
+          baseX - width * 0.46 + lean * 0.22,
+          baseY - height * 0.62,
+          baseX - width * 0.34 + lean * 0.25,
+          baseY - height * 0.7,
+        );
+        ctx.quadraticCurveTo(
+          baseX - width * 0.24 + lean * 0.3,
+          baseY - height * 0.49,
+          baseX - width * 0.08 + lean * 0.4,
+          baseY - height * 0.48,
+        );
+        ctx.quadraticCurveTo(baseX + width * 0.01 + lean * 0.48, baseY - height * 0.83, tipX, tipY);
+        ctx.quadraticCurveTo(
+          tipX + width * 0.12,
+          baseY - height * 0.68,
+          baseX + width * 0.28 + lean * 0.42,
+          baseY - height * 0.49,
+        );
+        ctx.quadraticCurveTo(
+          baseX + width * 0.38 + lean * 0.36,
+          baseY - height * 0.62,
+          baseX + width * 0.5 + lean * 0.28,
+          baseY - height * 0.56,
+        );
+        ctx.quadraticCurveTo(
+          baseX + width * 0.64 + lean * 0.22,
+          baseY - height * 0.36,
+          baseX + width * 0.8,
+          baseY - height * 0.27,
+        );
+        ctx.bezierCurveTo(
+          baseX + width * 0.97,
+          baseY - height * 0.17,
+          baseX + width * 1.02,
+          baseY - height * 0.04,
+          baseX + width,
+          baseY,
+        );
+        ctx.closePath();
+      };
+
+      ctx.globalAlpha = alpha * fade;
+      ctx.fillStyle = hot ? '#ff8c2a' : '#ed5418';
+      traceFlame();
+      ctx.fill();
+
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.scale(0.62, 0.7);
+      ctx.translate(-baseX, -baseY);
+      ctx.globalAlpha = alpha * 0.7 * fade;
+      ctx.fillStyle = hot ? '#ffd166' : '#ffb141';
+      traceFlame();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.scale(0.3, 0.42);
+      ctx.translate(-baseX, -baseY);
+      ctx.globalAlpha = alpha * 0.5 * fade;
+      ctx.fillStyle = hot ? '#fff3c9' : '#ffe29a';
+      traceFlame();
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const flameCount = Math.round(clamp(g.r / 17, 5, 7));
+    for (let i = 0; i < flameCount; i += 1) {
+      const angle = ph + i * 2.39996;
+      const distance = g.r * 0.56 * Math.sqrt((i + 0.5) / flameCount);
+      const heightSeed = hash(i + 17);
+      const widthSeed = hash(i + 71);
+      const wobble = 0.5 + 0.5 * Math.sin(t * (3.4 + heightSeed * 3) + i * 1.9 + ph * 2.4);
+      const baseX = g.x + Math.cos(angle) * distance;
+      const baseY = g.y + Math.sin(angle) * distance * 0.82;
+      const core = 1 - clamp(distance / g.r, 0, 1);
+      const height =
+        g.r * (0.38 + 0.3 * heightSeed) * (0.8 + 0.2 * core) * (0.85 + 0.15 * wobble) * (0.78 + 0.22 * fade);
+      const width = g.r * (0.1 + 0.055 * widthSeed) * (0.88 + 0.2 * core);
+      const lean = Math.sin(t * (3.2 + heightSeed * 2.7) + i * 2.1 + ph) * width * 1.25 + (widthSeed - 0.5) * width * 0.9;
+      paintTongue(baseX, baseY, height, width, lean, 0.12 + 0.22 * wobble, core > 0.42);
+    }
+
+    for (let i = 0; i < 6; i += 1) {
+      const cycle = (t * 0.27 + i * 0.37 + ph * 0.09) % 1;
+      const emberX = g.x + Math.sin(ph + i * 2.1 + t * 0.9) * g.r * (0.2 + 0.08 * (i % 3));
+      const emberY = g.y + g.r * 0.11 - cycle * g.r * (0.62 + 0.09 * (i % 2));
+      ctx.globalAlpha = (1 - cycle) * (0.12 + 0.045 * i) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#ffd58b' : '#ff9d4a';
+      ctx.beginPath();
+      ctx.arc(emberX, emberY, 0.65 + (1 - cycle) * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = fade * (0.22 + 0.08 * Math.sin(t * 3.4 + ph));
+    ctx.strokeStyle = '#ff9d52';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2.5, 11]);
+    ctx.lineDashOffset = -t * 11;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
