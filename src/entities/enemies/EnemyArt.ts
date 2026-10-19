@@ -386,6 +386,75 @@ function bossAura(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
 }
 
 /**
+ * 首领跨过血量门槛的那一下：脚下一道暗裂先撑开地面，随后一圈断环向外炸散，
+ * 环上带着与相位同色的刻片，越往后相位刻片越多、飞得越远。
+ *
+ * 粒子爆发只亮一瞬，这层持续约一秒，能在混乱里明确告诉玩家"它换招式了"；
+ * 全部画在身体后面，强度仍压在灯火之下，不会盖住首领剪影。
+ */
+function bossPhaseBreak(ctx: CanvasRenderingContext2D, e: Enemy, time: number): void {
+  if (e.phaseFlash <= 0) return;
+  const age = Math.max(0, Math.min(1, 1 - e.phaseFlash / 1.05));
+  const fade = 1 - age;
+  const r = e.radius;
+  const power = e.phase === 3 ? 1.28 : e.phase === 2 ? 1 : 0.82;
+  const spin = time * 1.15 + e.wobble * 0.4;
+  ctx.save();
+
+  // 暗裂先压在亮环下面，让"炸开"同时有一道被撕裂的地面。
+  ctx.strokeStyle = 'rgba(1,2,5,0.8)';
+  ctx.globalAlpha = fade * 0.34;
+  ctx.lineWidth = 2.6 - age * 1.2;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y + r * 0.18, r * (1.12 + age * 2.65), 0, TAU);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = rgba(e.color, 0.92);
+  ctx.globalAlpha = fade * (0.33 + power * 0.14);
+  ctx.lineWidth = 2.5 - age * 1.5;
+  ctx.setLineDash([6, 9]);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * (1.08 + age * 2.75) * power, spin * (1 + age), spin * (1 + age) + Math.PI * 1.64);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 第二道延迟半拍的断环，和主环错速，避免看起来像一张贴图在放大。
+  const lag = Math.max(0, Math.min(0.98, age * 1.32 - 0.18));
+  if (lag > 0) {
+    ctx.globalAlpha = (1 - lag) * (0.2 + power * 0.08);
+    ctx.lineWidth = 1.15;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * (1.52 + lag * 1.9) * power, -spin * 1.4 + 1.9, -spin * 1.4 + 3.8);
+    ctx.stroke();
+  }
+
+  // 相位刻片：像被震离外环的碎石，沿法线向外甩，亮面只留一星。
+  const shards = e.phase >= 3 ? 14 : 10;
+  for (let i = 0; i < shards; i += 1) {
+    const a = (i / shards) * TAU + spin * 0.28;
+    const dist = r * (1.08 + age * (1.7 + (i % 4) * 0.14)) * power;
+    const cx = e.x + Math.cos(a) * dist;
+    const cy = e.y + Math.sin(a) * dist;
+    const tx = -Math.sin(a);
+    const ty = Math.cos(a);
+    const out = r * (0.08 + (i % 3) * 0.022) * fade;
+    const side = r * (0.035 + (i % 2) * 0.012) * fade;
+    ctx.globalAlpha = fade * (0.26 + (i % 3) * 0.06);
+    ctx.fillStyle = i % 5 === 0 ? rgba('#ffe9c4', 0.9) : rgba(e.color, 0.9);
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * out, cy + Math.sin(a) * out);
+    ctx.lineTo(cx + tx * side, cy + ty * side);
+    ctx.lineTo(cx - Math.cos(a) * out * 0.45, cy - Math.sin(a) * out * 0.45);
+    ctx.lineTo(cx - tx * side, cy - ty * side);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
  * 出生成形：敌人不是凭空长出来，而是先从地面的一圈暗痕里收拢。
  *
  * 这层只活 0.4 秒，却正好盖住原来"小一号淡入"那段最容易穿帮的时间：
@@ -3251,7 +3320,10 @@ export function drawEnemy(
     ctx.translate(-e.x, -e.y);
   }
 
-  if (e.boss) bossAura(ctx, e, time);
+  if (e.boss) {
+    bossAura(ctx, e, time);
+    bossPhaseBreak(ctx, e, time);
+  }
   // 回响是"过去的你的影子"，所以整体压成半透明，跟实体敌人区分开
   if (id === 'echo' && e.hitFlash <= 0) ctx.globalAlpha = 0.82;
   shadow(ctx, e);

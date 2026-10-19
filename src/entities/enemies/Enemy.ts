@@ -159,6 +159,8 @@ export interface Enemy {
   attackCd: number;
   /** 首领专属招式的独立计时器（不和行为共用，免得贴脸时放不出招牌技） */
   bossCd: number;
+  /** 首领刚跨过相位门槛时的破裂余辉（秒）；只给画面读，不参与任何判定。 */
+  phaseFlash: number;
   stateTimer: number;
   spawnTimer: number;
   wobble: number;
@@ -374,6 +376,7 @@ export class EnemySystem {
     hitFlash: 0,
     attackCd: 0,
     bossCd: 0,
+    phaseFlash: 0,
     stateTimer: 0,
     spawnTimer: 0,
     wobble: 0,
@@ -432,6 +435,7 @@ export class EnemySystem {
     e.hitFlash = 0;
     e.attackCd = 1;
     e.bossCd = 1.4;
+    e.phaseFlash = 0;
     e.stateTimer = 0;
     e.spawnTimer = 0.4;
     e.wobble = Math.random() * Math.PI * 2;
@@ -615,6 +619,7 @@ export class EnemySystem {
         if (Math.random() < dt * 2) ctx.burst(e.x, e.y, 1, '#8affc1', { speed: 30, size: 2, life: 0.4 });
       }
       if (e.hitFlash > 0) e.hitFlash -= dt;
+      if (e.phaseFlash > 0) e.phaseFlash -= dt;
       if (e.slowTimer > 0) e.slowTimer -= dt;
       if (e.vortexMark > 0) e.vortexMark -= dt;
       if (e.burnTimer > 0) {
@@ -1084,6 +1089,7 @@ export class EnemySystem {
     if (newPhase > e.phase) {
       e.phase = newPhase;
       e.speed *= 1.12;
+      e.phaseFlash = 1.05;
       ctx.shake(0.6);
       ctx.burst(e.x, e.y, 40, e.color, { speed: 260, size: 5, life: 0.8 });
       ctx.addLight(e.x, e.y, 220, 0.9);
