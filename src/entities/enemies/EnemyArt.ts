@@ -769,18 +769,117 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'lancer': {
-      ctx.fillStyle = shade(body, -0.32);
-      for (const k of [-1, 1]) {
-        ctx.beginPath();
-        ctx.arc(e.x + Math.cos(e.angle + k * 2.3) * r * 0.62, e.y + Math.sin(e.angle + k * 2.3) * r * 0.62, r * 0.24, 0, TAU);
-        ctx.fill();
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const charging = e.stateTimer > 0;
+      const charge = charging ? Math.max(0, Math.min(1, 1 - e.stateTimer / 0.6)) : 0;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 20 + w);
+
+      if (e.dashing > 0) {
+        const trailLength = Math.hypot(e.dashVx, e.dashVy);
+        if (trailLength > 1) {
+          const backX = -e.dashVx / trailLength;
+          const backY = -e.dashVy / trailLength;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.lineCap = 'round';
+          for (let streak = 0; streak < 3; streak += 1) {
+            const offset = (streak - 1) * r * 0.28;
+            ctx.strokeStyle = rgba('#ff6f9b', 0.22 - streak * 0.045);
+            ctx.lineWidth = 2.1 - streak * 0.45;
+            ctx.beginPath();
+            ctx.moveTo(e.x + backX * r * 0.65 - sideX * offset, e.y + backY * r * 0.65 - sideY * offset);
+            ctx.lineTo(e.x + backX * r * (1.65 + streak * 0.28) - sideX * offset, e.y + backY * r * (1.65 + streak * 0.28) - sideY * offset);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
       }
-      ctx.strokeStyle = rgba('#ffffff', 0.35);
-      ctx.lineWidth = 2;
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255,225,237,0.13)';
       ctx.beginPath();
-      ctx.moveTo(e.x + Math.cos(e.angle) * r * 0.5, e.y + Math.sin(e.angle) * r * 0.5);
-      ctx.lineTo(e.x + Math.cos(e.angle) * r * 1.1, e.y + Math.sin(e.angle) * r * 1.1);
+      ctx.moveTo(e.x + facingX * r * 1.04, e.y + facingY * r * 1.04);
+      ctx.lineTo(e.x + sideX * r * 0.62 - facingX * r * 0.45, e.y + sideY * r * 0.62 - facingY * r * 0.45);
+      ctx.lineTo(e.x - facingX * r * 0.08, e.y - facingY * r * 0.08);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(55,8,32,0.2)';
+      ctx.beginPath();
+      ctx.moveTo(e.x + facingX * r * 1.04, e.y + facingY * r * 1.04);
+      ctx.lineTo(e.x - sideX * r * 0.62 - facingX * r * 0.45, e.y - sideY * r * 0.62 - facingY * r * 0.45);
+      ctx.lineTo(e.x - facingX * r * 0.08, e.y - facingY * r * 0.08);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(58,9,34,0.46)';
+      ctx.lineWidth = 1.1;
+      for (let band = 0; band < 2; band += 1) {
+        const back = r * (0.34 + band * 0.24);
+        const half = r * (0.44 - band * 0.07);
+        const centerX = e.x - facingX * back;
+        const centerY = e.y - facingY * back;
+        ctx.beginPath();
+        ctx.moveTo(centerX + sideX * half, centerY + sideY * half);
+        ctx.lineTo(centerX - facingX * r * 0.09, centerY - facingY * r * 0.09);
+        ctx.lineTo(centerX - sideX * half, centerY - sideY * half);
+        ctx.stroke();
+      }
+
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(255,230,239,0.36)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(e.x + facingX * r * 1.02, e.y + facingY * r * 1.02);
+      ctx.lineTo(e.x + facingX * r * 0.22, e.y + facingY * r * 0.22);
+      ctx.lineTo(e.x - facingX * r * 0.42, e.y - facingY * r * 0.42);
       ctx.stroke();
+      ctx.restore();
+
+      for (const side of [-1, 1]) {
+        const pitX = e.x + Math.cos(e.angle + side * 2.3) * r * 0.62;
+        const pitY = e.y + Math.sin(e.angle + side * 2.3) * r * 0.62;
+        ctx.fillStyle = shade(body, -0.36);
+        ctx.beginPath();
+        ctx.arc(pitX, pitY, r * 0.24, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,195,217,0.34)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        if (charging) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = `rgba(255,142,178,${0.22 + 0.42 * charge * pulse})`;
+          ctx.beginPath();
+          ctx.arc(pitX, pitY, r * (0.1 + charge * 0.08), 0, TAU);
+          ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+
+      if (charging) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const coreX = e.x - facingX * r * 0.12;
+        const coreY = e.y - facingY * r * 0.12;
+        const core = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, r * (0.46 + charge * 0.38));
+        core.addColorStop(0, `rgba(255,234,242,${0.25 + charge * 0.34})`);
+        core.addColorStop(0.28, `rgba(255,101,150,${0.18 + charge * 0.34})`);
+        core.addColorStop(1, 'rgba(164,28,82,0)');
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(coreX, coreY, r * (0.46 + charge * 0.38), 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255,139,177,${0.2 + 0.36 * charge})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(coreX, coreY, r * (0.3 + charge * 0.2), e.angle + 0.65, e.angle + TAU - 0.65);
+        ctx.stroke();
+        ctx.restore();
+      }
       break;
     }
     case 'beacon': {
