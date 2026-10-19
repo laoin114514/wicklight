@@ -540,6 +540,40 @@ const SCENES = {
     game.particles.shockwave(p.x, p.y, '#ffd08a', R, 0.3);
     for (let i = 0; i < 5; i += 1) game.particles.update(1 / 60); // 推到半路（后面的 4 帧还会再推一点）
   },
+  // 战斗特效与拾取物：给爆炸、烟尘、碎屑和五类掉落一个固定机位，方便逐版对照。
+  fx() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 50; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.hp = p.stats.maxHp;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [dx, dy, kind] of [
+      [-112, -58, 'xp'],
+      [-52, -82, 'gold'],
+      [22, -102, 'oil'],
+      [94, -64, 'heart'],
+      [136, 26, 'chest'],
+    ]) {
+      const item = game.pickups.spawn(dx, dy, kind, 1);
+      item.vx = 0;
+      item.vy = 0;
+    }
+    game.blast(176, -18, 118, 1, { ring: '#ff9d2e', spark: '#ffd9a0', sparkCount: 24 });
+    for (let i = 0; i < 7; i += 1) step();
+  },
 };
 
 const scene = arg('scene', 'play');

@@ -2340,6 +2340,7 @@ export class Game {
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + reduced * this.player.flags.lifesteal);
     }
     this.particles.burst(e.x, e.y, crit ? 5 : 2, crit ? '#fff0a8' : '#ffb14e', { speed: 120, size: 2.5, life: 0.3 });
+    if (crit) this.particles.sparks(e.x, e.y, 4, '#fff0a8', { speed: 170, size: 1.8, life: 0.32, stretch: 1.3 });
     if (killed) this.hitStop = Math.max(this.hitStop, 0.035);
     else this.audio.play('hit');
     return killed;
@@ -2502,6 +2503,18 @@ export class Game {
     }
     this.particles.burst(e.x, e.y, e.boss ? 60 : e.elite ? 24 : 10, def.color, { speed: e.boss ? 320 : 180, size: e.boss ? 6 : 4, life: e.boss ? 1 : 0.6 });
     this.particles.shockwave(e.x, e.y, def.color, e.radius * 2.5, 0.4);
+    this.particles.puff(e.x, e.y, e.boss ? 10 : e.elite ? 5 : 1, '#241d22', {
+      speed: e.boss ? 72 : 42,
+      size: e.boss ? 22 : Math.max(6, e.radius * 0.72),
+      life: e.boss ? 1.35 : 0.72,
+      grow: e.boss ? 2.6 : 2.1,
+    });
+    this.particles.debris(e.x, e.y, e.boss ? 14 : e.elite ? 6 : 2, def.color, {
+      speed: e.boss ? 250 : 145,
+      size: e.boss ? 4.2 : 2.3,
+      life: e.boss ? 0.85 : 0.5,
+      stretch: e.boss ? 1.7 : 1,
+    });
     this.audio.play('kill');
     let gold = 0;
     if (e.boss) gold = 30;
@@ -3116,6 +3129,24 @@ export class Game {
     const ring = opts.ring ?? '#ff7a2f';
     this.particles.shockwave(x, y, ring, radius, 0.45);
     this.particles.burst(x, y, opts.sparkCount ?? 14, opts.spark ?? '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
+    this.particles.sparks(x, y, Math.max(5, Math.round((opts.sparkCount ?? 14) * 0.55)), opts.spark ?? '#ff9d2e', {
+      speed: 265,
+      size: 2.1,
+      life: 0.52,
+      stretch: 1.6,
+    });
+    this.particles.puff(x, y, radius > 90 ? 7 : 4, opts.decal ?? '#312018', {
+      speed: Math.max(32, radius * 0.42),
+      size: Math.max(8, radius * 0.17),
+      life: 0.9,
+      grow: 2.4,
+    });
+    this.particles.debris(x, y, radius > 90 ? 7 : 4, opts.spark ?? '#ff9d2e', {
+      speed: 185,
+      size: 2.5,
+      life: 0.58,
+      stretch: 1.25,
+    });
     this.camera.addTrauma(0.2, this.settings.data.shake * this.settings.motionScale);
     this.addDecal(x, y, radius * 0.8, opts.decal ?? 'rgba(20,8,4,0.55)', 6);
     let hits = 0;

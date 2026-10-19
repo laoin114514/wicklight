@@ -18,6 +18,24 @@ export interface Particle {
   arcStart: number;
   arcEnd: number;
   gravity: number;
+  shape: 'dot' | 'spark' | 'smoke' | 'shard';
+  angle: number;
+  spin: number;
+  stretch: number;
+  grow: number;
+}
+
+export interface BurstOptions {
+  speed?: number;
+  size?: number;
+  life?: number;
+  drag?: number;
+  glow?: boolean;
+  gravity?: number;
+  shape?: Particle['shape'];
+  stretch?: number;
+  spin?: number;
+  grow?: number;
 }
 
 export class ParticleSystem {
@@ -37,6 +55,11 @@ export class ParticleSystem {
     arcStart: 0,
     arcEnd: Math.PI * 2,
     gravity: 0,
+    shape: 'dot',
+    angle: 0,
+    spin: 0,
+    stretch: 1,
+    grow: 0,
   }), 512);
 
   /**
@@ -45,7 +68,7 @@ export class ParticleSystem {
    */
   density = 1;
 
-  burst(x: number, y: number, count: number, color: string, opts: { speed?: number; size?: number; life?: number; drag?: number; glow?: boolean; gravity?: number } = {}): void {
+  burst(x: number, y: number, count: number, color: string, opts: BurstOptions = {}): void {
     const speed = opts.speed ?? 160;
     const n = this.density >= 1 ? count : Math.max(1, Math.round(count * this.density));
     for (let i = 0; i < n; i += 1) {
@@ -64,7 +87,27 @@ export class ParticleSystem {
       p.glow = opts.glow ?? true;
       p.ring = false;
       p.gravity = opts.gravity ?? 0;
+      p.shape = opts.shape ?? 'dot';
+      p.angle = a;
+      p.spin = opts.spin ?? 0;
+      p.stretch = opts.stretch ?? 1;
+      p.grow = opts.grow ?? 0;
     }
+  }
+
+  /** 爆炸后铺开的低透明度烟尘：用普通混合，避免加法叠加把夜色洗白。 */
+  puff(x: number, y: number, count: number, color: string, opts: BurstOptions = {}): void {
+    this.burst(x, y, count, color, { speed: 44, size: 10, life: 1.05, drag: 1.7, ...opts, shape: 'smoke', glow: false });
+  }
+
+  /** 飞散的火星：沿速度方向拉成细线，和圆点区分开。 */
+  sparks(x: number, y: number, count: number, color: string, opts: BurstOptions = {}): void {
+    this.burst(x, y, count, color, { speed: 210, size: 2.1, life: 0.46, drag: 2.6, ...opts, shape: 'spark' });
+  }
+
+  /** 几何碎屑：短命的实体小块，给爆炸和死亡补一点材质感。 */
+  debris(x: number, y: number, count: number, color: string, opts: BurstOptions = {}): void {
+    this.burst(x, y, count, color, { speed: 170, size: 2.6, life: 0.62, drag: 2.2, gravity: 260, ...opts, shape: 'shard', glow: false });
   }
 
   ember(x: number, y: number, color: string): void {
@@ -83,6 +126,11 @@ export class ParticleSystem {
     p.glow = true;
     p.ring = false;
     p.gravity = -4;
+    p.shape = 'dot';
+    p.angle = 0;
+    p.spin = 0;
+    p.stretch = 1;
+    p.grow = 0;
   }
 
   /** 灯火中缓慢漂浮的微尘：小而长命，用来"把光画出来"。 */
@@ -101,6 +149,11 @@ export class ParticleSystem {
     p.glow = true;
     p.ring = false;
     p.gravity = -1.6;
+    p.shape = 'dot';
+    p.angle = 0;
+    p.spin = 0;
+    p.stretch = 1;
+    p.grow = 0;
   }
 
   shockwave(x: number, y: number, color: string, size = 40, life = 0.4): void {
@@ -137,6 +190,11 @@ export class ParticleSystem {
     p.arcStart = arcStart;
     p.arcEnd = arcEnd;
     p.gravity = 0;
+    p.shape = 'dot';
+    p.angle = 0;
+    p.spin = 0;
+    p.stretch = 1;
+    p.grow = 0;
   }
 
   update(dt: number): void {
@@ -153,22 +211,66 @@ export class ParticleSystem {
       p.vy += p.gravity * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      p.angle += p.spin * dt;
     }
   }
 
   draw(ctx: CanvasRenderingContext2D, view?: { x: number; y: number; halfW: number; halfH: number }): void {
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     // 视野外的粒子不必进路径：一团碎屑在屏幕外，画它只是白烧 CPU
     const pad = 40;
+    const visible = (p: Particle): boolean =>
+      !view || (Math.abs(p.x - view.x) <= view.halfW + p.size * 2 + pad && Math.abs(p.y - view.y) <= view.halfH + p.size * 2 + pad);
+
+    // 烟尘与碎屑先走普通混合，作为实体层；火星和光点随后再加法叠亮。
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineCap = 'round';
+    for (const p of this.pool.all) {
+      if (!p.active || !visible(p)) continue;
+      const t = p.life / p.maxLife;
+      if (p.shape === 'smoke') {
+        const radius = p.size * (1.15 + (1 - t) * p.grow);
+        const g = ctx.createRadialGradient(p.x, p.y, radius * 0.08, p.x, p.y, radius);
+        g.addColorStop(0, p.color);
+        g.addColorStop(0.52, p.color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = Math.min(0.24, t * 0.23);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.shape === 'shard') {
+        const w = Math.max(0.7, p.size * (0.26 + t * 0.34));
+        const len = p.size * (1.15 + p.stretch * 0.72);
+        ctx.globalAlpha = Math.min(0.9, t * 1.25);
+        ctx.fillStyle = p.color;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.55, 0);
+        ctx.lineTo(-len * 0.06, -w);
+        ctx.lineTo(len * 0.55, 0);
+        ctx.lineTo(-len * 0.06, w);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha *= 0.45;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.32, 0);
+        ctx.lineTo(-len * 0.05, -w * 0.28);
+        ctx.lineTo(len * 0.18, 0);
+        ctx.lineTo(-len * 0.05, w * 0.22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of this.pool.all) {
       if (!p.active) continue;
-      if (
-        view &&
-        (Math.abs(p.x - view.x) > view.halfW + p.size + pad || Math.abs(p.y - view.y) > view.halfH + p.size + pad)
-      ) {
-        continue;
-      }
+      if (p.shape === 'smoke' || p.shape === 'shard' || !visible(p)) continue;
       const t = p.life / p.maxLife;
       if (p.ring) {
         const r = p.size * (1 - t) + 6;
@@ -178,12 +280,39 @@ export class ParticleSystem {
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, p.arcStart, p.arcEnd);
         ctx.stroke();
+      } else if (p.shape === 'spark') {
+        const speed = Math.hypot(p.vx, p.vy);
+        const ux = speed > 0.01 ? p.vx / speed : 1;
+        const uy = speed > 0.01 ? p.vy / speed : 0;
+        const len = Math.min(34, p.size * (2.4 + p.stretch * 3.2) + speed * 0.018);
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = t * 0.48;
+        ctx.lineWidth = Math.max(1, p.size * 0.72 * t);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - ux * len, p.y - uy * len);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff8dc';
+        ctx.globalAlpha = t * 0.9;
+        ctx.lineWidth = Math.max(0.6, p.size * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - ux * len * 0.55, p.y - uy * len * 0.55);
+        ctx.stroke();
       } else {
         ctx.globalAlpha = t;
         ctx.fillStyle = p.color;
+        const r = p.size * (0.4 + t * 0.6);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (0.4 + t * 0.6), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
+        if (p.size > 2) {
+          ctx.globalAlpha = t * 0.65;
+          ctx.fillStyle = '#fff6d8';
+          ctx.beginPath();
+          ctx.arc(p.x - r * 0.12, p.y - r * 0.18, Math.max(0.6, r * 0.26), 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
     ctx.restore();

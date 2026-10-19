@@ -169,39 +169,23 @@ export class ProjectileSystem {
 
   draw(ctx: CanvasRenderingContext2D): void {
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (const p of this.pool.all) {
       if (!p.active) continue;
       const r = p.radius;
-      if (p.trail) {
-        ctx.globalAlpha = 0.35;
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = r * 0.9;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - p.vx * 0.05, p.y - p.vy * 0.05);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
+      if (p.trail) drawProjectileTrail(ctx, p);
       if (p.boomerang > 0) {
-        // 月刃：两片交叉的弧，回程时整体转成偏白，提示"还能再打一次"
-        ctx.strokeStyle = p.returning ? '#ffffff' : p.color;
-        ctx.lineWidth = 3;
-        for (const side of [0, Math.PI]) {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r * 1.25, p.angle + side - 0.9, p.angle + side + 0.9);
-          ctx.stroke();
-        }
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+        drawBoomerang(ctx, p);
+      } else {
+        drawProjectileOrb(ctx, p);
       }
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.4);
-      g.addColorStop(0, '#fff');
-      g.addColorStop(0.35, p.color);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r * 2.4, 0, Math.PI * 2);
-      ctx.fill();
     }
     ctx.restore();
   }
@@ -217,4 +201,155 @@ export class ProjectileSystem {
   get count(): number {
     return this.pool.activeCount;
   }
+}
+
+function drawProjectileTrail(ctx: CanvasRenderingContext2D, p: Projectile): void {
+  const speed = Math.hypot(p.vx, p.vy);
+  if (speed < 1) return;
+  const ux = p.vx / speed;
+  const uy = p.vy / speed;
+  const r = p.radius;
+  const len = Math.min(60, 12 + speed * 0.068 + r * 3.1);
+  ctx.globalCompositeOperation = 'lighter';
+
+  ctx.globalAlpha = 0.09;
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = r * 1.38;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - ux * len, p.y - uy * len);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.24;
+  ctx.lineWidth = r * 0.64;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - ux * len * 0.74, p.y - uy * len * 0.74);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.62;
+  ctx.strokeStyle = p.returning ? '#ffffff' : '#fff8dc';
+  ctx.lineWidth = Math.max(0.8, r * 0.17);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - ux * len * 0.43, p.y - uy * len * 0.43);
+  ctx.stroke();
+
+  const px = -uy;
+  const py = ux;
+  for (const [along, side, size] of [
+    [0.38, 0.34, 0.22],
+    [0.67, -0.24, 0.16],
+    [0.86, 0.12, 0.12],
+  ] as const) {
+    ctx.globalAlpha = (1 - along) * 0.7;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x - ux * len * along + px * r * side, p.y - uy * len * along + py * r * side, Math.max(0.7, r * size), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawProjectileOrb(ctx: CanvasRenderingContext2D, p: Projectile): void {
+  const r = p.radius;
+  const pulse = 0.94 + 0.06 * Math.sin(p.life * 22 + p.x * 0.013);
+
+  // 深色底托把弹芯从同样发亮的火苗和灯火里剥出来；敌方弹再压重一点。
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = p.fromPlayer ? 0.15 : 0.42;
+  ctx.fillStyle = p.fromPlayer ? '#160b05' : '#050a18';
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r * 1.34, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 1;
+  const glowR = r * (p.fromPlayer ? 2.8 : 2.5) * pulse;
+  const g = ctx.createRadialGradient(p.x, p.y, r * 0.05, p.x, p.y, glowR);
+  g.addColorStop(0, '#fffef5');
+  g.addColorStop(0.1, '#ffffff');
+  g.addColorStop(0.29, p.color);
+  g.addColorStop(0.62, p.color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.76;
+  ctx.fillStyle = '#fffdf0';
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, Math.max(1, r * 0.3), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.34;
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = Math.max(0.8, r * 0.13);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r * 1.16, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawBoomerang(ctx: CanvasRenderingContext2D, p: Projectile): void {
+  const r = p.radius;
+  const returning = p.returning;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.angle);
+
+  // 先压一层深色刀身，再叠亮刃口：在暗地上也有实体厚度。
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 0.92;
+  ctx.strokeStyle = '#071313';
+  ctx.lineWidth = Math.max(4.2, r * 0.5);
+  for (const side of [0, Math.PI]) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.3, side - 0.94, side + 0.94);
+    ctx.stroke();
+  }
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.2;
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = Math.max(7, r * 0.82);
+  for (const lag of [-0.16, 0.17]) {
+    for (const side of [0, Math.PI]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.48, side + lag - 0.82, side + lag + 0.82);
+      ctx.stroke();
+    }
+  }
+
+  for (const side of [0, Math.PI]) {
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = returning ? '#effff9' : p.color;
+    ctx.lineWidth = Math.max(1.8, r * 0.2);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.3, side - 0.9, side + 0.9);
+    ctx.stroke();
+    ctx.globalAlpha = 0.82;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(0.65, r * 0.07);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.43, side - 0.68, side + 0.2);
+    ctx.stroke();
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#10201f';
+  ctx.beginPath();
+  ctx.arc(0, 0, Math.max(2.2, r * 0.3), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = Math.max(0.7, r * 0.08);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = returning ? '#ffffff' : '#c8ffe8';
+  ctx.beginPath();
+  ctx.arc(0, 0, Math.max(0.9, r * 0.1), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
