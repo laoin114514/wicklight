@@ -997,15 +997,90 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'weaver': {
-      ctx.strokeStyle = rgba('#dfeaf5', 0.3);
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 4; i += 1) {
-        const a = w * 0.5 + (i / 4) * TAU;
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const webRot = w * 0.16 + Math.sin(time * 0.7 + w) * 0.08;
+      const webRadius = r * (1.76 + Math.sin(time * 1.3 + w) * 0.035);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(207,231,243,0.14)';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      for (let spoke = 0; spoke < 8; spoke += 1) {
+        const angle = webRot + (spoke / 8) * TAU;
+        ctx.moveTo(e.x + Math.cos(angle) * r * 1.08, e.y + Math.sin(angle) * r * 1.08);
+        ctx.lineTo(e.x + Math.cos(angle) * webRadius, e.y + Math.sin(angle) * webRadius);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(216,238,248,0.17)';
+      for (let ring = 0; ring < 2; ring += 1) {
+        const radius = r * (1.34 + ring * 0.35);
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(a) * r * 0.4, e.y + Math.sin(a) * r * 0.4);
-        ctx.lineTo(e.x + Math.cos(a + 0.55) * r * 1.45, e.y + Math.sin(a + 0.55) * r * 1.45);
+        for (let spoke = 0; spoke <= 8; spoke += 1) {
+          const angle = webRot + (spoke / 8) * TAU;
+          const px = e.x + Math.cos(angle) * radius;
+          const py = e.y + Math.sin(angle) * radius;
+          if (spoke === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
         ctx.stroke();
       }
+
+      ctx.fillStyle = 'rgba(229,247,255,0.34)';
+      for (let bead = 0; bead < 4; bead += 1) {
+        const angle = webRot + (bead / 4) * TAU + 0.18;
+        const radius = r * (bead % 2 === 0 ? 1.34 : 1.69);
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(angle) * radius, e.y + Math.sin(angle) * radius, Math.max(0.5, r * 0.04), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        for (let leg = 0; leg < 2; leg += 1) {
+          const along = leg === 0 ? -r * 0.2 : r * 0.16;
+          const rootX = e.x + facingX * along + sideX * side * r * 0.56;
+          const rootY = e.y + facingY * along + sideY * side * r * 0.56;
+          const jointX = rootX + sideX * side * r * 0.43 - facingX * r * (leg === 0 ? 0.18 : 0.08);
+          const jointY = rootY + sideY * side * r * 0.43 - facingY * r * (leg === 0 ? 0.18 : 0.08);
+          const footX = jointX + sideX * side * r * 0.28 - facingX * r * 0.48;
+          const footY = jointY + sideY * side * r * 0.28 - facingY * r * 0.48;
+          ctx.strokeStyle = 'rgba(46,62,73,0.56)';
+          ctx.lineWidth = 1.65;
+          ctx.beginPath();
+          ctx.moveTo(rootX, rootY);
+          ctx.quadraticCurveTo(jointX, jointY, footX, footY);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(225,242,250,0.32)';
+          ctx.lineWidth = 0.75;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(228,242,249,0.24)';
+      ctx.lineWidth = 0.9;
+      for (let band = 0; band < 2; band += 1) {
+        const back = r * (0.18 + band * 0.28);
+        const half = r * (0.58 - band * 0.09);
+        const centerX = e.x - facingX * back;
+        const centerY = e.y - facingY * back;
+        ctx.beginPath();
+        ctx.moveTo(centerX + sideX * half, centerY + sideY * half);
+        ctx.quadraticCurveTo(centerX - facingX * r * 0.08, centerY - facingY * r * 0.08, centerX - sideX * half, centerY - sideY * half);
+        ctx.stroke();
+      }
+      ctx.restore();
+
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.16 + Math.sin(time * 2.4 + w) * 0.05;
