@@ -9189,3 +9189,68 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--meta .node__blurb { font-size: 8.3px; line-height: 1.32; }
   .panel--meta .node__cost { padding: 1px 4px 1px; font-size: 8.2px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v173 · 短横屏商店：六件货签一次看全
+   667×375 上六件遗物仍按单列铺开，后两件被吸底行动条盖住；844×390 的
+   三列竖牌也会压到底排价签。这里统一改成左图标、右文字的紧凑货签：
+   宽屏三列两排，720px 以下两列三排，六件商品都在首屏里。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 960px) {
+  .panel--shop { padding: 7px 12px 5px; }
+  .panel--shop .panel__title { margin-bottom: 3px; font-size: 15px; letter-spacing: 1.8px; }
+  .panel--shop .shop-wallet { margin-bottom: 4px; font-size: 9px; line-height: 1.2; letter-spacing: 0.3px; }
+  .panel--shop .shop-wallet b { font-size: 13px; }
+  .panel--shop .shop-arena { margin: -1px 0 4px; font-size: 8.5px; }
+  .panel--shop .shop-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .panel--shop .shop-item {
+    display: grid;
+    grid-template-columns: 27px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'icon name price'
+      'icon blurb blurb'
+      'icon delta delta';
+    column-gap: 6px;
+    row-gap: 1px;
+    align-items: start;
+    padding: 4px 6px;
+  }
+  .panel--shop .shop-item__icon {
+    grid-area: icon;
+    align-self: center;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    font-size: 14px;
+  }
+  .panel--shop .shop-item__name { grid-area: name; margin: 0; font-size: 12px; line-height: 1.2; }
+  .panel--shop .shop-item__blurb {
+    grid-area: blurb;
+    display: -webkit-box;
+    overflow: hidden;
+    min-height: 0;
+    font-size: 8.2px;
+    line-height: 1.28;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .panel--shop .shop-item__price {
+    grid-area: price;
+    align-self: start;
+    justify-self: end;
+    margin: 0;
+    padding: 0 6px 1px 4px;
+    font-size: 8.2px;
+  }
+  .panel--shop .shop-item .card__delta { grid-area: delta; gap: 1px 5px; margin: 1px 0 0; padding-top: 2px; }
+  .panel--shop .shop-item .card__delta .dl { font-size: 8px; }
+  .shop-actions { margin-top: 4px; padding-top: 4px; gap: 6px; }
+  .shop-actions .btn { padding: 5px 12px; font-size: 11px; letter-spacing: 0.4px; }
+  .shop-actions .key { padding: 0 3px; font-size: 8px; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 720px) {
+  .panel--shop .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
