@@ -3798,7 +3798,7 @@ body.is-touch .key { display: none; }
 
 /* 生涯摘要贴着左列下沿：它和"主行动"是一伙的（都在说"你现在什么水平"），
    落在左列也让两列的底边齐平，不再有一块空出来的左下角 */
-.menu-main .menu-foot {
+.panel--menu .menu-foot {
   align-self: end;
   justify-content: flex-start;
   margin-top: 10px;
@@ -8908,4 +8908,83 @@ body.is-touch .lvl-actions__hint { display: none; }
   .panel--meta .node__cost { margin-top: 2px; padding: 1px 4px 1px; font-size: 8.2px; }
   .panel--meta .node__cost::before { font-size: 6px; }
   .panel--meta .meta-page--fire .fire-block { margin-top: 0; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v167 · 主菜单：给账目刻上火印，也让窄屏喘口气
+   账本左侧原本只有五条一样的黄铜短线，五件事看上去仍像同一种东西。
+   这一版把短线换成各管一事的小火印（烬 / 鉴 / 录 / 勋 / 调），
+   同时收住 320px 上被挤成三行的今日灯芯副注与过厚的外框留白。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.ledger-row { grid-template-columns: 18px minmax(0, 1fr) auto; }
+.ledger-row__mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(192, 138, 62, 0.34);
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 231, 178, 0.14), rgba(255, 180, 78, 0.02) 58%),
+    linear-gradient(180deg, rgba(64, 48, 28, 0.66), rgba(13, 11, 8, 0.84));
+  color: rgba(244, 207, 144, 0.76);
+  font-family: var(--font-display);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.72;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 235, 191, 0.1),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.34);
+}
+.ledger-row[data-act="meta"] .ledger-row__mark::before { content: '烬'; }
+.ledger-row[data-act="codex"] .ledger-row__mark::before { content: '鉴'; }
+.ledger-row[data-act="records"] .ledger-row__mark::before { content: '录'; }
+.ledger-row[data-act="achievements"] .ledger-row__mark::before { content: '勋'; }
+.ledger-row[data-act="settings"] .ledger-row__mark::before { content: '调'; }
+.ledger-row:hover .ledger-row__mark {
+  border-color: rgba(255, 209, 125, 0.64);
+  color: #ffe2a9;
+  opacity: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 242, 205, 0.17),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.3),
+    0 0 9px rgba(255, 168, 62, 0.18);
+}
+
+.panel--menu .menu-foot {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: start;
+  align-items: baseline;
+  column-gap: clamp(10px, 1.6vw, 16px);
+  row-gap: 3px;
+}
+
+@media (min-width: 561px) {
+  .panel--menu .menu-body {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    grid-template-areas:
+      'main ledger'
+      'foot ledger';
+  }
+  .panel--menu .menu-main { grid-area: main; }
+  .panel--menu .menu-ledger { grid-area: ledger; }
+  .panel--menu .menu-foot { grid-area: foot; align-self: end; margin-top: 0; }
+}
+
+@media (max-width: 340px) {
+  .panel--menu { padding: 16px 16px 13px; }
+  .menu-body { margin: 12px 0 9px; }
+  .menu-runs .btn--run { padding: 9px 10px; }
+  .menu-runs .btn--run .btn__note {
+    overflow: hidden;
+    font-size: 9.4px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .ledger-row { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; padding-block: 9px; }
+  .ledger-row__mark { width: 16px; height: 16px; font-size: 8px; }
+  .menu-foot { font-size: 10px; row-gap: 1px; }
 }
