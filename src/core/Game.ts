@@ -7689,8 +7689,36 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.fillStyle = pool;
     ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.94, 0, Math.PI * 2);
+    // 沼液主体不是一只圆碗：液面沿边啃出参差的腐蚀口，读数线仍在下一段画。
+    for (let i = 0; i <= 28; i += 1) {
+      const a = (i / 28) * Math.PI * 2;
+      const rr = g.r * (0.88 + 0.06 * Math.sin(ph * 1.9 + i * 2.37) + 0.03 * Math.sin(i * 1.13));
+      const px = g.x + Math.cos(a) * rr;
+      const py = g.y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fill();
+
+    // 蚀边：几团更深的沼液咬进池沿，让"这是一摊"比"这是一个圈"先读出来。
+    for (let i = 0; i < 8; i += 1) {
+      const a = ph + i * 0.91 + 0.24;
+      const d = g.r * (0.76 + 0.06 * (i % 3));
+      ctx.globalAlpha = (0.075 + 0.03 * (i % 3)) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#0a1309' : '#101c0d';
+      ctx.beginPath();
+      ctx.ellipse(
+        g.x + Math.cos(a) * d,
+        g.y + Math.sin(a) * d,
+        g.r * (0.17 + 0.03 * (i % 2)),
+        g.r * (0.09 + 0.025 * ((i * 3) % 3)),
+        a + 1.4,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
 
     // 液面上那层病态绿光只占中央，边缘留给暗沼液，整片才不像一盏绿灯。
     ctx.globalCompositeOperation = 'lighter';
@@ -7702,6 +7730,34 @@ export class Game {
     ctx.beginPath();
     ctx.arc(g.x, g.y, g.r * 0.78, 0, Math.PI * 2);
     ctx.fill();
+
+    // 液面上的浮膜：三道缓慢错位的薄弧，只给反光，不额外发光。
+    for (let i = 0; i < 3; i += 1) {
+      const a = ph + this.time * 0.08 + i * 2.094;
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(a);
+      ctx.globalAlpha = (0.04 + 0.018 * Math.sin(this.time * 0.9 + i * 1.7 + ph)) * fade;
+      ctx.strokeStyle = i % 2 === 0 ? '#b8e49a' : '#6eae58';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.ellipse(g.r * 0.11, 0, g.r * (0.3 + i * 0.035), g.r * 0.12, 0.28, 0, Math.PI * 1.58);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 池沿的浮沫与碎屑：贴近边界打转，让液面与地面的交界不是一刀切。
+    for (let i = 0; i < 6; i += 1) {
+      const a = ph + i * 1.37 + this.time * 0.045;
+      const d = g.r * (0.7 + 0.08 * (i % 3));
+      const px = g.x + Math.cos(a) * d;
+      const py = g.y + Math.sin(a) * d * 0.78;
+      ctx.globalAlpha = (0.07 + 0.025 * (i % 3)) * fade;
+      ctx.fillStyle = i % 2 === 0 ? '#9adf76' : '#5d9b4c';
+      ctx.beginPath();
+      ctx.ellipse(px, py, 2.2 + (i % 3) * 0.7, 0.8 + (i % 2) * 0.4, a + 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 气泡：每个周期鼓起、亮起、破掉；只画环与一点反光，不用粒子池。
     for (let i = 0; i < 9; i += 1) {
@@ -7737,16 +7793,19 @@ export class Game {
       ctx.fill();
     }
 
-    // 边界仍然是可躲的范围：留一圈低亮度的酸绿虚线，不把毒池画成一团无边雾气。
+    // 边界仍然是可躲的范围：酸绿读数线切成不等长的刻段，位置钉在 0.97r。
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = fade * (0.3 + 0.12 * Math.sin(this.time * 3 + ph));
     ctx.strokeStyle = '#9ada75';
-    ctx.lineWidth = 2.2;
-    ctx.setLineDash([7, 12]);
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 22; i += 1) {
+      const a = ph * 0.13 + (i / 22) * Math.PI * 2;
+      const seg = 0.065 + 0.055 * Math.abs(Math.sin(ph + i * 1.73));
+      ctx.globalAlpha = fade * (0.25 + 0.1 * Math.sin(this.time * 2.4 + ph + i * 0.67));
+      ctx.lineWidth = 1.6 + (i % 3) * 0.26;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r * 0.97, a, a + seg);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
     ctx.restore();
   }
