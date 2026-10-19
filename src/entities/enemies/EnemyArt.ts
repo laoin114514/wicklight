@@ -3305,14 +3305,57 @@ export function drawEnemy(
     const bw = e.boss ? 140 : 48;
     const bh = e.boss ? 7 : 5;
     const y = e.y - r - 14;
-    // 暗玻璃底 + 细金边：血条不再是浮在黑里的一条色块，精英的那条也能在泛光上立住
-    ctx.fillStyle = 'rgba(3,3,8,0.76)';
-    ctx.fillRect(e.x - bw / 2 - 1.5, y - 1.5, bw + 3, bh + 3);
-    ctx.strokeStyle = e.boss ? 'rgba(255,77,109,0.4)' : 'rgba(255,196,120,0.36)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(e.x - bw / 2 - 1.5, y - 1.5, bw + 3, bh + 3);
-    ctx.fillStyle = e.boss ? '#ff4d6d' : '#ffb14e';
-    ctx.fillRect(e.x - bw / 2, y, bw * Math.max(0, e.hp / e.maxHp), bh);
+    const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
+    const x0 = e.x - bw / 2;
+    const accent = e.boss ? '#ff4d6d' : '#ffb14e';
+    const frame = e.boss ? 'rgba(255,120,144,0.5)' : 'rgba(255,208,146,0.42)';
+
+    // 暗玻璃铭牌：切角端头 + 双层细边，血条不再像一条贴在背景上的矩形色块。
+    const notch = e.boss ? 3.5 : 2.5;
+    const plate = (): void => {
+      ctx.beginPath();
+      ctx.moveTo(x0 - 2 + notch, y - 2);
+      ctx.lineTo(x0 + bw + 2 - notch, y - 2);
+      ctx.lineTo(x0 + bw + 2, y - 2 + bh * 0.5);
+      ctx.lineTo(x0 + bw + 2 - notch, y + bh + 2);
+      ctx.lineTo(x0 - 2 + notch, y + bh + 2);
+      ctx.lineTo(x0 - 2, y - 2 + bh * 0.5);
+      ctx.closePath();
+    };
+    ctx.fillStyle = 'rgba(3,3,8,0.8)';
+    plate();
+    ctx.fill();
+    ctx.strokeStyle = frame;
+    ctx.lineWidth = 0.9;
+    plate();
+    ctx.stroke();
+
+    // 血槽：底是一条冷黑凹槽，活下来的部分用熔色渐变，末端保留一枚亮血锋。
+    ctx.fillStyle = 'rgba(1,2,6,0.72)';
+    ctx.fillRect(x0, y, bw, bh);
+    if (frac > 0.001) {
+      const fill = ctx.createLinearGradient(0, y, 0, y + bh);
+      fill.addColorStop(0, e.boss ? '#ff9bad' : '#ffe1a1');
+      fill.addColorStop(0.42, accent);
+      fill.addColorStop(1, e.boss ? '#7b1029' : '#8f4d0a');
+      ctx.fillStyle = fill;
+      ctx.fillRect(x0, y, bw * frac, bh);
+      ctx.fillStyle = 'rgba(255,244,226,0.72)';
+      ctx.fillRect(x0 + bw * frac - Math.min(1.4, bw * frac), y, Math.min(1.4, bw * frac), bh);
+    }
+
+    // 十等分刻度：只压一点点暗线，既能读进度，又不会把血条切成串珠。
+    ctx.fillStyle = 'rgba(3,3,8,0.34)';
+    for (let i = 1; i < 10; i += 1) {
+      ctx.fillRect(x0 + (bw * i) / 10, y + (e.boss ? 0.8 : 0.5), 0.65, bh - (e.boss ? 1.6 : 1));
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.12;
+    ctx.fillRect(x0 - 1, y - 3, bw + 2, 1.2);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
     if (e.elite) {
       const aff = e.affix ? AFFIX_MAP[e.affix] : null;
       ctx.fillStyle = aff?.color ?? '#ffd9a0';
