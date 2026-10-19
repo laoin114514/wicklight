@@ -119,6 +119,340 @@ interface WallSprite {
   h: number;
 }
 
+/** 墙体的静态细节只跟位置有关：同一张地图每次烘焙都得到同一块石墙。 */
+function wallNoise(a: number, b: number, salt: number): number {
+  let n = (Math.imul(Math.round(a), 0x27d4eb2d) ^ Math.imul(Math.round(b), 0x165667b1) ^ Math.imul(salt, 0x9e3779b9)) >>> 0;
+  n ^= n >>> 15;
+  n = Math.imul(n, 0x85ebca6b);
+  n ^= n >>> 13;
+  n = Math.imul(n, 0xc2b2ae35);
+  n ^= n >>> 16;
+  return (n >>> 0) / 4294967296;
+}
+
+/** 墙脚的潮湿苔色跟着主题走：熔窟和长夜城不该长出同一片森林绿。 */
+function wallMossRgb(themeId: string): [number, number, number] {
+  if (themeId === 'gloamwood') return [126, 168, 112];
+  if (themeId === 'ashenkeep') return [112, 131, 157];
+  if (themeId === 'emberhold') return [129, 83, 61];
+  if (themeId === 'nightcity') return [119, 102, 150];
+  return [105, 125, 112];
+}
+
+/**
+ * 大尺度砌石分缝。贴图负责近看时的颗粒，这一层负责让墙在灯火里仍能读出
+ * "一块块垒起来"的结构——只加 1px 暗缝和极淡的受光边，不碰碰撞矩形。
+ */
+function drawWallMasonry(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+): void {
+  const { x, y, w, h } = wall;
+  if (w < 28 || h < 22) return;
+  ctx.save();
+  const course = h > 190 ? 38 : 30;
+  let row = 0;
+  for (let cy = y + course; cy < y + h - 9; cy += course, row += 1) {
+    ctx.strokeStyle = 'rgba(1,3,7,0.17)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, cy);
+    ctx.lineTo(x + w - 2, cy + 0.4);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,239,211,0.035)';
+    ctx.beginPath();
+    ctx.moveTo(x + 2, cy + 1);
+    ctx.lineTo(x + w - 2, cy + 1.4);
+    ctx.stroke();
+
+    const cell = 46 + wallNoise(x, y, row + 3) * 20;
+    const offset = (row % 2 ? cell * 0.52 : 0) + wallNoise(x, y, row + 9) * 14;
+    for (let sx = x + offset + 6; sx < x + w - 9; sx += cell) {
+      const jitter = (wallNoise(sx, cy, 4) - 0.5) * 5;
+      ctx.strokeStyle = 'rgba(1,3,7,0.15)';
+      ctx.beginPath();
+      ctx.moveTo(sx + jitter, cy - course + 2);
+      ctx.lineTo(sx + jitter + 1, cy - 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,239,211,0.028)';
+      ctx.beginPath();
+      ctx.moveTo(sx + jitter + 1, cy - course + 3);
+      ctx.lineTo(sx + jitter + 2, cy - 3);
+      ctx.stroke();
+    }
+  }
+
+  // 少量风化凹坑：暗面里只留一星受光边，近看有石质，远处不会变成麻点。
+  const pits = 2 + Math.floor(wallNoise(x, y, 21) * 3);
+  for (let i = 0; i < pits; i += 1) {
+    const px = x + 9 + wallNoise(x, y, 30 + i) * Math.max(1, w - 18);
+    const py = y + 11 + wallNoise(x, y, 40 + i) * Math.max(1, h - 22);
+    const pr = 1.4 + wallNoise(px, py, 50 + i) * 2.6;
+    ctx.fillStyle = 'rgba(0,0,0,0.13)';
+    ctx.beginPath();
+    ctx.ellipse(px, py, pr, pr * 0.56, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,240,216,0.055)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.arc(px - 0.3, py - 0.2, pr, Math.PI * 0.98, Math.PI * 1.62);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 分块压顶石：让墙顶不是一条尺子画出来的直线，而是一排有高低错位的旧石。 */
+function drawWallCrown(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+  theme: import('../types').StageTheme,
+): void {
+  const { x, y, w } = wall;
+  if (w < 26) return;
+  const count = Math.max(3, Math.min(12, Math.round(w / 34)));
+  ctx.save();
+  let left = x - 1.2;
+  for (let i = 0; i < count; i += 1) {
+    const rnd = wallNoise(x, y, 100 + i);
+    const right = i === count - 1 ? x + w + 1.2 : x + (w * (i + 1)) / count + (rnd - 0.5) * 6;
+    const lift = 0.7 + rnd * 1.35;
+    const lip = 4.2 + rnd * 3.3;
+    const inset = 0.8 + rnd * 1.25;
+    ctx.beginPath();
+    ctx.moveTo(left + 0.4, y + lip + 1.4);
+    ctx.lineTo(left + inset, y - lift);
+    ctx.lineTo(right - inset, y - lift - 0.15);
+    ctx.lineTo(right - 0.4, y + lip + 1.1);
+    ctx.closePath();
+    ctx.fillStyle = theme.wall;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.42)';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.1 + rnd * 0.06;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(left + inset + 0.7, y - lift + 0.35);
+    ctx.lineTo(right - inset - 0.7, y - lift + 0.2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(right, y - lift);
+    ctx.lineTo(right - 0.45, y + lip + 1);
+    ctx.stroke();
+    left = right - 0.35;
+  }
+  ctx.restore();
+}
+
+/** 墙面两侧各探出一两块扶手石，暗处的墙因此不再是一个完整长方形。 */
+function drawWallShoulders(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+  theme: import('../types').StageTheme,
+): void {
+  const { x, y, w, h } = wall;
+  const pairs = h > 180 ? 2 : 1;
+  ctx.save();
+  for (const side of [-1, 1] as const) {
+    for (let i = 0; i < pairs; i += 1) {
+      const rnd = wallNoise(x, y, 200 + side * 17 + i);
+      const cy = y + h * (0.27 + i * 0.42 + rnd * 0.07);
+      const half = 5 + rnd * 7;
+      const depth = 3.5 + rnd * 3.4;
+      const x0 = side < 0 ? x - depth : x + w - 1;
+      const x1 = side < 0 ? x + 1 : x + w + depth;
+      const y0 = cy - half;
+      const y1 = cy + half;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(x0 + 1.8, y0 + 1.6);
+      ctx.lineTo(x1 + 1.8, y0 + 2.4);
+      ctx.lineTo(x1 + 1.4, y1 + 2.7);
+      ctx.lineTo(x0 + 1.2, y1 + 2.2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 + 1.2);
+      ctx.lineTo(x0 + 0.8, y0 - 0.7);
+      ctx.lineTo(x1 - 0.8, y0 + 0.4);
+      ctx.lineTo(x1, y0 + 2.2);
+      ctx.lineTo(x1 - 0.7, y1 - 1.6);
+      ctx.lineTo(x0 + 1.3, y1 + 0.8);
+      ctx.closePath();
+      ctx.fillStyle = theme.wall;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.38)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.11;
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 1.4, y0 + 0.1);
+      ctx.lineTo(x1 - 1.1, y0 + 1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+
+/** 南侧石脚：玩家贴着墙时，真正吃光的是墙底这一条立面；把它切成有高低的石块。 */
+function drawWallFootFace(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+  theme: import('../types').StageTheme,
+): void {
+  const { x, y, w, h } = wall;
+  const faceH = Math.min(18, Math.max(10, h * 0.12));
+  const baseY = y + h - faceH;
+  const count = Math.max(3, Math.min(16, Math.round(w / 27)));
+  ctx.save();
+  let left = x - 0.5;
+  for (let i = 0; i < count; i += 1) {
+    const rnd = wallNoise(x, y, 500 + i);
+    const right = i === count - 1 ? x + w + 0.5 : x + (w * (i + 1)) / count + (rnd - 0.5) * 5;
+    const topJitter = (wallNoise(x, y, 540 + i) - 0.5) * 2.6;
+    const drop = 0.2 + wallNoise(x, y, 580 + i) * 2.5;
+    ctx.beginPath();
+    ctx.moveTo(left + 0.4, baseY + topJitter);
+    ctx.lineTo(right - 0.4, baseY + topJitter * 0.55);
+    ctx.lineTo(right - 0.3, y + h + drop);
+    ctx.lineTo(left + 0.5, y + h + drop * 0.62);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(3,5,9,${0.075 + rnd * 0.075})`;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.26)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(right - 0.2, baseY + topJitter * 0.55);
+    ctx.lineTo(right - 0.1, y + h + drop);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.045 + rnd * 0.025;
+    ctx.strokeStyle = theme.accent;
+    ctx.beginPath();
+    ctx.moveTo(left + 1.1, baseY + topJitter + 0.8);
+    ctx.lineTo(right - 1.2, baseY + topJitter * 0.55 + 0.8);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    left = right - 0.2;
+  }
+  ctx.restore();
+}
+
+/** 两三道落地的石扶壁：它们伸进被灯火照亮的那一条边，墙体才有厚度而不只是一块黑面。 */
+function drawWallButtresses(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+  theme: import('../types').StageTheme,
+): void {
+  const { x, y, w, h } = wall;
+  if (w < 145 || h < 76) return;
+  const count = w > 285 ? 3 : 2;
+  ctx.save();
+  for (let i = 0; i < count; i += 1) {
+    const rnd = wallNoise(x, y, 640 + i);
+    if (rnd < 0.16 && count > 1) continue;
+    const cx = x + (w * (i + 1)) / (count + 1) + (rnd - 0.5) * w * 0.055;
+    const halfW = 6.5 + wallNoise(x, y, 660 + i) * 3;
+    const top = y + h - Math.min(30, h * 0.24) - 2;
+    const out = 5.5 + wallNoise(x, y, 680 + i) * 2.8;
+    const bottom = y + h + out;
+    const bottomHalf = halfW * 1.18;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW * 0.85 + 2, top + 2.5);
+    ctx.lineTo(cx + halfW * 0.85 + 2, top + 2.8);
+    ctx.lineTo(cx + bottomHalf + 2.2, bottom + 2.8);
+    ctx.lineTo(cx - bottomHalf + 2, bottom + 2.6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW * 0.82, top);
+    ctx.lineTo(cx + halfW * 0.82, top + 0.5);
+    ctx.lineTo(cx + bottomHalf, bottom);
+    ctx.lineTo(cx - bottomHalf * 1.05, bottom - 0.4);
+    ctx.closePath();
+    ctx.fillStyle = theme.wall;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.44)';
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.13 + rnd * 0.05;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW * 0.68, top + 1.2);
+    ctx.lineTo(cx + halfW * 0.68, top + 1.6);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(cx + halfW * 0.08, top + 5);
+    ctx.lineTo(cx + halfW * 0.17, bottom - 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 墙脚散落的碎砾：把墙体与地面接起来，也顺手打碎底边那条直线。 */
+function drawWallRubble(
+  ctx: CanvasRenderingContext2D,
+  wall: { x: number; y: number; w: number; h: number },
+  theme: import('../types').StageTheme,
+): void {
+  const { x, y, w, h } = wall;
+  const count = Math.max(3, Math.min(9, Math.round(w / 46)));
+  ctx.save();
+  for (let i = 0; i < count; i += 1) {
+    const rnd = wallNoise(x, y, 300 + i);
+    const cx = x + 7 + ((i + 0.5) * Math.max(1, w - 14)) / count + (rnd - 0.5) * 10;
+    const cy = y + h - 0.8 + (wallNoise(cx, y, 320 + i) - 0.25) * 6.2;
+    const rx = 2.6 + rnd * 4.8;
+    const ry = 1.4 + rnd * 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
+    ctx.beginPath();
+    ctx.ellipse(cx + 1.7, cy + 2.1, rx, ry * 0.75, 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, cy + 0.2);
+    ctx.lineTo(cx - rx * 0.48, cy - ry);
+    ctx.lineTo(cx + rx * 0.55, cy - ry * 0.75);
+    ctx.lineTo(cx + rx, cy + 0.35);
+    ctx.lineTo(cx + rx * 0.2, cy + ry);
+    ctx.closePath();
+    ctx.fillStyle = theme.wall;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.globalAlpha = 0.09;
+    ctx.strokeStyle = theme.accent;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx * 0.5, cy - ry * 0.72);
+    ctx.lineTo(cx + rx * 0.42, cy - ry * 0.55);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
 const SHRINE_OFFERS: ShrineOffer[] = [
   { id: 'blood_pact', name: '血契', blurb: '生命上限 -20%，换取一件随机遗物。', icon: '🩸', color: '#ff4d6d' },
   { id: 'kindle', name: '燃薪', blurb: '伤害 +12%，但灯油消耗 +18%。', icon: '🔥', color: '#ff9d2e' },
@@ -5916,6 +6250,7 @@ export class Game {
     // 主体（贴图）
     ctx.fillStyle = pattern ?? theme.wall;
     ctx.fillRect(x, y, ww, wh);
+    drawWallMasonry(ctx, wall);
     // 顶部受光的高光带，暗示"这是有体积的障碍"
     const topLight = ctx.createLinearGradient(0, y, 0, y + Math.min(wh, 46));
     topLight.addColorStop(0, 'rgba(255,255,255,0.085)');
@@ -5935,17 +6270,23 @@ export class Game {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(x, y + wh - Math.min(10, wh * 0.2), ww, Math.min(10, wh * 0.2));
     ctx.fillRect(x + ww - Math.min(10, ww * 0.2), y, Math.min(10, ww * 0.2), wh);
+    drawWallFootFace(ctx, wall, theme);
+    drawWallButtresses(ctx, wall, theme);
+    drawWallCrown(ctx, wall, theme);
+    drawWallShoulders(ctx, wall, theme);
+    drawWallRubble(ctx, wall, theme);
     // 墙脚的苔藓/尘积：用不规则软斑，不要一条规规矩矩的色带。
     ctx.save();
     ctx.globalCompositeOperation = 'source-atop';
+    const [mossR, mossG, mossB] = wallMossRgb(theme.id);
     for (let i = 0; i < 5; i += 1) {
       const mx = x + ww * (0.1 + i * 0.2) + Math.sin(i * 4.7) * ww * 0.06;
       const my = y + wh - Math.min(13, wh * 0.22);
       const mr = Math.min(ww * 0.16, 18 + (i % 3) * 7);
       const moss = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
-      moss.addColorStop(0, 'rgba(126,168,112,0.13)');
-      moss.addColorStop(0.55, 'rgba(103,143,91,0.055)');
-      moss.addColorStop(1, 'rgba(80,120,70,0)');
+      moss.addColorStop(0, `rgba(${mossR},${mossG},${mossB},0.13)`);
+      moss.addColorStop(0.55, `rgba(${mossR},${mossG},${mossB},0.055)`);
+      moss.addColorStop(1, `rgba(${mossR},${mossG},${mossB},0)`);
       ctx.fillStyle = moss;
       ctx.beginPath();
       ctx.ellipse(mx, my, mr, mr * 0.38, 0, 0, Math.PI * 2);
