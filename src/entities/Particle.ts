@@ -303,11 +303,22 @@ export class ParticleSystem {
       const t = p.life / p.maxLife;
       if (p.ring) {
         const r = p.size * (1 - t) + 6;
-        ctx.globalAlpha = t * 0.75;
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = 2 + 4 * t;
+        // 一圈冲击波要读成"被推开的空气"，不是一条圆规线：外层热晕先铺厚度，
+        // 主缘承认真实半径，内侧再留一根更窄的白热丝。半径始终只有 `r` 这一个。
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, p.arcStart, p.arcEnd);
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = t * 0.13;
+        ctx.lineWidth = 7 + 11 * t;
+        ctx.stroke();
+
+        ctx.globalAlpha = t * 0.72;
+        ctx.lineWidth = 1.7 + 3.6 * t;
+        ctx.stroke();
+
+        ctx.globalAlpha = t * (0.22 + 0.24 * t);
+        ctx.strokeStyle = '#fff2cf';
+        ctx.lineWidth = Math.max(0.55, 1.1 * t);
         ctx.stroke();
       } else if (p.shape === 'spark') {
         const speed = Math.hypot(p.vx, p.vy);
