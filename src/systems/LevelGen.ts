@@ -79,7 +79,7 @@ export function scatterDecor(
       x: rng.range(-halfW + 40, halfW - 40),
       y: rng.range(-halfH + 40, halfH - 40),
       r: 4 + rng.next() * 12,
-      kind: Math.floor(rng.next() * 4),
+      kind: Math.floor(rng.next() * 5),
     });
   }
   return { decor, details };

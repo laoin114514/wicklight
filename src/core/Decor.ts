@@ -1857,6 +1857,177 @@ function leafLitter(ctx: CanvasRenderingContext2D, d: Decor): void {
   });
 }
 
+function fallenTwig(ctx: CanvasRenderingContext2D, d: Decor): void {
+  const phase = d.x * 0.031 + d.y * 0.023;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const rot = Math.sin(phase * 1.4) * 0.48;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  const px = (v: number): number => d.x + (v * cos) * d.r * mirror;
+  const py = (v: number): number => d.y + (v * sin + Math.abs(v) * 0.08) * d.r;
+
+  ctx.fillStyle = 'rgba(2,6,4,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(d.x + d.r * 0.08 * mirror, d.y + d.r * 0.2, d.r * 0.72, d.r * 0.17, rot * 0.4, 0, TAU);
+  ctx.fill();
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(58,46,29,0.58)';
+  ctx.lineWidth = Math.max(0.6, d.r * 0.075);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.88), py(0.1));
+  ctx.lineTo(px(-0.34), py(-0.08));
+  ctx.lineTo(px(0.08), py(0.04));
+  ctx.lineTo(px(0.52), py(-0.12));
+  ctx.lineTo(px(0.82), py(-0.04));
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(92,77,47,0.38)';
+  ctx.lineWidth = Math.max(0.5, d.r * 0.048);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.3), py(-0.08));
+  ctx.lineTo(px(-0.52), py(-0.38));
+  ctx.moveTo(px(0.28), py(-0.03));
+  ctx.lineTo(px(0.38), py(0.3));
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(137,122,78,0.18)';
+  ctx.lineWidth = Math.max(0.35, d.r * 0.025);
+  ctx.beginPath();
+  ctx.moveTo(px(-0.78), py(0.03));
+  ctx.lineTo(px(-0.32), py(-0.15));
+  ctx.lineTo(px(0.06), py(-0.03));
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(151,144,91,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(px(0.84), py(-0.02), d.r * 0.035, d.r * 0.07, rot, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(69,104,66,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.38), py(-0.11), d.r * 0.1, d.r * 0.045, rot, 0, TAU);
+  ctx.fill();
+}
+
+function mossPatch(ctx: CanvasRenderingContext2D, d: Decor): void {
+  const phase = d.x * 0.023 + d.y * 0.019;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const tilt = Math.sin(phase * 1.3) * 0.32;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(41,74,55,0.3)';
+  for (const [x, y, rx, ry, rot] of [
+    [-0.25, 0.04, 0.46, 0.22, -0.12],
+    [0.2, 0.02, 0.34, 0.18, 0.16],
+    [0.02, 0.17, 0.3, 0.13, 0.02],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, rot * mirror + tilt, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(82,121,76,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.1), py(-0.03), d.r * 0.31, d.r * 0.13, tilt, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(118,154,91,0.2)';
+  for (const [x, y, radius] of [
+    [-0.38, -0.02, 0.026],
+    [-0.13, 0.08, 0.02],
+    [0.1, -0.06, 0.023],
+    [0.31, 0.08, 0.018],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(px(x), py(y), Math.max(0.35, d.r * radius), 0, TAU);
+    ctx.fill();
+  }
+}
+
+function ashMound(ctx: CanvasRenderingContext2D, d: Decor): void {
+  const phase = d.x * 0.029 + d.y * 0.021;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const pulse = 0.45 + Math.sin(phase * 2.1) * 0.18;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(7,4,3,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px(0.04), py(0.2), d.r * 0.72, d.r * 0.2, 0.03 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(62,51,48,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(px(-0.67), py(0.15));
+  ctx.quadraticCurveTo(px(-0.56), py(-0.28), px(-0.16), py(-0.38));
+  ctx.quadraticCurveTo(px(0.39), py(-0.34), px(0.67), py(0.08));
+  ctx.quadraticCurveTo(px(0.34), py(0.33), px(-0.12), py(0.3));
+  ctx.quadraticCurveTo(px(-0.48), py(0.28), px(-0.67), py(0.15));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(119,102,98,0.24)';
+  ctx.beginPath();
+  ctx.ellipse(px(-0.12), py(-0.22), d.r * 0.34, d.r * 0.12, -0.04 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(29,23,23,0.5)';
+  for (const [x, y, rx, ry] of [
+    [-0.34, 0.05, 0.12, 0.05],
+    [0.14, 0.14, 0.1, 0.04],
+    [0.39, -0.06, 0.08, 0.035],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(px(x), py(y), d.r * rx, d.r * ry, 0.08 * mirror, 0, TAU);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(255,118,38,${0.1 + pulse * 0.08})`;
+  ctx.beginPath();
+  ctx.ellipse(px(0.08), py(0.02), d.r * 0.17, d.r * 0.07, 0.05 * mirror, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,188,96,${0.16 + pulse * 0.13})`;
+  ctx.beginPath();
+  ctx.arc(px(0.09), py(0.01), Math.max(0.35, d.r * 0.035), 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+function glassShard(ctx: CanvasRenderingContext2D, d: Decor): void {
+  const phase = d.x * 0.025 + d.y * 0.031;
+  const mirror = Math.sin(phase) < 0 ? -1 : 1;
+  const tilt = Math.sin(phase * 1.6) * 0.38;
+  const px = (v: number): number => d.x + v * d.r * mirror;
+  const py = (v: number): number => d.y + v * d.r;
+
+  ctx.fillStyle = 'rgba(2,2,8,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(px(0.03), py(0.16), d.r * 0.58, d.r * 0.17, tilt * 0.3, 0, TAU);
+  ctx.fill();
+  const shards: readonly (readonly [number, number, number, number, number])[] = [
+    [-0.36, 0.12, -0.1, -0.4, 0.24],
+    [0.08, 0.13, 0.36, -0.28, 0.2],
+    [0.34, 0.16, 0.58, 0.02, 0.15],
+  ];
+  shards.forEach(([x, y, tipX, tipY, width], index) => {
+    ctx.fillStyle = index === 1 ? 'rgba(112,83,156,0.44)' : 'rgba(82,67,118,0.4)';
+    ctx.beginPath();
+    ctx.moveTo(px(x - width * 0.5), py(y));
+    ctx.lineTo(px(tipX), py(tipY));
+    ctx.lineTo(px(x + width * 0.55), py(y + 0.04));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = index === 1 ? 'rgba(201,173,255,0.25)' : 'rgba(155,129,206,0.16)';
+    ctx.lineWidth = Math.max(0.35, d.r * 0.02);
+    ctx.beginPath();
+    ctx.moveTo(px(x - width * 0.2), py(y));
+    ctx.lineTo(px(tipX), py(tipY));
+    ctx.stroke();
+  });
+  ctx.fillStyle = 'rgba(225,208,255,0.32)';
+  ctx.beginPath();
+  ctx.arc(px(0.34), py(-0.25), Math.max(0.35, d.r * 0.027), 0, TAU);
+  ctx.fill();
+}
+
 function puddle(ctx: CanvasRenderingContext2D, d: Decor, time: number): void {
   const phase = time * 1.15 + d.x * 0.019 + d.y * 0.013;
   const mirror = Math.sin(d.x * 0.017 + d.y * 0.021) < 0 ? -1 : 1;
@@ -2248,25 +2419,29 @@ function drawDetails(
         if (d.kind === 0) grassTuft(ctx, d, time);
         else if (d.kind === 1) pebble(ctx, d, 'rgba(46,62,50,0.75)');
         else if (d.kind === 2) mushroomDot(ctx, d, time);
-        else leafLitter(ctx, d);
+        else if (d.kind === 3) leafLitter(ctx, d);
+        else fallenTwig(ctx, d);
         break;
       case 'ashenkeep':
         if (d.kind === 0) chip(ctx, d, 'rgba(70,74,96,0.62)');
         else if (d.kind === 1) pebble(ctx, d, 'rgba(60,64,84,0.7)');
         else if (d.kind === 2) puddle(ctx, d, time);
-        else candleStub(ctx, d, time, themeId);
+        else if (d.kind === 3) candleStub(ctx, d, time, themeId);
+        else mossPatch(ctx, d);
         break;
       case 'emberhold':
         if (d.kind === 0) pebble(ctx, d, 'rgba(66,42,38,0.78)');
         else if (d.kind === 1) chip(ctx, d, 'rgba(78,48,42,0.6)');
         else if (d.kind === 2) heatCrack(ctx, d, time);
-        else emberDot(ctx, d, time);
+        else if (d.kind === 3) emberDot(ctx, d, time);
+        else ashMound(ctx, d);
         break;
       case 'nightcity':
         if (d.kind === 0) pebble(ctx, d, 'rgba(60,52,88,0.72)');
         else if (d.kind === 1) chip(ctx, d, 'rgba(74,64,108,0.6)');
         else if (d.kind === 2) runeInlay(ctx, d, time);
-        else candleStub(ctx, d, time, themeId);
+        else if (d.kind === 3) candleStub(ctx, d, time, themeId);
+        else glassShard(ctx, d);
         break;
       default:
         if (d.kind === 0) hairlineCrack(ctx, d);
