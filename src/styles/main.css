@@ -8988,3 +8988,19 @@ body.is-touch .lvl-actions__hint { display: none; }
   .ledger-row__mark { width: 16px; height: 16px; font-size: 8px; }
   .menu-foot { font-size: 10px; row-gap: 1px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v168 · 图鉴：把最后一层纸边压平
+   桌面索引条比纸页左右各多出 1px，会凭空长出一条横向滚动；
+   320px 的详情页则只差 13px 就能把返回键留在首屏。这里只收紧纸边与账行，
+   分类、搜索与条目内容都不动。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 721px) {
+  .panel--codex .cx-tabs { margin-inline: -28px; padding-inline: 28px; }
+}
+
+@media (max-width: 360px) {
+  .panel--detail .cx-rows > div { padding-top: 5px; padding-bottom: 4px; }
+}
