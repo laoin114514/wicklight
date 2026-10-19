@@ -875,16 +875,131 @@ function details(ctx: CanvasRenderingContext2D, e: Enemy, id: string, time: numb
       break;
     }
     case 'crawler': {
-      ctx.fillStyle = shade(body, -0.35);
+      const facingX = Math.cos(e.angle);
+      const facingY = Math.sin(e.angle);
+      const sideX = -facingY;
+      const sideY = facingX;
+      const rushing = e.dashing > 0;
+      const trailX = rushing ? e.dashVx : e.vx;
+      const trailY = rushing ? e.dashVy : e.vy;
+      const trailLength = Math.hypot(trailX, trailY);
+
+      if (rushing && trailLength > 1) {
+        const backX = -trailX / trailLength;
+        const backY = -trailY / trailLength;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        for (let streak = 0; streak < 3; streak += 1) {
+          const offset = (streak - 1) * r * 0.32;
+          const start = r * (0.82 + streak * 0.12);
+          const sway = Math.sin(time * 9 + w + streak * 2.1) * r * 0.1;
+          ctx.strokeStyle = rgba(body, 0.2 - streak * 0.045);
+          ctx.lineWidth = 1.25 - streak * 0.2;
+          ctx.beginPath();
+          ctx.moveTo(e.x + backX * start - sideX * offset, e.y + backY * start - sideY * offset);
+          ctx.lineTo(
+            e.x + backX * (start + r * (0.72 + streak * 0.18)) - sideX * (offset + sway),
+            e.y + backY * (start + r * (0.72 + streak * 0.18)) - sideY * (offset + sway),
+          );
+          ctx.stroke();
+        }
+        ctx.fillStyle = rgba('#d9b98a', 0.26);
+        ctx.beginPath();
+        for (let mote = 0; mote < 3; mote += 1) {
+          const cycle = (time * 1.8 + mote * 0.31 + w * 0.07) % 1;
+          const drift = Math.sin(time * 5 + mote * 2.4 + w) * r * 0.28;
+          const cx = e.x + backX * r * (1.05 + cycle * 1.15) - sideX * drift;
+          const cy = e.y + backY * r * (1.05 + cycle * 1.15) - sideY * drift;
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, Math.max(0.55, r * (0.055 + (1 - cycle) * 0.035)), 0, TAU);
+        }
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        for (let leg = 0; leg < 2; leg += 1) {
+          const along = leg === 0 ? -r * 0.28 : r * 0.22;
+          const rootX = e.x + facingX * along + sideX * side * r * 0.52;
+          const rootY = e.y + facingY * along + sideY * side * r * 0.52;
+          const jointX = rootX + sideX * side * r * 0.46 - facingX * r * (leg === 0 ? 0.08 : 0.16);
+          const jointY = rootY + sideY * side * r * 0.46 - facingY * r * (leg === 0 ? 0.08 : 0.16);
+          const footX = jointX + sideX * side * r * 0.34 - facingX * r * 0.36;
+          const footY = jointY + sideY * side * r * 0.34 - facingY * r * 0.36;
+          ctx.strokeStyle = 'rgba(30,18,9,0.7)';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(rootX, rootY);
+          ctx.quadraticCurveTo(jointX, jointY, footX, footY);
+          ctx.stroke();
+          ctx.strokeStyle = rgba('#e3c08b', 0.24);
+          ctx.lineWidth = 0.75;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      ctx.fillStyle = shade(body, -0.48);
       for (const side of [-1, 1]) {
         ctx.beginPath();
-        ctx.moveTo(e.x + Math.cos(e.angle) * r * 0.7, e.y + Math.sin(e.angle) * r * 0.7);
-        ctx.lineTo(e.x + Math.cos(e.angle + side * 1.15) * r * 0.35, e.y + Math.sin(e.angle + side * 1.15) * r * 0.35);
-        ctx.lineTo(e.x - Math.cos(e.angle) * r * 0.75, e.y - Math.sin(e.angle) * r * 0.75);
+        ctx.moveTo(e.x + facingX * r * 0.56 + sideX * side * r * 0.18, e.y + facingY * r * 0.56 + sideY * side * r * 0.18);
+        ctx.lineTo(e.x + facingX * r * 1.12 + sideX * side * r * 0.54, e.y + facingY * r * 1.12 + sideY * side * r * 0.54);
+        ctx.lineTo(e.x + facingX * r * 0.42 + sideX * side * r * 0.5, e.y + facingY * r * 0.42 + sideY * side * r * 0.5);
         ctx.closePath();
         ctx.fill();
       }
-      ctx.strokeStyle = rgba('#ffe7ba', 0.18);
+
+      ctx.save();
+      bodyPath(ctx, e, id, time);
+      ctx.clip();
+      const frontX = e.x + facingX * r * 0.68;
+      const frontY = e.y + facingY * r * 0.68;
+      const backX = e.x - facingX * r * 0.68;
+      const backY = e.y - facingY * r * 0.68;
+      const leftX = e.x - sideX * r * 0.82;
+      const leftY = e.y - sideY * r * 0.82;
+      const rightX = e.x + sideX * r * 0.82;
+      const rightY = e.y + sideY * r * 0.82;
+      ctx.fillStyle = 'rgba(255,231,190,0.08)';
+      ctx.beginPath();
+      ctx.moveTo(frontX, frontY);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(backX, backY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(24,14,7,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(frontX, frontY);
+      ctx.lineTo(rightX, rightY);
+      ctx.lineTo(backX, backY);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(38,23,11,0.52)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(e.x + facingX * r * 0.18 + sideX * r * 0.08, e.y + facingY * r * 0.18 + sideY * r * 0.08);
+      ctx.lineTo(e.x + sideX * r * 0.34 - facingX * r * 0.06, e.y + sideY * r * 0.34 - facingY * r * 0.06);
+      ctx.lineTo(e.x + sideX * r * 0.62 + facingX * r * 0.04, e.y + sideY * r * 0.62 + facingY * r * 0.04);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.x - facingX * r * 0.2 - sideX * r * 0.12, e.y - facingY * r * 0.2 - sideY * r * 0.12);
+      ctx.lineTo(e.x - sideX * r * 0.42 - facingX * r * 0.38, e.y - sideY * r * 0.42 - facingY * r * 0.38);
+      ctx.stroke();
+      ctx.strokeStyle = rgba('#ffe7ba', 0.16);
+      ctx.lineWidth = 0.9;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(e.x + facingX * r * 0.46 + sideX * side * r * 0.2, e.y + facingY * r * 0.46 + sideY * side * r * 0.2);
+        ctx.lineTo(e.x - facingX * r * 0.42 + sideX * side * r * 0.48, e.y - facingY * r * 0.42 + sideY * side * r * 0.48);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = rgba('#ffe7ba', 0.2);
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(e.x + Math.cos(e.angle) * r * 0.68, e.y + Math.sin(e.angle) * r * 0.68);
