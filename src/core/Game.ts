@@ -7883,6 +7883,17 @@ export class Game {
         const s2 = Math.sin(k * 12.9898 + ph * 78.233) * 43758.5453;
         return s2 - Math.floor(s2);
       };
+      // 热雾画在火舌之前、敌人之后：火焰不只是"盖在怪上的一排形状"，
+      // 它得先把自己那圈空气烘亮，站在里面的剪影才有被火包住的实感。
+      const haze = ctx.createRadialGradient(g.x, g.y - g.r * 0.08, 0, g.x, g.y - g.r * 0.04, g.r * 0.94);
+      haze.addColorStop(0, `rgba(255,150,58,${0.095 * fade})`);
+      haze.addColorStop(0.52, `rgba(255,92,24,${0.05 * fade})`);
+      haze.addColorStop(1, 'rgba(255,68,16,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = haze;
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y - g.r * 0.04, g.r * 0.94, g.r * 0.82, 0, 0, 6.2832);
+      ctx.fill();
       const n = Math.round(clamp(g.r / 6.5, 10, 20));
       for (let i = 0; i < n; i += 1) {
         const a = ph + i * 2.39996; // 黄金角：撒得匀又不成行
@@ -7897,21 +7908,38 @@ export class Game {
         const h = g.r * (0.14 + 0.72 * r1) * (0.7 + 0.45 * core) * (0.8 + 0.35 * wob);
         const w = g.r * (0.045 + 0.075 * r2);
         const tip = bx + Math.sin(t * 4.4 + i * 2.3 + ph) * w * 0.6; // 火尖自己也会飘
-        ctx.globalAlpha = (0.16 + 0.22 * wob) * (0.7 + 0.5 * r2) * fade;
-        ctx.fillStyle = core > 0.45 ? '#ff9a34' : '#ff6a1e';
+        const shoulder = w * (0.55 + 0.4 * hash(i + 101));
+        ctx.globalAlpha = (0.2 + 0.25 * wob) * (0.72 + 0.48 * r2) * fade;
+        ctx.fillStyle = core > 0.45 ? '#ffad43' : '#ff7526';
         ctx.beginPath();
         ctx.moveTo(bx - w, by);
-        ctx.quadraticCurveTo(bx - w * 1.2, by - h * 0.5, tip, by - h);
-        ctx.quadraticCurveTo(bx + w * 1.2, by - h * 0.5, bx + w, by);
+        ctx.bezierCurveTo(bx - w * 1.22, by - h * 0.24, bx - shoulder * 1.18, by - h * 0.46, bx - shoulder, by - h * 0.57);
+        ctx.quadraticCurveTo(bx - w * 0.22, by - h * 0.74, tip, by - h);
+        ctx.quadraticCurveTo(tip + w * 0.2, by - h * 0.7, bx + shoulder * 0.9, by - h * 0.52);
+        ctx.bezierCurveTo(bx + shoulder * 1.24, by - h * 0.42, bx + w * 1.18, by - h * 0.2, bx + w, by);
+        ctx.closePath();
         ctx.fill();
+        // 高焰偶尔歪出一小截侧舌：火不是单向生长的锥体，边沿总有一两簇先卷出去。
+        if (r1 > 0.58 && core > 0.28) {
+          const lick = (hash(i + 23) - 0.5) * w * 2.1;
+          ctx.globalAlpha *= 0.64;
+          ctx.beginPath();
+          ctx.moveTo(bx + lick * 0.25, by - h * (0.18 + 0.12 * r2));
+          ctx.quadraticCurveTo(bx + lick * 0.8, by - h * 0.48, bx + lick, by - h * 0.6);
+          ctx.quadraticCurveTo(bx + lick * 0.48, by - h * 0.34, bx + w * 0.38, by - h * 0.12);
+          ctx.closePath();
+          ctx.fill();
+        }
         // 内焰只给中间那几朵（边上也白的话，整片会糊成一团奶白）
         if (core > 0.2) {
-          ctx.globalAlpha = (0.14 + 0.26 * wob) * core * fade;
-          ctx.fillStyle = core > 0.55 ? '#fff0c0' : '#ffbc5c';
+          ctx.globalAlpha = (0.17 + 0.28 * wob) * core * fade;
+          ctx.fillStyle = core > 0.55 ? '#fff3c9' : '#ffcb6e';
           ctx.beginPath();
           ctx.moveTo(bx - w * 0.44, by);
-          ctx.quadraticCurveTo(bx - w * 0.5, by - h * 0.3, tip, by - h * (0.5 + 0.25 * core));
-          ctx.quadraticCurveTo(bx + w * 0.5, by - h * 0.3, bx + w * 0.44, by);
+          ctx.bezierCurveTo(bx - w * 0.55, by - h * 0.2, bx - w * 0.36, by - h * 0.38, bx - w * 0.12, by - h * 0.48);
+          ctx.quadraticCurveTo(bx + w * 0.02, by - h * 0.6, tip, by - h * (0.5 + 0.25 * core));
+          ctx.quadraticCurveTo(bx + w * 0.34, by - h * 0.35, bx + w * 0.44, by);
+          ctx.closePath();
           ctx.fill();
         }
       }
