@@ -32,6 +32,14 @@ const BRAKE_DUST = 2;
 /** 燎灯脉冲的可见角度采样数（v104）：72 段在 320px 外约每 28px 一段。 */
 const AURA_ARC_SEGMENTS = 72;
 
+type Rgb = readonly [number, number, number];
+
+/** 拨芯的冷色过渡：只给画面用，数值上仍是同一条灯火曲线。 */
+function wickTint(warm: Rgb, cool: Rgb, t: number): string {
+  const k = clamp(t, 0, 1);
+  return `${Math.round(warm[0] + (cool[0] - warm[0]) * k)},${Math.round(warm[1] + (cool[1] - warm[1]) * k)},${Math.round(warm[2] + (cool[2] - warm[2]) * k)}`;
+}
+
 /** 把一段圆形范围按"看得见 / 看不见"切成连续弧段；可见数组也给边缘火星挑角度。 */
 function sightArcs(
   x: number,
@@ -961,7 +969,7 @@ export class Player {
     ctx.addLight(this.x, this.y, this.lightRadius, this.brightness, 0.04);
     ctx.addLight(this.x, this.y, this.lightRadius * 0.46, Math.min(1, this.brightness * 0.85), 0);
     // 火光的暖调：让"被照亮"看起来像被火点着，而不是被灰雾罩住
-    ctx.addGlow(this.x, this.y, this.lightRadius * 0.92, 0.55 * this.brightness);
+    ctx.addGlow(this.x, this.y, this.lightRadius * 0.92, 0.55 * this.brightness * (1 - this.wick * 0.45));
 
     // Regen
     if (s.regen > 0) this.hp = Math.min(s.maxHp, this.hp + s.regen * dt);
@@ -1527,6 +1535,8 @@ export class Player {
 
   draw(ctx: CanvasRenderingContext2D, time: number, opts?: { cone?: number; halo?: number }): void {
     const R = this.radius;
+    const dim = clamp(this.wick, 0, 1);
+    const tint = (warm: Rgb, cool: Rgb): string => wickTint(warm, cool, dim);
     const coneScale = opts?.cone ?? 1;
     const haloScale = opts?.halo ?? 1;
     const speed = Math.hypot(this.vx, this.vy);
@@ -1546,19 +1556,21 @@ export class Player {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const hem = ctx.createRadialGradient(0, 0, edge * 0.84, 0, 0, edge * 1.01);
-      hem.addColorStop(0, 'rgba(255,168,74,0)');
-      hem.addColorStop(0.72, `rgba(255,166,76,${0.03 + breathe * 0.012})`);
-      hem.addColorStop(1, 'rgba(255,150,48,0)');
+      hem.addColorStop(0, `rgba(${tint([255, 168, 74], [104, 136, 208])},0)`);
+      hem.addColorStop(0.72, `rgba(${tint([255, 166, 76], [104, 136, 208])},${0.03 + breathe * 0.012})`);
+      hem.addColorStop(1, `rgba(${tint([255, 150, 48], [80, 108, 174])},0)`);
       ctx.fillStyle = hem;
       ctx.beginPath();
       ctx.arc(0, 0, edge * 1.01, 0, TAU);
       ctx.fill();
+      const moteHot = `rgb(${tint([255, 224, 160], [186, 210, 255])})`;
+      const moteWarm = `rgb(${tint([255, 177, 92], [118, 153, 228])})`;
       for (let i = 0; i < 14; i += 1) {
         const a = time * 0.055 + i * (TAU / 14) + Math.sin(time * 0.7 + i * 2.3) * 0.055;
         const reach = edge * (0.915 + Math.sin(time * 1.4 + i * 1.7) * 0.022);
         const span = 0.045 + (i % 4) * 0.012;
         ctx.globalAlpha = (0.05 + (i % 3) * 0.016) * this.brightness * (0.72 + breathe * 0.28);
-        ctx.strokeStyle = i % 4 === 0 ? '#ffe0a0' : '#ffb15c';
+        ctx.strokeStyle = i % 4 === 0 ? moteHot : moteWarm;
         ctx.lineWidth = 3.4 + (i % 3) * 2.2;
         ctx.beginPath();
         ctx.arc(0, 0, reach, a - span, a + span);
@@ -1845,9 +1857,9 @@ export class Player {
     ctx.globalCompositeOperation = 'lighter';
     const haloR = (40 * this.brightness + 18) * haloScale;
     const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
-    halo.addColorStop(0, `rgba(255,216,150,${0.34 * flick})`);
-    halo.addColorStop(0.5, `rgba(255,150,60,${0.13 * flick})`);
-    halo.addColorStop(1, 'rgba(255,150,60,0)');
+    halo.addColorStop(0, `rgba(${tint([255, 216, 150], [186, 212, 255])},${0.34 * flick})`);
+    halo.addColorStop(0.5, `rgba(${tint([255, 150, 60], [86, 116, 190])},${0.13 * flick})`);
+    halo.addColorStop(1, `rgba(${tint([255, 150, 60], [58, 88, 150])},0)`);
     ctx.fillStyle = halo;
     ctx.beginPath();
     ctx.arc(0, 0, haloR, 0, TAU);
@@ -1872,9 +1884,9 @@ export class Player {
       const half = 64 * band.width;
       const alpha = band.alpha * flick * coneScale;
       const cone = ctx.createLinearGradient(0, 0, this.radius + coneLen, 0);
-      cone.addColorStop(0, `rgba(255,210,145,${alpha})`);
-      cone.addColorStop(0.45, `rgba(255,172,86,${alpha * 0.52})`);
-      cone.addColorStop(1, 'rgba(255,150,60,0)');
+      cone.addColorStop(0, `rgba(${tint([255, 210, 145], [180, 204, 246])},${alpha})`);
+      cone.addColorStop(0.45, `rgba(${tint([255, 172, 86], [96, 126, 196])},${alpha * 0.52})`);
+      cone.addColorStop(1, `rgba(${tint([255, 150, 60], [52, 80, 140])},0)`);
       ctx.fillStyle = cone;
       ctx.beginPath();
       ctx.moveTo(this.radius * 0.6, -3);
@@ -1886,8 +1898,8 @@ export class Player {
     }
     // 锥心的亮芯
     const core = ctx.createRadialGradient(0, 0, this.radius, 0, 0, this.radius + coneLen * 0.55);
-    core.addColorStop(0, `rgba(255,224,168,${0.16 * flick * coneScale})`);
-    core.addColorStop(1, 'rgba(255,170,80,0)');
+    core.addColorStop(0, `rgba(${tint([255, 224, 168], [210, 228, 255])},${0.16 * flick * coneScale})`);
+    core.addColorStop(1, `rgba(${tint([255, 170, 80], [70, 104, 174])},0)`);
     ctx.fillStyle = core;
     ctx.beginPath();
     ctx.moveTo(this.radius * 0.6, -3);
@@ -1898,6 +1910,8 @@ export class Player {
     ctx.fill();
 
     const dust = 18;
+    const dustHot = `rgb(${tint([255, 246, 220], [232, 243, 255])})`;
+    const dustWarm = `rgb(${tint([255, 211, 148], [164, 191, 245])})`;
     for (let i = 0; i < dust; i += 1) {
       const frac = (time * (0.17 + (i % 4) * 0.014) + i * 0.137) % 1;
       const reach = this.radius * 0.65 + coneLen * frac;
@@ -1906,7 +1920,7 @@ export class Player {
       const twinkle = 0.5 + 0.5 * Math.sin(time * 3.4 + i * 1.9);
       const rad = (1 + (i % 3) * 0.5) * (1 - frac * 0.25);
       ctx.globalAlpha = (0.18 + twinkle * 0.36) * (1 - frac * 0.66) * flick * coneScale;
-      ctx.fillStyle = i % 4 === 0 ? '#fff6dc' : '#ffd394';
+      ctx.fillStyle = i % 4 === 0 ? dustHot : dustWarm;
       ctx.beginPath();
       ctx.arc(reach, drift, Math.max(0.5, rad), 0, TAU);
       ctx.fill();
@@ -2040,7 +2054,7 @@ export class Player {
       ctx.save();
       ctx.rotate(this.angle);
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,190,120,0.62)';
+      ctx.strokeStyle = `rgba(${tint([255, 190, 120], [160, 190, 255])},0.62)`;
       ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.arc(0, 0, R * 0.98, -1.05, 1.05);
@@ -2160,9 +2174,9 @@ export class Player {
 
     ctx.globalCompositeOperation = 'lighter';
     const lanternGlow = ctx.createRadialGradient(lx, 0, 0, lx, 0, 13);
-    lanternGlow.addColorStop(0, `rgba(255,246,204,${0.36 + 0.38 * flick})`);
-    lanternGlow.addColorStop(0.4, `rgba(255,171,72,${0.16 + 0.16 * flick})`);
-    lanternGlow.addColorStop(1, 'rgba(255,120,28,0)');
+    lanternGlow.addColorStop(0, `rgba(${tint([255, 246, 204], [218, 236, 255])},${0.36 + 0.38 * flick})`);
+    lanternGlow.addColorStop(0.4, `rgba(${tint([255, 171, 72], [96, 132, 214])},${0.16 + 0.16 * flick})`);
+    lanternGlow.addColorStop(1, `rgba(${tint([255, 120, 28], [48, 78, 150])},0)`);
     ctx.fillStyle = lanternGlow;
     ctx.beginPath();
     ctx.arc(lx, 0, 13, 0, TAU);
@@ -2170,20 +2184,25 @@ export class Player {
 
     // 火舌不是一颗椭圆：下面圆、上面收尖，随呼吸荡一下
     const flameLean = Math.sin(time * 7.5) * 0.8;
-    ctx.fillStyle = `rgba(255,164,62,${0.7 + 0.2 * flick})`;
+    ctx.save();
+    ctx.translate(lx, 0);
+    ctx.scale(1 - dim * 0.18, 1 - dim * 0.32);
+    ctx.translate(-lx, 0);
+    ctx.fillStyle = `rgba(${tint([255, 164, 62], [118, 162, 238])},${0.7 + 0.2 * flick})`;
     ctx.beginPath();
     ctx.moveTo(lx, 6.2);
     ctx.bezierCurveTo(lx - 4.7, 4.1, lx - 3.1, -1.4, lx + flameLean, -6.7 - flick * 1.1);
     ctx.bezierCurveTo(lx + 3.2, -1.1, lx + 4.8, 3.5, lx, 6.2);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#fff7d7';
+    ctx.fillStyle = `rgb(${tint([255, 247, 215], [234, 245, 255])})`;
     ctx.beginPath();
     ctx.moveTo(lx, 4.4);
     ctx.bezierCurveTo(lx - 2.1, 2.6, lx - 1.4, -0.5, lx + flameLean * 0.55, -3.3);
     ctx.bezierCurveTo(lx + 1.6, -0.2, lx + 2.2, 2.5, lx, 4.4);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
 
     // 玻璃罩上的两道反光，证明它是"罩子"而不是一团色块
     ctx.strokeStyle = 'rgba(255,248,222,0.5)';

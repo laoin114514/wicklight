@@ -5531,7 +5531,8 @@ export class Game {
     }
 
     this.drawWorld(ctx, w, h);
-    this.light.setDarkness(clamp(0.94 + this.darknessBoost, 0, 0.99));
+    const wickDim = clamp(this.player.wick, 0, 1);
+    this.light.setDarkness(clamp(0.94 + this.darknessBoost + wickDim * 0.04, 0, 0.99));
     this.light.setScale(r.dpr, this.profile.lightScale);
     this.light.setOccluders(this.level.walls);
     this.light.render(ctx, this.camera, w, h, this.time);
@@ -5554,7 +5555,7 @@ export class Game {
     // Screen-space overlays
     ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
     // 暖色分级 + 泛光：两件都是加法叠加，合成一趟做（手机上省一次整屏读改写）
-    this.postfx.applyGlow(ctx, w, h, { px: this.renderer.width / 2, py: this.renderer.height / 2, strength: 1 });
+    this.postfx.applyGlow(ctx, w, h, { px: this.renderer.width / 2, py: this.renderer.height / 2, strength: 1 - wickDim * 0.42 });
     this.postfx.applyMain(ctx, w, h);
     this.foreground.draw(ctx, w, h, this.time, this.camera, this.profile.handheld);
     if (this.flash > 0) {
