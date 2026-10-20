@@ -19,6 +19,7 @@ export class PostFX {
   private bands: Band[] = [];
   private grainSeed = 0;
   private scanCanvas: HTMLCanvasElement | null = null;
+  private grainTile: HTMLCanvasElement | null = null;
   private dangerVignette: CanvasGradient | null = null;
   danger = 0;
   private bloomA: HTMLCanvasElement | null = null;
@@ -61,6 +62,29 @@ export class PostFX {
     dg.addColorStop(0.85, 'rgba(170,5,35,0.62)');
     dg.addColorStop(1, 'rgba(140,0,25,0.8)');
     this.dangerVignette = dg;
+  }
+
+  /** 一次性烘一张可平铺的细颗粒；运行时不额外读改写整屏，只并进暗角那张乘算贴图。 */
+  private ensureGrain(): HTMLCanvasElement | null {
+    if (this.grainTile) return this.grainTile;
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+    const size = 96;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const cc = c.getContext('2d');
+    if (!cc) return null;
+    let seed = 0x6d2b79f5;
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        const v = 206 + (seed >>> 24) % 50;
+        cc.fillStyle = `rgb(${v},${v + 1},${Math.min(255, v + 3)})`;
+        cc.fillRect(x, y, 1, 1);
+      }
+    }
+    this.grainTile = c;
+    return c;
   }
 
   /** 低分辨率两级泛光：让火焰、闪电、提灯与爆炸真正“发光”。 */
@@ -285,6 +309,19 @@ export class PostFX {
       if (!cc) return;
       cc.fillStyle = '#ffffff';
       cc.fillRect(0, 0, dw, dh);
+      // 细颗粒并进同一张乘算贴图：暗部不再是一块纯色，灯火的渐变也更少断带。
+      const grain = this.ensureGrain();
+      if (grain) {
+        const pat = cc.createPattern(grain, 'repeat');
+        if (pat) {
+          cc.save();
+          cc.globalCompositeOperation = 'multiply';
+          cc.globalAlpha = 0.32;
+          cc.fillStyle = pat;
+          cc.fillRect(0, 0, dw, dh);
+          cc.restore();
+        }
+      }
       if (this.scanCanvas && this.settings.data.quality !== 'low') {
         const pat = cc.createPattern(this.scanCanvas, 'repeat');
         if (pat) {

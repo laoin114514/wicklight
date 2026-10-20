@@ -1538,6 +1538,35 @@ export class Player {
     ctx.save();
     ctx.translate(this.x, this.y + bob);
 
+    // ── 光池边缘：一圈贴着地面的呼吸暖雾，把灯火从"平涂圆盘"垫成有体积的光 ──
+    // 只在半径内侧最外一圈提亮；实际半径仍是上面那条边界，不把可走位读成比真值更宽。
+    if (this.lightRadius > 24 && this.brightness > 0.02) {
+      const edge = this.lightRadius;
+      const breathe = 0.5 + Math.sin(time * 2.2) * 0.5;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const hem = ctx.createRadialGradient(0, 0, edge * 0.84, 0, 0, edge * 1.01);
+      hem.addColorStop(0, 'rgba(255,168,74,0)');
+      hem.addColorStop(0.72, `rgba(255,166,76,${0.03 + breathe * 0.012})`);
+      hem.addColorStop(1, 'rgba(255,150,48,0)');
+      ctx.fillStyle = hem;
+      ctx.beginPath();
+      ctx.arc(0, 0, edge * 1.01, 0, TAU);
+      ctx.fill();
+      for (let i = 0; i < 14; i += 1) {
+        const a = time * 0.055 + i * (TAU / 14) + Math.sin(time * 0.7 + i * 2.3) * 0.055;
+        const reach = edge * (0.915 + Math.sin(time * 1.4 + i * 1.7) * 0.022);
+        const span = 0.045 + (i % 4) * 0.012;
+        ctx.globalAlpha = (0.05 + (i % 3) * 0.016) * this.brightness * (0.72 + breathe * 0.28);
+        ctx.strokeStyle = i % 4 === 0 ? '#ffe0a0' : '#ffb15c';
+        ctx.lineWidth = 3.4 + (i % 3) * 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, reach, a - span, a + span);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // ── 掠影的符文 ──
     // 它画在**脚边地上**（一圈压扁的椭圆，跟滞行雾 / 险境预警是同一套语言：
     // 画在地上的东西 = 规则，画在身上的东西 = 角色），所以不会被误读成"判定圈"。
