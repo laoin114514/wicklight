@@ -5,6 +5,7 @@ import { applySlow, type Enemy, type EnemySystem } from './enemies/Enemy';
 import type { ParticleSystem } from './Particle';
 import type { ProjectileSystem } from './Projectile';
 import { clamp, TAU } from '../core/MathUtils';
+import { drawGlow } from '../core/SoftFX';
 import { GRAZE } from '../data/graze';
 import { WICK } from '../data/wick';
 import { AURA } from '../data/aura';
@@ -1501,7 +1502,19 @@ export class Player {
       case 'whip': {
         const range = st.range * area;
         const half = st.spread / 2;
-        ctx.particles.shockwave(this.x + Math.cos(aim) * range * 0.5, this.y + Math.sin(aim) * range * 0.5, def.color, range * 0.5, 0.28);
+        ctx.particles.shockwaveArc(this.x, this.y, def.color, range, 0.3, aim - half, aim + half, 2.6);
+        ctx.particles.shockwaveArc(this.x, this.y, '#ffe0a3', range * 0.72, 0.2, aim - half * 0.82, aim + half * 0.82, 1.9);
+        for (let i = 0; i < 11; i += 1) {
+          const a = aim - half + (i / 10) * half * 2;
+          const rr = range * (0.82 + 0.07 * Math.sin(i * 1.9 + this.stepClock * 1.3));
+          const size = range * (0.045 + 0.012 * Math.sin(i * 2.7));
+          ctx.particles.flare(this.x + Math.cos(a) * rr, this.y + Math.sin(a) * rr, i % 3 === 0 ? '#ffe0a3' : def.color, size, 0.2);
+        }
+        for (let i = 0; i < 9; i += 1) {
+          const a = aim - half + (i / 8) * half * 2;
+          const rr = range * (0.62 + 0.22 * Math.sin(i * 2.3 + this.stepClock * 0.8));
+          ctx.particles.ember(this.x + Math.cos(a) * rr, this.y + Math.sin(a) * rr, i % 3 === 0 ? '#ffd58b' : def.color);
+        }
         ctx.enemies.forEach((e) => {
           const dx = e.x - this.x;
           const dy = e.y - this.y;
@@ -1539,6 +1552,10 @@ export class Player {
     const tint = (warm: Rgb, cool: Rgb): string => wickTint(warm, cool, dim);
     const coneScale = opts?.cone ?? 1;
     const haloScale = opts?.halo ?? 1;
+    // 亮度不仅决定看得多远，也决定“光在空气里留下多少余辉”。
+    // 拨芯时让光晕按平方趋势退得更快，画面才会真的沉下去，而不是只剩一圈小灯。
+    const bright = clamp(this.brightness, 0, 1);
+    const glowScale = 0.22 + 0.7 * bright * bright + 0.08 * bright;
     const speed = Math.hypot(this.vx, this.vy);
     const speedFrac = Math.min(1, speed / Math.max(1, this.stats.moveSpeed));
     const bob = this.moving ? Math.sin(time * 14) * 1.5 : Math.sin(time * 3) * 0.8;
@@ -1568,13 +1585,16 @@ export class Player {
       for (let i = 0; i < 14; i += 1) {
         const a = time * 0.055 + i * (TAU / 14) + Math.sin(time * 0.7 + i * 2.3) * 0.055;
         const reach = edge * (0.915 + Math.sin(time * 1.4 + i * 1.7) * 0.022);
-        const span = 0.045 + (i % 4) * 0.012;
-        ctx.globalAlpha = (0.05 + (i % 3) * 0.016) * this.brightness * (0.72 + breathe * 0.28);
-        ctx.strokeStyle = i % 4 === 0 ? moteHot : moteWarm;
-        ctx.lineWidth = 3.4 + (i % 3) * 2.2;
-        ctx.beginPath();
-        ctx.arc(0, 0, reach, a - span, a + span);
-        ctx.stroke();
+        drawGlow(
+          ctx,
+          Math.cos(a) * reach,
+          Math.sin(a) * reach,
+          4.2 + (i % 4) * 2.1,
+          1.15 + (i % 3) * 0.42,
+          i % 4 === 0 ? moteHot : moteWarm,
+          (0.046 + (i % 3) * 0.014) * this.brightness * (0.72 + breathe * 0.28),
+          a + Math.PI / 2,
+        );
       }
       ctx.restore();
     }
@@ -1782,67 +1802,44 @@ export class Player {
         const lean = Math.sin(time * 6.8 + i * 2.1) * rad * 0.22;
 
         // 一小截轨道余烬 + 向后的火尾：火球在绕着你转，而不是钉在空中的灯泡。
-        ctx.globalAlpha = 0.1 * fl;
+        ctx.globalAlpha = 0.075 * fl * glowScale;
         ctx.strokeStyle = def.color;
-        ctx.lineWidth = st.radius * 0.68;
+        ctx.lineWidth = st.radius * 0.52;
         ctx.beginPath();
         ctx.ellipse(0, 0, radius, radius * 0.86, 0, a - 0.58, a - 0.08);
         ctx.stroke();
 
         const tail = rad * (1.9 + 0.25 * Math.sin(time * 5.3 + i * 1.7));
-        ctx.globalAlpha = 0.16 * fl;
-        ctx.lineWidth = rad * 0.72;
-        ctx.beginPath();
-        ctx.moveTo(ox + fwdX * rad * 0.28, oy + fwdY * rad * 0.28);
-        ctx.quadraticCurveTo(
-          ox - fwdX * tail * 0.36 - fwdY * lean * 0.4,
-          oy - fwdY * tail * 0.36 + fwdX * lean * 0.4,
-          ox - fwdX * tail,
-          oy - fwdY * tail,
-        );
-        ctx.stroke();
-        ctx.globalAlpha = 0.42 * fl;
-        ctx.lineWidth = rad * 0.24;
-        ctx.beginPath();
-        ctx.moveTo(ox + fwdX * rad * 0.24, oy + fwdY * rad * 0.24);
-        ctx.quadraticCurveTo(
-          ox - fwdX * tail * 0.28 - fwdY * lean * 0.3,
-          oy - fwdY * tail * 0.28 + fwdX * lean * 0.3,
-          ox - fwdX * tail * 0.72,
-          oy - fwdY * tail * 0.72,
-        );
-        ctx.stroke();
+        const tailAngle = Math.atan2(-fwdY, -fwdX);
+        for (let k = 0; k < 6; k += 1) {
+          const u = (k + 1) / 6;
+          const drift = Math.sin(time * 5.6 + i * 2.1 + k * 1.4) * rad * 0.12 * u;
+          drawGlow(
+            ctx,
+            ox - fwdX * tail * u - fwdY * drift,
+            oy - fwdY * tail * u + fwdX * drift,
+            rad * (0.72 - u * 0.42),
+            rad * (0.46 - u * 0.26),
+            k < 2 ? '#ffb14e' : def.color,
+            (0.11 + 0.08 * (1 - u)) * (1 - u * 0.8) * fl * glowScale,
+            tailAngle,
+          );
+        }
 
-        const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, rad);
-        g.addColorStop(0, 'rgba(255,255,255,0.95)');
-        g.addColorStop(0.28, def.color);
-        g.addColorStop(0.62, 'rgba(255,120,40,0.35)');
-        g.addColorStop(1, 'rgba(255,90,20,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(ox, oy, rad, 0, TAU);
-        ctx.fill();
-
-        // 焰尖从火心往上抽，尖端随时间偏摆；用渐变收口，避免变成一块不透明的尖三角。
-        const crest = ctx.createLinearGradient(ox, oy + rad * 0.2, ox + lean, oy - rad * 1.55);
-        crest.addColorStop(0, 'rgba(255,120,30,0)');
-        crest.addColorStop(0.52, 'rgba(255,166,58,0.22)');
-        crest.addColorStop(1, 'rgba(255,241,193,0.5)');
-        ctx.globalAlpha = 0.62 * fl;
-        ctx.fillStyle = crest;
-        ctx.beginPath();
-        ctx.moveTo(ox - rad * 0.34, oy + rad * 0.08);
-        ctx.quadraticCurveTo(ox - rad * 0.52 + lean, oy - rad * 0.58, ox + lean, oy - rad * 1.48);
-        ctx.quadraticCurveTo(ox + rad * 0.48 + lean * 0.35, oy - rad * 0.48, ox + rad * 0.34, oy + rad * 0.08);
-        ctx.closePath();
-        ctx.fill();
+        // 火心只留柔光层级，不再用白色实心圆和尖三角去塑形。
+        drawGlow(ctx, ox, oy, rad * 2.5, rad * 2.15, '#ff6a1a', 0.07 * fl * glowScale);
+        drawGlow(ctx, ox, oy, rad * 1.3, rad * 1.12, def.color, 0.25 * fl * glowScale);
+        drawGlow(ctx, ox, oy, rad * 0.58, rad * 0.5, '#ffd58a', 0.32 * fl * glowScale);
+        drawGlow(ctx, ox, oy, rad * 0.2, rad * 0.2, '#fff8dc', 0.44 * fl * glowScale);
+        drawGlow(ctx, ox + lean * 0.5, oy - rad * 0.52, rad * 0.46, rad * 0.76, '#ffa33e', 0.1 * fl * glowScale);
+        drawGlow(ctx, ox + lean, oy - rad * 1.04, rad * 0.2, rad * 0.38, '#ffe1a0', 0.075 * fl * glowScale);
 
         // 两粒脱开的余烬沿着来路后退，补足速度感。
         for (let k = 0; k < 2; k += 1) {
           const cycle = (time * 1.7 + i * 0.37 + k * 0.46) % 1;
           const ex = ox - fwdX * tail * (0.55 + cycle * 0.62) - fwdY * lean * (0.3 + cycle * 0.4);
           const ey = oy - fwdY * tail * (0.55 + cycle * 0.62) + fwdX * lean * (0.3 + cycle * 0.4);
-          ctx.globalAlpha = (1 - cycle) * (0.3 + k * 0.08) * fl;
+          ctx.globalAlpha = (1 - cycle) * (0.3 + k * 0.08) * fl * glowScale;
           ctx.fillStyle = k === 0 ? '#ffd89a' : def.color;
           ctx.beginPath();
           ctx.arc(ex, ey, Math.max(0.7, st.radius * (0.24 - cycle * 0.1)), 0, TAU);
@@ -1857,8 +1854,8 @@ export class Player {
     ctx.globalCompositeOperation = 'lighter';
     const haloR = (40 * this.brightness + 18) * haloScale;
     const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
-    halo.addColorStop(0, `rgba(${tint([255, 216, 150], [186, 212, 255])},${0.34 * flick})`);
-    halo.addColorStop(0.5, `rgba(${tint([255, 150, 60], [86, 116, 190])},${0.13 * flick})`);
+    halo.addColorStop(0, `rgba(${tint([255, 216, 150], [186, 212, 255])},${0.34 * flick * glowScale})`);
+    halo.addColorStop(0.5, `rgba(${tint([255, 150, 60], [86, 116, 190])},${0.13 * flick * glowScale})`);
     halo.addColorStop(1, `rgba(${tint([255, 150, 60], [58, 88, 150])},0)`);
     ctx.fillStyle = halo;
     ctx.beginPath();
@@ -1872,46 +1869,39 @@ export class Player {
     ctx.translate(this.leanF * R * 0.035, this.leanS * R * 0.035);
     ctx.globalCompositeOperation = 'lighter';
     const coneLen = (130 + 150 * this.brightness) * (0.6 + 0.4 * coneScale);
-    const bands = [
-      { width: 1, alpha: 0.012 },
-      { width: 0.82, alpha: 0.016 },
-      { width: 0.66, alpha: 0.022 },
-      { width: 0.5, alpha: 0.03 },
-      { width: 0.34, alpha: 0.04 },
-      { width: 0.2, alpha: 0.055 },
-    ];
-    for (const band of bands) {
-      const half = 64 * band.width;
-      const alpha = band.alpha * flick * coneScale;
-      const cone = ctx.createLinearGradient(0, 0, this.radius + coneLen, 0);
-      cone.addColorStop(0, `rgba(${tint([255, 210, 145], [180, 204, 246])},${alpha})`);
-      cone.addColorStop(0.45, `rgba(${tint([255, 172, 86], [96, 126, 196])},${alpha * 0.52})`);
-      cone.addColorStop(1, `rgba(${tint([255, 150, 60], [52, 80, 140])},0)`);
-      ctx.fillStyle = cone;
-      ctx.beginPath();
-      ctx.moveTo(this.radius * 0.6, -3);
-      ctx.quadraticCurveTo(this.radius + coneLen * 0.58, -half * 0.64, this.radius + coneLen, -half);
-      ctx.lineTo(this.radius + coneLen, half);
-      ctx.quadraticCurveTo(this.radius + coneLen * 0.58, half * 0.64, this.radius * 0.6, 3);
-      ctx.closePath();
-      ctx.fill();
+    const warmDust = `rgb(${tint([255, 210, 145], [180, 204, 246])})`;
+    const coolDust = `rgb(${tint([255, 172, 86], [96, 126, 196])})`;
+    const coneSteps = 9;
+    for (let i = 0; i < coneSteps; i += 1) {
+      const u = (i + 0.72) / coneSteps;
+      const reach = this.radius * 0.6 + coneLen * u;
+      const half = 4 + 60 * Math.pow(u, 1.08);
+      const tuft = 0.85 + 0.15 * Math.sin(time * 2.7 + i * 1.61);
+      drawGlow(
+        ctx,
+        reach,
+        Math.sin(time * 1.4 + i * 1.8) * half * 0.08,
+        34 + coneLen * 0.075,
+        half * 0.9,
+        warmDust,
+        (0.018 + (1 - u) * 0.018) * flick * coneScale * tuft * glowScale,
+      );
+      drawGlow(
+        ctx,
+        reach + Math.sin(time * 1.1 + i * 2.3) * 6,
+        Math.cos(time * 1.7 + i * 1.2) * half * 0.34,
+        24 + coneLen * 0.045,
+        half * 0.46,
+        coolDust,
+        0.009 * flick * coneScale * tuft * glowScale,
+      );
     }
-    // 锥心的亮芯
-    const core = ctx.createRadialGradient(0, 0, this.radius, 0, 0, this.radius + coneLen * 0.55);
-    core.addColorStop(0, `rgba(${tint([255, 224, 168], [210, 228, 255])},${0.16 * flick * coneScale})`);
-    core.addColorStop(1, `rgba(${tint([255, 170, 80], [70, 104, 174])},0)`);
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.moveTo(this.radius * 0.6, -3);
-    ctx.lineTo(this.radius + coneLen * 0.62, -14);
-    ctx.lineTo(this.radius + coneLen * 0.62, 14);
-    ctx.lineTo(this.radius * 0.6, 3);
-    ctx.closePath();
-    ctx.fill();
+    drawGlow(ctx, coneLen * 0.34, 0, coneLen * 0.3, 22, warmDust, 0.012 * flick * coneScale * glowScale);
+    drawGlow(ctx, this.radius * 0.72, 0, 18, 10, warmDust, 0.055 * flick * coneScale * glowScale);
 
     const dust = 18;
     const dustHot = `rgb(${tint([255, 246, 220], [232, 243, 255])})`;
-    const dustWarm = `rgb(${tint([255, 211, 148], [164, 191, 245])})`;
+    const dustWarm = warmDust;
     for (let i = 0; i < dust; i += 1) {
       const frac = (time * (0.17 + (i % 4) * 0.014) + i * 0.137) % 1;
       const reach = this.radius * 0.65 + coneLen * frac;
@@ -1919,7 +1909,7 @@ export class Player {
       const drift = Math.sin(time * 0.9 + i * 2.17) * half * 0.78;
       const twinkle = 0.5 + 0.5 * Math.sin(time * 3.4 + i * 1.9);
       const rad = (1 + (i % 3) * 0.5) * (1 - frac * 0.25);
-      ctx.globalAlpha = (0.18 + twinkle * 0.36) * (1 - frac * 0.66) * flick * coneScale;
+      ctx.globalAlpha = (0.18 + twinkle * 0.36) * (1 - frac * 0.66) * flick * coneScale * glowScale;
       ctx.fillStyle = i % 4 === 0 ? dustHot : dustWarm;
       ctx.beginPath();
       ctx.arc(reach, drift, Math.max(0.5, rad), 0, TAU);
@@ -2173,35 +2163,34 @@ export class Player {
     ctx.stroke();
 
     ctx.globalCompositeOperation = 'lighter';
-    const lanternGlow = ctx.createRadialGradient(lx, 0, 0, lx, 0, 13);
-    lanternGlow.addColorStop(0, `rgba(${tint([255, 246, 204], [218, 236, 255])},${0.36 + 0.38 * flick})`);
-    lanternGlow.addColorStop(0.4, `rgba(${tint([255, 171, 72], [96, 132, 214])},${0.16 + 0.16 * flick})`);
-    lanternGlow.addColorStop(1, `rgba(${tint([255, 120, 28], [48, 78, 150])},0)`);
-    ctx.fillStyle = lanternGlow;
-    ctx.beginPath();
-    ctx.arc(lx, 0, 13, 0, TAU);
-    ctx.fill();
+    drawGlow(ctx, lx, 0, 28, 28, `rgb(${tint([255, 126, 32], [60, 92, 170])})`, 0.14 + 0.10 * flick);
+    drawGlow(ctx, lx, 0, 14, 14, `rgb(${tint([255, 178, 74], [105, 143, 220])})`, 0.24 + 0.18 * flick);
+    drawGlow(ctx, lx, -0.5, 6.4, 7.6, `rgb(${tint([255, 242, 198], [216, 238, 255])})`, 0.38 + 0.28 * flick);
 
-    // 火舌不是一颗椭圆：下面圆、上面收尖，随呼吸荡一下
+    // 火舌不是一颗椭圆：下面圆、上面收尖，随呼吸荡一下；外圈用柔光叠，不留硬边。
     const flameLean = Math.sin(time * 7.5) * 0.8;
     ctx.save();
     ctx.translate(lx, 0);
     ctx.scale(1 - dim * 0.18, 1 - dim * 0.32);
     ctx.translate(-lx, 0);
-    ctx.fillStyle = `rgba(${tint([255, 164, 62], [118, 162, 238])},${0.7 + 0.2 * flick})`;
-    ctx.beginPath();
-    ctx.moveTo(lx, 6.2);
-    ctx.bezierCurveTo(lx - 4.7, 4.1, lx - 3.1, -1.4, lx + flameLean, -6.7 - flick * 1.1);
-    ctx.bezierCurveTo(lx + 3.2, -1.1, lx + 4.8, 3.5, lx, 6.2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = `rgb(${tint([255, 247, 215], [234, 245, 255])})`;
-    ctx.beginPath();
-    ctx.moveTo(lx, 4.4);
-    ctx.bezierCurveTo(lx - 2.1, 2.6, lx - 1.4, -0.5, lx + flameLean * 0.55, -3.3);
-    ctx.bezierCurveTo(lx + 1.6, -0.2, lx + 2.2, 2.5, lx, 4.4);
-    ctx.closePath();
-    ctx.fill();
+    drawGlow(
+      ctx,
+      lx + flameLean * 0.24,
+      0.4,
+      4.8,
+      8.8 + flick * 0.9,
+      `rgb(${tint([255, 156, 54], [112, 156, 235])})`,
+      0.5 + 0.16 * flick,
+    );
+    drawGlow(
+      ctx,
+      lx + flameLean * 0.55,
+      -1.1,
+      2.3,
+      4.9,
+      `rgb(${tint([255, 247, 215], [234, 245, 255])})`,
+      0.58 + 0.2 * flick,
+    );
     ctx.restore();
 
     // 玻璃罩上的两道反光，证明它是"罩子"而不是一团色块

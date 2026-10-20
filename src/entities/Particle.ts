@@ -1,5 +1,6 @@
 import { Pool } from '../core/Pool';
 import { rng } from '../core/Random';
+import { drawGlow, drawSoftRing } from '../core/SoftFX';
 
 export interface Particle {
   active: boolean;
@@ -23,6 +24,7 @@ export interface Particle {
   spin: number;
   stretch: number;
   grow: number;
+  strength: number;
 }
 
 export interface BurstOptions {
@@ -60,6 +62,7 @@ export class ParticleSystem {
     spin: 0,
     stretch: 1,
     grow: 0,
+    strength: 1,
   }), 512);
 
   /**
@@ -105,9 +108,9 @@ export class ParticleSystem {
     this.burst(x, y, count, color, { speed: 210, size: 2.1, life: 0.46, drag: 2.6, ...opts, shape: 'spark' });
   }
 
-  /** 几何碎屑：短命的实体小块，给爆炸和死亡补一点材质感。 */
+  /** 爆散的火星：短命、轻微下坠，但仍然是光而不是实体碎片。 */
   debris(x: number, y: number, count: number, color: string, opts: BurstOptions = {}): void {
-    this.burst(x, y, count, color, { speed: 170, size: 2.6, life: 0.62, drag: 2.2, gravity: 260, ...opts, shape: 'shard', glow: false });
+    this.burst(x, y, count, color, { speed: 145, size: 1.7, life: 0.48, drag: 3.1, gravity: 150, ...opts, shape: 'spark', glow: true });
   }
 
   ember(x: number, y: number, color: string): void {
@@ -203,6 +206,7 @@ export class ParticleSystem {
     life: number,
     arcStart: number,
     arcEnd: number,
+    strength = 1,
   ): void {
     const p = this.pool.acquire();
     p.x = x;
@@ -224,6 +228,7 @@ export class ParticleSystem {
     p.spin = 0;
     p.stretch = 1;
     p.grow = 0;
+    p.strength = strength;
   }
 
   update(dt: number): void {
@@ -252,6 +257,7 @@ export class ParticleSystem {
       !view || (Math.abs(p.x - view.x) <= view.halfW + p.size * 2 + pad && Math.abs(p.y - view.y) <= view.halfH + p.size * 2 + pad);
 
     // 烟尘与碎屑先走普通混合，作为实体层；火星和光点随后再加法叠亮。
+    // 碎屑不再画白色高光：这一局的光效应是加法叠出来的，实体小片只留一点暗色轮廓。
     ctx.globalCompositeOperation = 'source-over';
     ctx.lineCap = 'round';
     for (const p of this.pool.all) {
@@ -263,15 +269,15 @@ export class ParticleSystem {
         g.addColorStop(0, p.color);
         g.addColorStop(0.52, p.color);
         g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.globalAlpha = Math.min(0.24, t * 0.23);
+        ctx.globalAlpha = Math.min(0.18, t * 0.18);
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
         ctx.fill();
       } else if (p.shape === 'shard') {
-        const w = Math.max(0.7, p.size * (0.26 + t * 0.34));
-        const len = p.size * (1.15 + p.stretch * 0.72);
-        ctx.globalAlpha = Math.min(0.9, t * 1.25);
+        const w = Math.max(0.55, p.size * (0.2 + t * 0.28));
+        const len = p.size * (0.92 + p.stretch * 0.52);
+        ctx.globalAlpha = Math.min(0.52, t * 0.68);
         ctx.fillStyle = p.color;
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -281,15 +287,6 @@ export class ParticleSystem {
         ctx.lineTo(-len * 0.06, -w);
         ctx.lineTo(len * 0.55, 0);
         ctx.lineTo(-len * 0.06, w);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalAlpha *= 0.45;
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.moveTo(-len * 0.32, 0);
-        ctx.lineTo(-len * 0.05, -w * 0.28);
-        ctx.lineTo(len * 0.18, 0);
-        ctx.lineTo(-len * 0.05, w * 0.22);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -303,55 +300,75 @@ export class ParticleSystem {
       const t = p.life / p.maxLife;
       if (p.ring) {
         const r = p.size * (1 - t) + 6;
-        // 一圈冲击波要读成"被推开的空气"，不是一条圆规线：外层热晕先铺厚度，
-        // 主缘承认真实半径，内侧再留一根更窄的白热丝。半径始终只有 `r` 这一个。
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r, p.arcStart, p.arcEnd);
-        ctx.strokeStyle = p.color;
-        ctx.globalAlpha = t * 0.13;
-        ctx.lineWidth = 7 + 11 * t;
-        ctx.stroke();
-
-        ctx.globalAlpha = t * 0.72;
-        ctx.lineWidth = 1.7 + 3.6 * t;
-        ctx.stroke();
-
-        ctx.globalAlpha = t * (0.22 + 0.24 * t);
-        ctx.strokeStyle = '#fff2cf';
-        ctx.lineWidth = Math.max(0.55, 1.1 * t);
-        ctx.stroke();
+        // 冲击波是一团被推开的空气：厚而透明，中心留空，只有靠近半径处收成一圈亮缘。
+        const thickness = 7 + 13 * t;
+        const span = Math.abs(p.arcEnd - p.arcStart);
+        if (span >= Math.PI * 2 - 0.001) {
+          // 整圆先铺一层几乎看不见的连续热空气，再用五段错开的压力波收边。
+          // 小缺口让环读成“被推开的空气”，而不是圆规画出的闭合几何线。
+          const phase = (p.x * 0.011 + p.y * 0.017) % (Math.PI * 2);
+          drawSoftRing(ctx, p.x, p.y, r, thickness * 2.7, p.color, t * 0.055 * p.strength);
+          const segments = 5;
+          for (let i = 0; i < segments; i += 1) {
+            const a0 = phase + (i / segments) * Math.PI * 2 + 0.055;
+            const a1 = phase + ((i + 1) / segments) * Math.PI * 2 - 0.055;
+            const wobble = 0.94 + 0.1 * Math.sin(i * 1.7 + phase);
+            drawSoftRing(
+              ctx,
+              p.x,
+              p.y,
+              r * wobble,
+              thickness * (2.15 + 0.25 * (i % 3)),
+              p.color,
+              t * 0.18 * p.strength,
+              a0,
+              a1,
+              '#fff4d8',
+              t * 0.03 * p.strength,
+            );
+          }
+        } else {
+          drawSoftRing(
+            ctx,
+            p.x,
+            p.y,
+            r,
+            thickness * 2.3,
+            p.color,
+            t * 0.3 * p.strength,
+            p.arcStart,
+            p.arcEnd,
+            '#fff4d8',
+            t * 0.05 * p.strength,
+          );
+        }
       } else if (p.shape === 'spark') {
         const speed = Math.hypot(p.vx, p.vy);
         const ux = speed > 0.01 ? p.vx / speed : 1;
         const uy = speed > 0.01 ? p.vy / speed : 0;
         const len = Math.min(34, p.size * (2.4 + p.stretch * 3.2) + speed * 0.018);
+        const angle = Math.atan2(p.vy, p.vx);
+        drawGlow(ctx, p.x - ux * len * 0.3, p.y - uy * len * 0.3, len * 0.58, p.size * 1.7, p.color, t * 0.46, angle);
         ctx.strokeStyle = p.color;
-        ctx.globalAlpha = t * 0.48;
-        ctx.lineWidth = Math.max(1, p.size * 0.72 * t);
+        ctx.globalAlpha = t * 0.08;
+        ctx.lineWidth = Math.max(0.8, p.size * 0.72 * t);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x - ux * len, p.y - uy * len);
         ctx.stroke();
+        // 白芯只留一瞬的方向感；爆裂的亮度交给外圈柔光，不靠一根根白线塑形。
         ctx.strokeStyle = '#fff8dc';
-        ctx.globalAlpha = t * 0.9;
-        ctx.lineWidth = Math.max(0.6, p.size * 0.2);
+        ctx.globalAlpha = t * 0.055;
+        ctx.lineWidth = Math.max(0.28, p.size * 0.045);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x - ux * len * 0.55, p.y - uy * len * 0.55);
         ctx.stroke();
       } else {
-        ctx.globalAlpha = t;
-        ctx.fillStyle = p.color;
         const r = p.size * (0.4 + t * 0.6);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fill();
-        if (p.size > 2) {
-          ctx.globalAlpha = t * 0.65;
-          ctx.fillStyle = '#fff6d8';
-          ctx.beginPath();
-          ctx.arc(p.x - r * 0.12, p.y - r * 0.18, Math.max(0.6, r * 0.26), 0, Math.PI * 2);
-          ctx.fill();
+        drawGlow(ctx, p.x, p.y, r * 2.2, r * 2.2, p.color, t * 0.74);
+        if (p.size > 2.2) {
+          drawGlow(ctx, p.x - r * 0.08, p.y - r * 0.12, Math.max(0.55, r * 0.48), Math.max(0.55, r * 0.48), '#fff4d8', t * 0.36);
         }
       }
     }

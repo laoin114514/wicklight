@@ -556,11 +556,28 @@ async function main() {
   const cleanScene = () =>
     page.evaluate(() => {
       const g = window.__WICKLIGHT__.game;
+      // 蘑菇 halo 与未点亮灯台的「方向微光」都不跟灯芯走，会直接稀释拨芯前后的亮度差。
+      // 只在这段像素测量里摘掉，截完图马上还原，后面的场景仍保持原样。
+      window.__WICK_SCENE__ = { decor: g.level.decor, details: g.level.details, pyres: g.level.pyres };
+      g.level.decor = g.level.decor.filter((d) => d.kind !== 1);
+      g.level.details = g.level.details.filter((d) => d.kind !== 2);
+      for (const pyre of g.level.pyres) {
+        pyre.lit = false;
+        pyre.flame = 0;
+      }
+      g.level.pyres = [];
       g.enemies.clear();
       g.projectiles.clear();
       g.pickups.clear();
       g.particles.clear();
       g.lamps.length = 0;
+      g.grounds.length = 0;
+      g.hazards.length = 0;
+      g.vortexes.length = 0;
+      g.mines.length = 0;
+      g.beams.length = 0;
+      g.arcs.length = 0;
+      g.wallfireGlows.length = 0;
       g.player.oil = 0.6;
     });
   await cleanScene();
@@ -571,6 +588,22 @@ async function main() {
   await sleep(650);
   const lit1 = await page.evaluate(() => window.__PROBE__.canvasStats());
   const wick1 = await wickRead();
+  // 静态地面 / 墙的月光不吃灯火，也不该算进“灯火少照了多少”。
+  // 在同一机位把玩家灯火临时关掉取一张底图，用“亮处减底图”来量灯芯真正的照度贡献。
+  const litBase = await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    const p = g.player;
+    const r = p.lightRadius;
+    const brightness = p.brightness;
+    g.light.begin();
+    p.lightRadius = 0;
+    p.brightness = 0;
+    g.render();
+    const stats = window.__PROBE__.canvasStats();
+    p.lightRadius = r;
+    p.brightness = brightness;
+    return stats;
+  });
   expect(wick1.on === true && wick1.wick === 1, '按 C 拨芯：灯芯该拨到底', JSON.stringify(wick1));
   expect(
     Math.abs(wick1.r - wick0.r * 0.5) <= 2,
@@ -579,12 +612,20 @@ async function main() {
   );
   expect(wick1.bright < wick0.bright * 0.6, '亮度跟着掉（火是真的矮下去了）', `${wick0.bright} → ${wick1.bright}`);
   expect(
-    lit1.litFrac < lit0.litFrac * 0.6,
+    lit1.litFrac - litBase.litFrac < (lit0.litFrac - litBase.litFrac) * 0.6,
     '画面真的暗下去：被照亮的那一片少掉六成以上（这是这个动作真正的代价）',
-    `litFrac ${lit0.litFrac} → ${lit1.litFrac}，mean ${lit0.mean} → ${lit1.mean}`,
+    `litFrac ${lit0.litFrac} → ${lit1.litFrac}，底图 ${litBase.litFrac}，mean ${lit0.mean} → ${lit1.mean}`,
   );
   expect(wick1.chip === true, '灯油条上挂起「拨芯」的牌子', JSON.stringify(wick1));
   await shot('03j-wick');
+  await page.evaluate(() => {
+    const g = window.__WICKLIGHT__.game;
+    if (!window.__WICK_SCENE__) return;
+    g.level.decor = window.__WICK_SCENE__.decor;
+    g.level.details = window.__WICK_SCENE__.details;
+    g.level.pyres = window.__WICK_SCENE__.pyres;
+    delete window.__WICK_SCENE__;
+  });
 
   // 拨回来：火要真的回到原来那个量级。
   // ⚠ 这里不能拿"半径 == 拨芯之前那个数"去比：这几秒钟里油一直在烧，灯火半径本来就跟着油在掉
@@ -2173,8 +2214,14 @@ async function main() {
     g.enemies.clear();
     g.projectiles.clear();
     // 点一座灯台出来放在玩家旁边（真实流程是站过去等它点亮，这里只问"亮着的灯台能不能扑火"）
-    py.x = p.x + 90;
-    py.y = p.y;
+    // 回到出生点再摆：前一段逆风跑会把玩家带到地图边，那里随便一堵墙都能正当地挡住灯光，
+    // 量到的就变成"墙后不算光"而不是"灯台能不能扑火"。
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+    py.x = 90;
+    py.y = 0;
     py.lit = true;
     py.flame = 1;
     py.progress = 1;

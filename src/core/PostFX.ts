@@ -1,8 +1,8 @@
 import type { Settings } from './Settings';
 import type { PerfProfile } from './Perf';
 
-/** 单层泛光整屏叠加用的 alpha（叠两层那条路是 1 + 0.28）。 */
-const BLOOM_ADD_ALPHA = 0.78;
+/** 低画质单层泛光整屏叠加用的 alpha。 */
+const BLOOM_ADD_ALPHA = 0.72;
 
 interface Band {
   y: number;
@@ -93,7 +93,7 @@ export class PostFX {
     const src = this.bloomSource(ctx, w, h);
     if (!src) return;
     // 两次整屏叠加是这个效果里最贵的一步，所以低配只叠一次（视觉上只差外圈一点点）
-    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses);
+    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses, null);
   }
 
   /** 把主画布压到 1/4 分辨率、自乘一次，得到只剩余亮的泛光源。 */
@@ -136,6 +136,11 @@ export class PostFX {
     b.drawImage(this.bloomA, 0, 0, bw, bh, 0, 0, bw, bh);
     b.globalCompositeOperation = 'multiply';
     b.drawImage(this.bloomA, 0, 0, bw, bh, 0, 0, bw, bh);
+    // 高画质再压一次，让泛光只从真正的火心/电光里长出来，不让整片地面都发灰。
+    if (this.bloomPasses >= 2) {
+      b.globalAlpha = 0.7;
+      b.drawImage(this.bloomA, 0, 0, bw, bh, 0, 0, bw, bh);
+    }
     // 自乘完把状态复位：接着 applyGlow 可能还要往这张小图上叠暖光（加法）
     b.globalCompositeOperation = 'lighter';
     b.globalAlpha = 1;
@@ -147,7 +152,15 @@ export class PostFX {
    * 两次加法叠加可以现在半分辨率小图上合起来、再整屏加一次 —— 加法可结合，
    * 于是整屏"读改写"少一次（这是整个后处理里最贵的一步）。
    */
-  private bloomComposite(ctx: CanvasRenderingContext2D, w: number, h: number, bw: number, bh: number, passes: number): void {
+  private bloomComposite(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    bw: number,
+    bh: number,
+    passes: number,
+    grade: { px: number; py: number; strength: number } | null,
+  ): void {
     const b = this.bloomB;
     if (!b) return;
     if (passes <= 1) {
@@ -156,12 +169,15 @@ export class PostFX {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = BLOOM_ADD_ALPHA;
-      ctx.drawImage(b, -w * 0.015, -h * 0.015, w * 1.03, h * 1.03);
+      ctx.drawImage(b, -w * 0.018, -h * 0.018, w * 1.036, h * 1.036);
       ctx.restore();
       return;
     }
-    const hw = Math.max(1, Math.round(w / 2));
-    const hh = Math.max(1, Math.round(h / 2));
+    // 泛光本来就是低频光，多尺度叠层在半分辨率上做仍然偏"实"：
+    // 合成缓冲只要跟降采样源同尺寸，四层光晕叠加后再一次性放大，边缘反而更柔，
+    // 同时把中间缓冲的像素量再降四倍（桌面高画质最贵的一步）。
+    const hw = Math.max(1, Math.round(w / this.bloomDivisor));
+    const hh = Math.max(1, Math.round(h / this.bloomDivisor));
     if (typeof document !== 'undefined' && (!this.bloomHalf || this.bloomHalf.width !== hw || this.bloomHalf.height !== hh)) {
       try {
         const c = document.createElement('canvas');
@@ -182,14 +198,21 @@ export class PostFX {
       hc.clearRect(0, 0, hw, hh);
       hc.globalCompositeOperation = 'lighter';
       if (passes >= 2) {
-        hc.globalAlpha = 0.5;
+        // 四个尺度由亮到暗、由窄到宽地叠进半分辨率缓冲，最后仍然只做一次整屏加法。
+        // 近处的白热收在 1.00，空气里的余辉散到 1.24，火才不会只有一圈硬边。
+        hc.globalAlpha = 0.38;
         hc.drawImage(b, 0, 0, bw, bh, 0, 0, hw, hh);
-        hc.globalAlpha = 0.28;
-        hc.drawImage(b, 0, 0, bw, bh, -hw * 0.03, -hh * 0.03, hw * 1.06, hh * 1.06);
+        hc.globalAlpha = 0.16;
+        hc.drawImage(b, 0, 0, bw, bh, -hw * 0.022, -hh * 0.022, hw * 1.045, hh * 1.045);
+        hc.globalAlpha = 0.085;
+        hc.drawImage(b, 0, 0, bw, bh, -hw * 0.065, -hh * 0.065, hw * 1.13, hh * 1.13);
+        hc.globalAlpha = 0.04;
+        hc.drawImage(b, 0, 0, bw, bh, -hw * 0.12, -hh * 0.12, hw * 1.24, hh * 1.24);
       } else {
-        hc.globalAlpha = 0.78;
+        hc.globalAlpha = BLOOM_ADD_ALPHA;
         hc.drawImage(b, 0, 0, bw, bh, -hw * 0.015, -hh * 0.015, hw * 1.03, hh * 1.03);
       }
+      if (grade) this.paintGrade(hc, hw, hh, w, h, grade, 1);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 1;
@@ -200,12 +223,16 @@ export class PostFX {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     if (passes >= 2) {
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.38;
       ctx.drawImage(b, 0, 0, bw, bh, 0, 0, w, h);
-      ctx.globalAlpha = 0.28;
-      ctx.drawImage(b, 0, 0, bw, bh, -w * 0.03, -h * 0.03, w * 1.06, h * 1.06);
+      ctx.globalAlpha = 0.16;
+      ctx.drawImage(b, 0, 0, bw, bh, -w * 0.022, -h * 0.022, w * 1.045, h * 1.045);
+      ctx.globalAlpha = 0.085;
+      ctx.drawImage(b, 0, 0, bw, bh, -w * 0.065, -h * 0.065, w * 1.13, h * 1.13);
+      ctx.globalAlpha = 0.04;
+      ctx.drawImage(b, 0, 0, bw, bh, -w * 0.12, -h * 0.12, w * 1.24, h * 1.24);
     } else {
-      ctx.globalAlpha = 0.78;
+      ctx.globalAlpha = BLOOM_ADD_ALPHA;
       ctx.drawImage(b, 0, 0, bw, bh, -w * 0.015, -h * 0.015, w * 1.03, h * 1.03);
     }
     ctx.restore();
@@ -233,8 +260,8 @@ export class PostFX {
       if (g) this.applyGrade(ctx, w, h, g.px, g.py, g.strength);
       return;
     }
-    if (g && this.bloomPasses <= 1) this.paintGrade(this.bloomBCtx, src.bw, src.bh, w, h, g);
-    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses);
+    if (g && this.bloomPasses <= 1) this.paintGrade(this.bloomBCtx, src.bw, src.bh, w, h, g, 1 / BLOOM_ADD_ALPHA);
+    this.bloomComposite(ctx, w, h, src.bw, src.bh, this.bloomPasses, g);
   }
 
   /**
@@ -250,12 +277,13 @@ export class PostFX {
     w: number,
     h: number,
     g: { px: number; py: number; strength: number },
+    gain: number,
   ): void {
     if (!bctx) return;
     const sx = bw / w;
     const sy = bh / h;
     const r = Math.min(w, h) * 0.64 * sx;
-    const k = (1 / BLOOM_ADD_ALPHA) * g.strength;
+    const k = gain * g.strength;
     bctx.save();
     bctx.globalCompositeOperation = 'lighter';
     const grad = bctx.createRadialGradient(g.px * sx, g.py * sy, 0, g.px * sx, g.py * sy, r);

@@ -319,6 +319,31 @@ const SCENES = {
     game.player.update(1 / 60, { moveX: 0, moveY: 0, dash: false, nova: false }, game.playerCtx());
     for (let i = 0; i < 16; i += 1) step();
   },
+  whipfx() {
+    game.newRun('shadewalker', 'normal', false);
+    game.enemies.clear();
+    for (let i = 0; i < 80; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.player.weapons.clear();
+    game.player.levelWeapon('whip');
+    game.player.levelWeapon('whip');
+    game.player.levelWeapon('whip');
+    game.player.recomputeStats();
+    game.player.angle = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [d, dy] of [[120, -54], [190, 0], [145, 72], [270, 28]]) {
+      const e = game.enemies.spawn('shade', game.player.x + d, game.player.y + dy, 8, 1);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0;
+      e.speed = 0;
+    }
+    game.player.cooldowns.set('whip', 0);
+    step();
+    step();
+  },
   pyres() {
     game.newRun('warden', 'normal', false);
     game.enemies.clear();
@@ -339,6 +364,100 @@ const SCENES = {
       const ang = (i / 4) * Math.PI * 2;
       game.enemies.spawn('shade', game.player.x + Math.cos(ang) * 150, game.player.y + Math.sin(ang) * 130, 3, 1);
     }
+    for (let i = 0; i < 3; i += 1) step();
+  },
+  // 火光专项：一片油火、一片会伤人的火、三只靶和一道正亮着的光矛。
+  // 每次改火焰/泛光都重拍这一张，固定检查"火海是不是一团柔光，而不是贴图碎片"。
+  firefx() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 30; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.weapons.clear();
+    p.levelWeapon('fireball');
+    p.levelWeapon('spray');
+    p.recomputeStats();
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [x, y] of [[150, -40], [245, 70], [-185, 50]]) {
+      const e = game.enemies.spawn('shade', x, y, 3, 1);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0;
+      e.speed = 0;
+    }
+    game.addGround(125, -20, 94, 99, 0, 'fire', true, 'pour');
+    game.addGround(-150, 72, 72, 99, 0, 'fire');
+    game.fireBeam(0, 0, 0.1, 330, 18, 34, '#ffe6b0', { knockback: 80 });
+    for (let i = 0; i < 18; i += 1) step();
+    game.fireBeam(0, 0, -0.05, 360, 18, 34, '#fff0c8', { knockback: 80 });
+    for (let i = 0; i < 2; i += 1) step();
+  },
+  oilfire() {
+    game.newRun('warden', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    for (let i = 0; i < 30; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.weapons.clear();
+    p.recomputeStats();
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    p.x = 260;
+    p.y = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    game.addGround(0, 0, 110, 99, 0, 'fire', true, 'pour');
+    for (let i = 0; i < 24; i += 1) step();
+  },
+  blastfx() {
+    game.newRun('emberkin', 'normal', false);
+    game.director.introTimer = 1e9;
+    game.director.hazardTimer = 1e9;
+    game.xpToNext = 1e9;
+    for (let i = 0; i < 30; i += 1) step();
+    game.enemies.clear();
+    game.projectiles.clear();
+    game.pickups.clear();
+    game.hazards.length = 0;
+    game.grounds.length = 0;
+    game.particles.clear();
+    const p = game.player;
+    p.weapons.clear();
+    p.levelWeapon('fireball');
+    p.recomputeStats();
+    p.hp = 1e9;
+    p.oil = p.oilMax;
+    p.x = 0;
+    p.y = 0;
+    game.camera.x = 0;
+    game.camera.y = 0;
+    for (const [x, y] of [[190, -30], [230, 80], [-180, 70], [-240, -60]]) {
+      const e = game.enemies.spawn('shade', x, y, 3, 1);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      e.damage = 0;
+      e.speed = 0;
+    }
+    game.blast(120, 10, 150, 0, { sparkCount: 26, spark: '#ff9d2e' });
     for (let i = 0; i < 3; i += 1) step();
   },
   snuffer() {

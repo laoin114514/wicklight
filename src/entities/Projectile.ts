@@ -1,4 +1,5 @@
 import { Pool } from '../core/Pool';
+import { drawGlow, drawStreak } from '../core/SoftFX';
 
 export interface Projectile {
   active: boolean;
@@ -177,11 +178,7 @@ export class ProjectileSystem {
       if (p.trail) drawProjectileTrail(ctx, p);
       if (p.boomerang > 0) {
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = 0.3;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r * 2.1, 0, Math.PI * 2);
-        ctx.fill();
+        drawGlow(ctx, p.x, p.y, r * 2.7, r * 2.7, p.color, 0.13);
         drawBoomerang(ctx, p);
       } else {
         drawProjectileOrb(ctx, p);
@@ -212,28 +209,9 @@ function drawProjectileTrail(ctx: CanvasRenderingContext2D, p: Projectile): void
   const len = Math.min(60, 12 + speed * 0.068 + r * 3.1);
   ctx.globalCompositeOperation = 'lighter';
 
-  ctx.globalAlpha = 0.09;
-  ctx.strokeStyle = p.color;
-  ctx.lineWidth = r * 1.38;
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y);
-  ctx.lineTo(p.x - ux * len, p.y - uy * len);
-  ctx.stroke();
-
-  ctx.globalAlpha = 0.24;
-  ctx.lineWidth = r * 0.64;
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y);
-  ctx.lineTo(p.x - ux * len * 0.74, p.y - uy * len * 0.74);
-  ctx.stroke();
-
-  ctx.globalAlpha = 0.62;
-  ctx.strokeStyle = p.returning ? '#ffffff' : '#fff8dc';
-  ctx.lineWidth = Math.max(0.8, r * 0.17);
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y);
-  ctx.lineTo(p.x - ux * len * 0.43, p.y - uy * len * 0.43);
-  ctx.stroke();
+  // 拖尾是一层层被速度拉长的空气光，不再用三条等宽直线。
+  drawStreak(ctx, p.x - ux * len, p.y - uy * len, p.x, p.y, Math.max(2.4, r * 2.35), p.color, 0.24);
+  drawStreak(ctx, p.x - ux * len * 0.58, p.y - uy * len * 0.58, p.x, p.y, Math.max(1.1, r * 0.72), p.returning ? '#ffffff' : '#fff8dc', 0.28);
 
   const px = -uy;
   const py = ux;
@@ -242,11 +220,9 @@ function drawProjectileTrail(ctx: CanvasRenderingContext2D, p: Projectile): void
     [0.67, -0.24, 0.16],
     [0.86, 0.12, 0.12],
   ] as const) {
-    ctx.globalAlpha = (1 - along) * 0.7;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x - ux * len * along + px * r * side, p.y - uy * len * along + py * r * side, Math.max(0.7, r * size), 0, Math.PI * 2);
-    ctx.fill();
+    const sx = p.x - ux * len * along + px * r * side;
+    const sy = p.y - uy * len * along + py * r * side;
+    drawGlow(ctx, sx, sy, Math.max(1.4, r * size * 2.3), Math.max(1.4, r * size * 2.3), p.color, (1 - along) * 0.48);
   }
 }
 
@@ -254,63 +230,55 @@ function drawProjectileOrb(ctx: CanvasRenderingContext2D, p: Projectile): void {
   const r = p.radius;
   const pulse = 0.94 + 0.06 * Math.sin(p.life * 22 + p.x * 0.013);
 
-  // 深色底托把弹芯从同样发亮的火苗和灯火里剥出来；敌方弹再压重一点。
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = p.fromPlayer ? 0.15 : 0.42;
-  ctx.fillStyle = p.fromPlayer ? '#160b05' : '#050a18';
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r * 1.34, 0, Math.PI * 2);
-  ctx.fill();
+  // 玩家的弹不再垫深色底托：它是一团飞出去的光，不是镶了黑边的球。
+  // 敌方弹仍保留一层暗芯，和地面火光区分开。
+  if (!p.fromPlayer) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = '#050a18';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 1.12, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.globalCompositeOperation = 'lighter';
   ctx.globalAlpha = 1;
-  const glowR = r * (p.fromPlayer ? 2.8 : 2.5) * pulse;
-  const g = ctx.createRadialGradient(p.x, p.y, r * 0.05, p.x, p.y, glowR);
-  g.addColorStop(0, p.fromPlayer ? '#fffef5' : p.color);
-  g.addColorStop(0.1, p.fromPlayer ? '#ffffff' : p.color);
-  g.addColorStop(0.29, p.color);
-  g.addColorStop(0.62, p.color);
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
-  ctx.fill();
+  drawGlow(ctx, p.x, p.y, r * (p.fromPlayer ? 4.1 : 3.4) * pulse, r * (p.fromPlayer ? 4.1 : 3.4) * pulse, p.color, p.fromPlayer ? 0.14 : 0.1);
+  drawGlow(ctx, p.x, p.y, r * 1.72 * pulse, r * 1.72 * pulse, p.color, p.fromPlayer ? 0.34 : 0.22);
 
   if (p.fromPlayer) {
-    ctx.globalAlpha = 0.76;
-    ctx.fillStyle = '#fffdf0';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(1, r * 0.3), 0, Math.PI * 2);
-    ctx.fill();
+    drawGlow(ctx, p.x, p.y, Math.max(1.2, r * 0.62), Math.max(1.2, r * 0.62), '#fffdf0', 0.78);
   } else {
     // 敌方弹是"暗核亮边"：一团包着冷光的黑铅。
     // 它和玩家的白热弹、地上的经验晶体都能一眼分开，玩家不会把危险误认成掉落。
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.94;
+    ctx.globalAlpha = 0.9;
     ctx.fillStyle = '#070913';
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(1.1, r * 0.52), 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.82;
+    ctx.globalAlpha = 0.62;
     ctx.strokeStyle = p.color;
     ctx.lineWidth = Math.max(0.8, r * 0.13);
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(1.2, r * 0.55), 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = 0.58;
+    ctx.globalAlpha = 0.4;
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(p.x - r * 0.16, p.y - r * 0.18, Math.max(0.5, r * 0.075), 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.globalAlpha = 0.34;
-  ctx.strokeStyle = p.color;
-  ctx.lineWidth = Math.max(0.8, r * 0.13);
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r * 1.16, 0, Math.PI * 2);
-  ctx.stroke();
+  if (!p.fromPlayer) {
+    ctx.globalAlpha = 0.2;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = Math.max(0.8, r * 0.13);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 1.16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawBoomerang(ctx: CanvasRenderingContext2D, p: Projectile): void {
@@ -320,41 +288,42 @@ function drawBoomerang(ctx: CanvasRenderingContext2D, p: Projectile): void {
   ctx.translate(p.x, p.y);
   ctx.rotate(p.angle);
 
-  // 先压一层深色刀身，再叠亮刃口：在暗地上也有实体厚度。
+  // 两段带间距的月牙，而不是闭合圆环；深色刀身只负责轮廓。
+  const span = 0.78;
   ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 0.78;
   ctx.strokeStyle = '#071313';
-  ctx.lineWidth = Math.max(4.2, r * 0.5);
+  ctx.lineWidth = Math.max(3.2, r * 0.34);
   for (const side of [0, Math.PI]) {
     ctx.beginPath();
-    ctx.arc(0, 0, r * 1.3, side - 0.94, side + 0.94);
+    ctx.arc(0, 0, r * 1.3, side - span, side + span);
     ctx.stroke();
   }
 
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.2;
+  ctx.globalAlpha = 0.18;
   ctx.strokeStyle = p.color;
   ctx.lineWidth = Math.max(7, r * 0.82);
   for (const lag of [-0.16, 0.17]) {
     for (const side of [0, Math.PI]) {
       ctx.beginPath();
-      ctx.arc(0, 0, r * 1.48, side + lag - 0.82, side + lag + 0.82);
+      ctx.arc(0, 0, r * 1.48, side + lag - span * 0.88, side + lag + span * 0.88);
       ctx.stroke();
     }
   }
 
   for (const side of [0, Math.PI]) {
-    ctx.globalAlpha = 0.95;
-    ctx.strokeStyle = returning ? '#effff9' : p.color;
-    ctx.lineWidth = Math.max(1.8, r * 0.2);
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.3, side - 0.9, side + 0.9);
-    ctx.stroke();
     ctx.globalAlpha = 0.82;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(0.65, r * 0.07);
+    ctx.strokeStyle = returning ? '#effff9' : p.color;
+    ctx.lineWidth = Math.max(1.5, r * 0.16);
     ctx.beginPath();
-    ctx.arc(0, 0, r * 1.43, side - 0.68, side + 0.2);
+    ctx.arc(0, 0, r * 1.3, side - span * 0.94, side + span * 0.94);
+    ctx.stroke();
+    ctx.globalAlpha = 0.74;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(0.55, r * 0.06);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.43, side - span * 0.72, side + span * 0.18);
     ctx.stroke();
   }
 

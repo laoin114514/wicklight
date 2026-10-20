@@ -12,6 +12,7 @@ import { Settings } from './Settings';
 import { Storage, type Storage as StorageType } from './Storage';
 import { EventBus, type GameEvents } from './Events';
 import { clamp, segDist } from './MathUtils';
+import { drawFlame, drawGlow, drawSoftRing, drawStreak } from './SoftFX';
 import { CombatHaptics } from './Haptics';
 import { isTouchDevice, perfProfile, type PerfProfile } from './Perf';
 import { AudioEngine } from '../audio/AudioEngine';
@@ -2376,12 +2377,14 @@ export class Game {
           const t = (this.time * 0.55) % 1;
           ctx.save();
           ctx.globalCompositeOperation = 'lighter';
-          const ring = ctx.createRadialGradient(s.x, s.y - 4, 10, s.x, s.y - 4, 52);
+          const ring = ctx.createRadialGradient(s.x, s.y - 4, 9, s.x, s.y - 4, 58);
           ring.addColorStop(0, 'rgba(120,180,255,0)');
-          ring.addColorStop(1, `rgba(120,180,255,${0.11 * near})`);
+          ring.addColorStop(0.58, `rgba(120,180,255,${0.018 * near})`);
+          ring.addColorStop(0.86, `rgba(120,180,255,${0.07 * near})`);
+          ring.addColorStop(1, 'rgba(120,180,255,0)');
           ctx.fillStyle = ring;
           ctx.beginPath();
-          ctx.arc(s.x, s.y - 4, 52, 0, Math.PI * 2);
+          ctx.arc(s.x, s.y - 4, 58, 0, Math.PI * 2);
           ctx.fill();
 
           // 内环是石座上的八段刻线，慢慢转；它不是一圈实线，所以不会读成加载圈。
@@ -2752,90 +2755,73 @@ export class Game {
       const nx = -uy;
       const ny = ux;
       const w = b.width;
+      const flicker = 0.92 + 0.08 * Math.sin(this.time * 47 + b.seed * 0.7);
+      const angle = Math.atan2(dy, dx);
 
-      // 外层先铺一条随时间散开的薄雾。原来的三道等宽实线叠在一起，
-      // 多发齐射时会糊成一块手电筒；这里把"宽"和"亮"拆开，宽度只负责氛围。
-      ctx.globalAlpha = 0.1 * t;
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = w * (3.1 + (1 - t) * 1.5);
-      ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.ex, b.ey);
-      ctx.stroke();
-
-      // 主光锥从灯口略收、向命中点微张；颜色也由武器的色过渡到白热。
-      const body = ctx.createLinearGradient(b.x, b.y, b.ex, b.ey);
-      body.addColorStop(0, b.color);
-      body.addColorStop(0.7, b.color);
-      body.addColorStop(1, '#fffbe8');
-      const w0 = w * 0.46;
-      const w1 = w * 1.18;
-      ctx.globalAlpha = 0.45 * t;
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(b.x + nx * w0, b.y + ny * w0);
-      ctx.lineTo(b.ex + nx * w1, b.ey + ny * w1);
-      ctx.lineTo(b.ex - nx * w1, b.ey - ny * w1);
-      ctx.lineTo(b.x - nx * w0, b.y - ny * w0);
-      ctx.closePath();
-      ctx.fill();
-
-      // 两缕不闭口的细丝：沿长度轻微偏移，给光矛一点"被喷出来"的速度感。
-      // 偏移只取现成的 seed，不引入新的逐帧状态。
-      ctx.globalAlpha = 0.32 * t;
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = Math.max(0.65, w * 0.075);
-      for (const side of [-1, 1]) {
-        ctx.beginPath();
-        for (let i = 0; i <= 6; i += 1) {
-          const u = i / 6;
-          const spread = w * (0.28 + u * 0.72) * side;
-          const wave = i === 0 || i === 6 ? 0 : Math.sin(b.seed * 0.11 + u * 7.5 + side * 2.1) * w * 0.16 * (1 - u);
-          const px = b.x + dx * u + nx * (spread + wave);
-          const py = b.y + dy * u + ny * (spread + wave);
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
+      // 先把整条光路周围的空气点亮：取样点带一点横向漂移，宽光不再是规整的长方形。
+      for (let i = 0; i <= 10; i += 1) {
+        const u = i / 10;
+        const edge = Math.max(0, Math.min(1, u / 0.08, (1 - u) / 0.12));
+        const air = 0.5 + 0.5 * Math.sin(b.seed * 0.37 + u * 9.2 + this.time * 2.1);
+        const side = Math.sin(b.seed * 0.19 + u * 7.4 + this.time * 1.32) * w * (0.14 + air * 0.24);
+        drawGlow(
+          ctx,
+          b.x + dx * u + nx * side,
+          b.y + dy * u + ny * side,
+          w * (3.2 + air * 1.1),
+          w * (0.8 + air * 0.38),
+          '#ff5c16',
+          (0.007 + t * 0.009) * edge * flicker,
+          angle,
+        );
       }
 
-      // 最里面只留一条很窄的白芯，亮度从命中的那一刻往回退。
-      const core0 = w * 0.13;
-      const core1 = w * 0.34;
-      ctx.globalAlpha = 0.94 * t;
-      ctx.strokeStyle = '#fffbe8';
-      ctx.fillStyle = '#fffbe8';
-      ctx.beginPath();
-      ctx.moveTo(b.x + nx * core0, b.y + ny * core0);
-      ctx.lineTo(b.ex + nx * core1, b.ey + ny * core1);
-      ctx.lineTo(b.ex - nx * core1, b.ey - ny * core1);
-      ctx.lineTo(b.x - nx * core0, b.y - ny * core0);
-      ctx.closePath();
-      ctx.fill();
+      // 色光本身仍要连着，才能读出贯穿方向；宽层只留空气色，真正可读的是中间那根细芯。
+      drawStreak(ctx, b.x, b.y, b.ex, b.ey, w * 8.2 * (1 + (1 - t) * 0.12), '#ff4e0c', 0.026 * t * flicker);
+      drawStreak(ctx, b.x, b.y, b.ex, b.ey, w * 4.2 * (1 + (1 - t) * 0.08), '#ff8a2a', 0.07 * t * flicker);
+      drawStreak(ctx, b.x, b.y, b.ex, b.ey, w * 2.05, '#ffc25f', 0.072 * t);
+      drawStreak(ctx, b.x, b.y, b.ex, b.ey, w * 0.52, '#ffe7b0', 0.15 * t);
 
-      // 命中端：一圈扩散的色光包着小白点，既交代"打到这里"，又不增加判定半径。
-      const bloomR = w * (3 + (1 - t) * 2.2);
-      const bloom = ctx.createRadialGradient(b.ex, b.ey, 0, b.ex, b.ey, bloomR);
-      bloom.addColorStop(0, b.color);
-      bloom.addColorStop(0.34, b.color);
-      bloom.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.24 * t;
-      ctx.fillStyle = bloom;
-      ctx.beginPath();
-      ctx.arc(b.ex, b.ey, bloomR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 0.84 * t;
-      ctx.fillStyle = '#fffbe8';
-      ctx.beginPath();
-      ctx.arc(b.ex, b.ey, Math.max(0.8, w * 0.55), 0, Math.PI * 2);
-      ctx.fill();
+      // 沿光路漂移的热斑与碎光负责告诉眼睛“能量正在往前跑”，而不是一根静止的尺子。
+      for (let i = 0; i < 6; i += 1) {
+        const u = (this.time * (0.24 + i * 0.026) + b.seed * 0.017 + i / 6) % 1;
+        const side = Math.sin(b.seed * 0.4 + i * 2.1 + this.time * 0.9) * w * (0.16 + (i % 2) * 0.08);
+        drawGlow(
+          ctx,
+          b.x + dx * u + nx * side,
+          b.y + dy * u + ny * side,
+          w * (0.9 + (i % 3) * 0.24),
+          w * (0.9 + (i % 3) * 0.24),
+          i % 3 === 0 ? '#ffe0a3' : b.color,
+          0.045 * t * Math.sin(Math.PI * u),
+        );
+      }
 
-      // 灯口只留一枚很小的亮点：多发齐射时若画得太大，会在角色身上叠成一团白球。
-      ctx.globalAlpha = 0.34 * t;
-      ctx.fillStyle = b.color;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, Math.max(1, w * 0.34), 0, Math.PI * 2);
-      ctx.fill();
+      // 白热芯不再是一条连续直线，而是几粒沿光路闪过的碎光。
+      for (let i = 0; i < 5; i += 1) {
+        const u = (i / 5 + b.seed * 0.013 + this.time * 0.18) % 1;
+        const edge = Math.sin(Math.PI * u);
+        drawGlow(
+          ctx,
+          b.x + dx * u + nx * Math.sin(b.seed + i * 2.7) * w * 0.08,
+          b.y + dy * u + ny * Math.sin(b.seed + i * 2.7) * w * 0.08,
+          Math.max(0.9, w * (0.2 + 0.13 * edge)),
+          Math.max(0.9, w * (0.2 + 0.13 * edge)),
+          '#fff4d0',
+          (0.14 + 0.1 * edge) * t * flicker,
+        );
+      }
+
+      // 命中端：先用一大团低透明色光把空气点亮，再收成一枚很小的白热芯。
+      const bloomR = w * (5.2 + (1 - t) * 4.4);
+      drawGlow(ctx, b.ex, b.ey, bloomR, bloomR, '#ff5c16', 0.04 * t);
+      drawGlow(ctx, b.ex, b.ey, bloomR * 0.54, bloomR * 0.54, '#ffad4a', 0.072 * t);
+      drawGlow(ctx, b.ex, b.ey, bloomR * 0.27, bloomR * 0.27, '#ffd98e', 0.1 * t);
+      drawGlow(ctx, b.ex, b.ey, Math.max(1.1, w * 0.3), Math.max(1.1, w * 0.3), '#fff2c8', 0.16 * t);
+
+      // 灯口同样先铺柔光：多发齐射时也不会在角色身上叠出一颗白球。
+      drawGlow(ctx, b.x, b.y, Math.max(2.4, w * 2.2), Math.max(2.4, w * 2.2), '#ff8a2a', 0.055 * t);
+      drawGlow(ctx, b.x, b.y, Math.max(0.9, w * 0.5), Math.max(0.9, w * 0.5), '#ffe6ae', 0.12 * t);
     }
     ctx.restore();
   }
@@ -2891,21 +2877,48 @@ export class Game {
         for (let i = 2; i < bolt.length; i += 2) ctx.lineTo(bolt[i], bolt[i + 1]);
       };
 
-      // 三层由宽到窄：冷色电离雾、可见电弧、白热芯。
+      // 电离雾沿折线一颗颗铺开，转角处也不会留下硬折线。
+      for (let i = 2; i < bolt.length; i += 4) {
+        const x0 = bolt[i - 2];
+        const y0 = bolt[i - 1];
+        const x1 = bolt[i];
+        const y1 = bolt[i + 1];
+        const pulse = 0.5 + 0.5 * Math.sin(a.seed * 0.61 + i * 0.37 + time * 31);
+        drawGlow(
+          ctx,
+          x1,
+          y1,
+          20 + pulse * 10,
+          7 + pulse * 4.4,
+          a.color,
+          (0.045 + pulse * 0.05) * t * flicker,
+          Math.atan2(y1 - y0, x1 - x0),
+        );
+      }
+
+      // 可见电弧只保留两层细线，白热部分交给断断续续的亮点。
       traceBolt();
       ctx.strokeStyle = a.color;
-      ctx.globalAlpha = 0.11 * t * flicker;
-      ctx.lineWidth = 13;
+      ctx.globalAlpha = 0.13 * t * flicker;
+      ctx.lineWidth = 5.4;
       ctx.stroke();
       traceBolt();
-      ctx.globalAlpha = 0.34 * t * flicker;
-      ctx.lineWidth = 4.2;
+      ctx.globalAlpha = 0.32 * t * flicker;
+      ctx.lineWidth = 1.7;
       ctx.stroke();
       traceBolt();
-      ctx.strokeStyle = '#f2ffff';
-      ctx.globalAlpha = 0.96 * t;
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = '#e9ffff';
+      ctx.globalAlpha = 0.12 * t;
+      ctx.lineWidth = 0.5;
       ctx.stroke();
+
+      // 白热碎光跳过整条路径，只在几个节点亮一下，电弧于是有“呼吸”而不是一根白线。
+      for (let i = 0; i < 6; i += 1) {
+        const u = (i / 6 + a.seed * 0.017 + time * 0.22) % 1;
+        const idx = 2 + Math.floor(u * Math.max(1, bolt.length / 2 - 2)) * 2;
+        const pulse = 0.4 + 0.6 * Math.sin(a.seed * 0.9 + i * 2.1 + time * 17);
+        drawGlow(ctx, bolt[idx], bolt[idx + 1], 1.3 + pulse * 2.1, 1 + pulse * 1.6, '#f2ffff', (0.22 + pulse * 0.28) * t);
+      }
 
       // 每一跳再分出两截短叉：只参与画面，不改变 `pts` 与命中数量。
       for (let i = 2; i < a.pts.length; i += 2) {
@@ -2932,20 +2945,28 @@ export class Game {
           const ey = my + uy * branchLen * 0.34 - ny * side * branchLen * 0.28;
 
           ctx.strokeStyle = a.color;
-          ctx.globalAlpha = 0.28 * t * flicker;
-          ctx.lineWidth = 2.2;
+          ctx.globalAlpha = 0.13 * t * flicker;
+          ctx.lineWidth = 4.2;
           ctx.beginPath();
           ctx.moveTo(bx, by);
           ctx.lineTo(mx, my);
           ctx.lineTo(ex, ey);
           ctx.stroke();
-          ctx.strokeStyle = '#f2ffff';
-          ctx.globalAlpha = 0.68 * t;
-          ctx.lineWidth = 0.8;
+          ctx.globalAlpha = 0.18 * t * flicker;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(mx, my);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+          ctx.strokeStyle = '#e9ffff';
+          ctx.globalAlpha = 0.22 * t;
+          ctx.lineWidth = 0.56;
           ctx.beginPath();
           ctx.moveTo(bx, by);
           ctx.lineTo(mx, my);
           ctx.stroke();
+          drawGlow(ctx, mx, my, 4.6, 2.8, a.color, 0.1 * t * flicker);
         }
       }
 
@@ -2953,19 +2974,10 @@ export class Game {
       for (let i = 0; i < a.pts.length; i += 2) {
         const x = a.pts[i];
         const y = a.pts[i + 1];
-        const node = ctx.createRadialGradient(x, y, 0, x, y, 9);
-        node.addColorStop(0, a.color);
-        node.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.globalAlpha = 0.3 * t * flicker;
-        ctx.fillStyle = node;
-        ctx.beginPath();
-        ctx.arc(x, y, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 0.86 * t;
-        ctx.fillStyle = '#f2ffff';
-        ctx.beginPath();
-        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
-        ctx.fill();
+        drawGlow(ctx, x, y, 28, 26, a.color, 0.14 * t * flicker);
+        drawGlow(ctx, x, y, 11, 11, a.color, 0.34 * t * flicker);
+        drawGlow(ctx, x, y, 2.8, 2.8, '#e9ffff', 0.46 * t);
+        drawGlow(ctx, x, y, 1.1, 1.1, '#ffffff', 0.62 * t);
       }
     }
     ctx.restore();
@@ -3864,12 +3876,18 @@ export class Game {
     // 中心亮核只补视觉：暖色外团 + 白色内芯，二者都不消费 rng。
     this.particles.flare(x, y, 'rgba(255,172,84,0.58)', radius * 0.3, 0.2);
     this.particles.flare(x, y, '#fff7dc', radius * 0.14, 0.15);
-    this.particles.burst(x, y, opts.sparkCount ?? 14, opts.spark ?? '#ff9d2e', { speed: 240, size: 4, life: 0.6 });
-    this.particles.sparks(x, y, Math.max(5, Math.round((opts.sparkCount ?? 14) * 0.55)), opts.spark ?? '#ff9d2e', {
-      speed: 265,
-      size: 2.1,
-      life: 0.52,
-      stretch: 1.6,
+    this.particles.burst(x, y, Math.round((opts.sparkCount ?? 14) * 1.25), opts.spark ?? '#ff9d2e', {
+      speed: 215,
+      size: 3.4,
+      life: 0.68,
+    });
+    // 长拖尾火星一多就会拼成八芒星。爆裂要读成一团被掀开的热空气：
+    // 主体交给软热屑，只留几粒短拖尾给方向感。
+    this.particles.sparks(x, y, Math.max(2, Math.round((opts.sparkCount ?? 14) * 0.16)), opts.spark ?? '#ff9d2e', {
+      speed: 165,
+      size: 1.15,
+      life: 0.34,
+      stretch: 0.58,
     });
     this.particles.puff(x, y, radius > 90 ? 7 : 4, opts.decal ?? '#312018', {
       speed: Math.max(32, radius * 0.42),
@@ -4942,6 +4960,9 @@ export class Game {
         this.embers.splice(i, 1);
         continue;
       }
+      // 冲刺本身就是“抖火”：这三四帧里穿过去的火种不再重新粘身。
+      // 否则刚清掉层数就会在同一帧被脚边那颗糊回来，采样器、玩家都看不到“抖干净”的那一瞬。
+      if (p.dashTimer > 0) continue;
       const dx = m.x - p.x;
       const dy = m.y - p.y;
       if (dx * dx + dy * dy > rr * rr) continue;
@@ -5992,64 +6013,48 @@ export class Game {
 
       ctx.globalCompositeOperation = 'lighter';
       if (py.lit) {
-        // 灯焰越少，火越小：被吹灯客抽着的时候一眼就看得出来
-        const glowR = 58 * flicker * (0.45 + 0.55 * flame);
-        const g = ctx.createRadialGradient(py.x, py.y - 28, 0, py.x, py.y - 28, glowR);
-        g.addColorStop(0, `rgba(255,238,196,${0.35 + 0.6 * flame})`);
-        g.addColorStop(0.4, `rgba(255,160,60,${0.18 + 0.32 * flame})`);
-        g.addColorStop(1, 'rgba(255,110,20,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(py.x, py.y - 28, glowR, 0, Math.PI * 2);
-        ctx.fill();
+        // 火不是一只橙色水滴，而是一团从盆口向上散开的光。外圈负责照亮空气，
+        // 内圈只留一小块白热；被吹灯客抽火时，整团光会一起缩下去。
+        const glowR = (62 + 34 * flame) * flicker;
+        drawGlow(ctx, py.x, py.y - 30, glowR * 1.45, glowR, '#ff5f12', 0.11 + 0.12 * flame);
+        drawGlow(ctx, py.x, py.y - 29, 34 + 20 * flame, 31 + 17 * flame, '#ff9d38', 0.2 + 0.22 * flame);
 
-        // 一束很薄的上升光，让火苗不是浮在盆口，而是真的向上散开。
-        const shaftGlow = ctx.createLinearGradient(py.x, py.y - 24, py.x, py.y - 112);
-        shaftGlow.addColorStop(0, `rgba(255,176,82,${0.13 + 0.08 * flame})`);
-        shaftGlow.addColorStop(0.48, `rgba(255,146,54,${0.045 + 0.03 * flame})`);
-        shaftGlow.addColorStop(1, 'rgba(255,120,30,0)');
-        ctx.fillStyle = shaftGlow;
-        ctx.beginPath();
-        ctx.moveTo(py.x - 6, py.y - 23);
-        ctx.lineTo(py.x - 17, py.y - 106);
-        ctx.lineTo(py.x + 17, py.y - 106);
-        ctx.lineTo(py.x + 6, py.y - 23);
-        ctx.closePath();
-        ctx.fill();
-
-        const tip = py.y - 22 - (20 + 22 * flame * flicker);
-        ctx.globalAlpha = 0.62 + 0.18 * flame;
-        ctx.fillStyle = '#ff7a22';
-        ctx.beginPath();
-        ctx.moveTo(py.x + sway * 0.45, tip);
-        ctx.bezierCurveTo(py.x + 9.5, py.y - 38, py.x + 8.5, py.y - 27, py.x, py.y - 22.5);
-        ctx.bezierCurveTo(py.x - 8.5, py.y - 27, py.x - 7.2, py.y - 38, py.x + sway * 0.45, tip);
-        ctx.fill();
-
-        // 两片侧焰：高低错开，火才会跳，而不是一根静态的橙色水滴。
-        for (const side of [-1, 1]) {
-          const lift = 10 + 6 * flame + Math.sin(this.time * 9 + side * 1.7 + py.y) * 1.8;
-          ctx.globalAlpha = 0.42 + 0.12 * flame;
-          ctx.fillStyle = side < 0 ? '#ff9c34' : '#ffb148';
-          ctx.beginPath();
-          ctx.moveTo(py.x + side * 5.2 + sway * 0.25, py.y - 23 - lift);
-          ctx.quadraticCurveTo(py.x + side * 10, py.y - 29, py.x + side * 5.8, py.y - 21.5);
-          ctx.quadraticCurveTo(py.x + side * 3.6, py.y - 25, py.x + side * 5.2 + sway * 0.25, py.y - 23 - lift);
-          ctx.fill();
+        // 上升的热气：三团纵向拉长的柔光替代原来的梯形硬边光柱。
+        for (let i = 0; i < 3; i += 1) {
+          const lift = 34 + i * 24;
+          drawGlow(
+            ctx,
+            py.x + sway * (0.35 + i * 0.16) + Math.sin(this.time * 2.2 + i * 1.8) * (2 + i * 2.2),
+            py.y - 30 - lift,
+            9 + i * 4,
+            25 + i * 12,
+            i === 2 ? '#ff7a22' : '#ffad4a',
+            (0.07 - i * 0.014) * (0.65 + 0.35 * flame),
+          );
         }
 
-        ctx.globalAlpha = 0.84 + 0.12 * flame;
-        ctx.fillStyle = '#ffd887';
-        ctx.beginPath();
-        ctx.moveTo(py.x + sway * 0.28, tip + 9);
-        ctx.bezierCurveTo(py.x + 5.4, py.y - 35, py.x + 5.1, py.y - 27, py.x, py.y - 23);
-        ctx.bezierCurveTo(py.x - 5.1, py.y - 27, py.x - 4.2, py.y - 35, py.x + sway * 0.28, tip + 9);
-        ctx.fill();
-        ctx.globalAlpha = 0.92;
-        ctx.fillStyle = '#fff5d6';
-        ctx.beginPath();
-        ctx.ellipse(py.x + sway * 0.12, py.y - 29, 2.4 + flame * 1.3, 4.6 + flame * 2.8, 0, 0, Math.PI * 2);
-        ctx.fill();
+        const flameH = 22 + 27 * flame * flicker;
+        // 主火舌用和地面火海同一张噪声火焰：连续、向上收尖，边缘不再是一串光团。
+        const lean = sway * 0.42 + Math.sin(this.time * 6.3 + py.y * 0.03) * (1.4 + flame * 1.4);
+        drawFlame(ctx, py.x, py.y - 22, 27 + flame * 9, flameH + 7, '#ff711d', (0.72 + flame * 0.28) * flicker, lean);
+        drawFlame(ctx, py.x, py.y - 22, 15 + flame * 5, flameH * 0.68, '#ffd277', 0.64 + flame * 0.22, lean * 0.72);
+        drawGlow(ctx, py.x + sway * 0.18, py.y - 31, 3.8 + flame * 2.2, 7.5 + flame * 4.2, '#fff2c9', 0.36 + 0.28 * flame);
+
+        // 两缕偏摆的侧焰只留光丝，不再填成实心三角。
+        for (const side of [-1, 1]) {
+          const lift = 12 + 7 * flame + Math.sin(this.time * 9 + side * 1.7 + py.y) * 2;
+          ctx.globalAlpha = 0.16 + 0.12 * flame;
+          ctx.strokeStyle = side < 0 ? '#ff7c20' : '#ff9f38';
+          ctx.lineWidth = 4.6;
+          ctx.beginPath();
+          ctx.moveTo(py.x + side * 3.6, py.y - 24);
+          ctx.quadraticCurveTo(py.x + side * 10.5, py.y - 27, py.x + side * (6.2 + sway * 0.3), py.y - 23 - lift);
+          ctx.stroke();
+          ctx.globalAlpha = 0.34;
+          ctx.strokeStyle = '#ffd58d';
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+        }
 
         // 盆沿接住火光，再往上飘几点余烬；只用时间算位置，不加新的粒子账。
         ctx.globalAlpha = 0.32 + 0.16 * flame;
@@ -6070,14 +6075,8 @@ export class Game {
         }
       } else {
         // 只剩一撮将熄的余烬：既是没有点亮的提示，也是黑暗里的一点定位
-        const e = ctx.createRadialGradient(py.x, py.y - 22, 0, py.x, py.y - 22, 24 * flicker);
-        e.addColorStop(0, `rgba(255,150,70,${0.34 + breathe * 0.18})`);
-        e.addColorStop(0.38, 'rgba(255,112,38,0.14)');
-        e.addColorStop(1, 'rgba(255,110,20,0)');
-        ctx.fillStyle = e;
-        ctx.beginPath();
-        ctx.arc(py.x, py.y - 22, 24 * flicker, 0, Math.PI * 2);
-        ctx.fill();
+        drawGlow(ctx, py.x, py.y - 22, 24 * flicker, 24 * flicker, '#ff7c24', 0.22 + breathe * 0.12);
+        drawGlow(ctx, py.x, py.y - 22, 10 * flicker, 12 * flicker, '#ffb45c', 0.15 + breathe * 0.1);
         ctx.globalAlpha = 0.32 + breathe * 0.28;
         ctx.fillStyle = '#ff9d48';
         ctx.beginPath();
@@ -7530,8 +7529,8 @@ export class Game {
     ctx.globalCompositeOperation = 'source-over';
 
     const soot = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-    soot.addColorStop(0, `rgba(19,11,7,${0.72 * fade})`);
-    soot.addColorStop(0.62, `rgba(15,9,6,${0.56 * fade})`);
+    soot.addColorStop(0, `rgba(19,11,7,${0.46 * fade})`);
+    soot.addColorStop(0.62, `rgba(15,9,6,${0.34 * fade})`);
     soot.addColorStop(1, 'rgba(9,6,4,0)');
     ctx.fillStyle = soot;
     ctx.beginPath();
@@ -7542,7 +7541,7 @@ export class Game {
       const angle = ph + i * 2.39996;
       const distance = g.r * (0.2 + 0.12 * ((i * 3) % 3));
       const blob = g.r * (0.24 + 0.045 * ((i * 5) % 4));
-      ctx.globalAlpha = (0.18 + 0.06 * ((i * 3) % 3)) * fade;
+      ctx.globalAlpha = (0.1 + 0.04 * ((i * 3) % 3)) * fade;
       ctx.fillStyle = i % 3 === 0 ? '#090604' : '#120b07';
       ctx.beginPath();
       ctx.ellipse(
@@ -7558,23 +7557,22 @@ export class Game {
     }
 
     ctx.lineCap = 'round';
-    for (let i = 0; i < 7; i += 1) {
-      const angle = ph + i * 0.8976 + 0.18;
-      const inner = g.r * (0.16 + 0.05 * (i % 3));
-      const outer = g.r * (0.64 + 0.14 * ((i * 3) % 3));
-      const bend = (hash(i + 91) - 0.5) * g.r * 0.24;
-      const mx = g.x + Math.cos(angle) * inner;
-      const my = g.y + Math.sin(angle) * inner;
+    // 焦痕只留几道偏离中心的短裂纹；原先七根从火心射出的线会在柔光下变成"米字"。
+    for (let i = 0; i < 4; i += 1) {
+      const angle = ph + i * 1.71 + 0.42;
+      const inner = g.r * (0.3 + 0.07 * hash(i + 44));
+      const outer = inner + g.r * (0.24 + 0.1 * hash(i + 63));
+      const bend = (hash(i + 91) - 0.5) * g.r * 0.2;
       const ex = g.x + Math.cos(angle) * outer;
       const ey = g.y + Math.sin(angle) * outer;
       ctx.globalAlpha = (0.28 + 0.08 * (i % 3)) * fade;
       ctx.strokeStyle = '#080403';
       ctx.lineWidth = 1.2 + (i % 2) * 0.7;
       ctx.beginPath();
-      ctx.moveTo(mx, my);
+      ctx.moveTo(g.x + Math.cos(angle) * inner, g.y + Math.sin(angle) * inner);
       ctx.quadraticCurveTo(
-        g.x + Math.cos(angle - 0.22) * outer * 0.58 + Math.cos(angle + 1.57) * bend,
-        g.y + Math.sin(angle - 0.22) * outer * 0.58 + Math.sin(angle + 1.57) * bend,
+        g.x + Math.cos(angle - 0.22) * (inner + outer) * 0.5 + Math.cos(angle + 1.57) * bend,
+        g.y + Math.sin(angle - 0.22) * (inner + outer) * 0.5 + Math.sin(angle + 1.57) * bend,
         ex,
         ey,
       );
@@ -7583,9 +7581,9 @@ export class Game {
 
     ctx.globalCompositeOperation = 'lighter';
     const outerGlow = ctx.createRadialGradient(g.x, g.y, g.r * 0.04, g.x, g.y, g.r);
-    outerGlow.addColorStop(0, `rgba(255,148,64,${0.44 * breath * fade})`);
-    outerGlow.addColorStop(0.42, `rgba(255,88,26,${0.25 * breath * fade})`);
-    outerGlow.addColorStop(0.76, 'rgba(255,58,18,0.08)');
+    outerGlow.addColorStop(0, `rgba(255,148,64,${0.11 * breath * fade})`);
+    outerGlow.addColorStop(0.42, `rgba(255,88,26,${0.048 * breath * fade})`);
+    outerGlow.addColorStop(0.74, `rgba(255,58,18,${0.018 * fade})`);
     outerGlow.addColorStop(1, 'rgba(255,48,12,0)');
     ctx.globalAlpha = 1;
     ctx.fillStyle = outerGlow;
@@ -7593,41 +7591,11 @@ export class Game {
     ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
     ctx.fill();
 
-    const fireBed = ctx.createRadialGradient(
-      g.x - g.r * 0.04,
-      g.y - g.r * 0.02,
-      0,
-      g.x,
-      g.y,
-      g.r * 0.66,
-    );
-    fireBed.addColorStop(0, `rgba(255,221,132,${0.46 * breath * fade})`);
-    fireBed.addColorStop(0.32, `rgba(255,142,48,${0.34 * breath * fade})`);
-    fireBed.addColorStop(0.7, 'rgba(255,66,18,0.14)');
-    fireBed.addColorStop(1, 'rgba(255,52,15,0)');
-    ctx.fillStyle = fireBed;
-    ctx.beginPath();
-    ctx.ellipse(g.x, g.y + g.r * 0.02, g.r * 0.66, g.r * 0.54, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (let i = 0; i < 6; i += 1) {
-      const angle = ph + i * 1.0472 + 0.24;
-      const inner = g.r * (0.18 + 0.04 * (i % 2));
-      const outer = g.r * (0.68 + 0.15 * ((i * 3) % 3));
-      const bend = (hash(i + 127) - 0.5) * g.r * 0.2;
-      ctx.globalAlpha = (0.1 + 0.07 * (0.5 + 0.5 * Math.sin(t * 3.9 + i * 1.7 + ph))) * fade;
-      ctx.strokeStyle = i % 2 === 0 ? '#ff8a2c' : '#ffb14a';
-      ctx.lineWidth = 0.75 + (i % 3) * 0.28;
-      ctx.beginPath();
-      ctx.moveTo(g.x + Math.cos(angle) * inner, g.y + Math.sin(angle) * inner);
-      ctx.quadraticCurveTo(
-        g.x + Math.cos(angle - 0.18) * outer * 0.58 + Math.cos(angle + 1.57) * bend,
-        g.y + Math.sin(angle - 0.18) * outer * 0.58 + Math.sin(angle + 1.57) * bend,
-        g.x + Math.cos(angle) * outer,
-        g.y + Math.sin(angle) * outer,
-      );
-      ctx.stroke();
-    }
+    // 火床不是一只正圆盘子：用几团偏置柔光叠出不规则亮区，外缘自然溶进夜色。
+    drawGlow(ctx, g.x - g.r * 0.05, g.y - g.r * 0.02, g.r * 0.64, g.r * 0.52, '#ffb04a', 0.062 * breath * fade);
+    drawGlow(ctx, g.x + g.r * 0.18, g.y + g.r * 0.08, g.r * 0.4, g.r * 0.31, '#ff7a24', 0.055 * breath * fade);
+    drawGlow(ctx, g.x - g.r * 0.2, g.y + g.r * 0.04, g.r * 0.36, g.r * 0.28, '#ff922f', 0.048 * breath * fade);
+    drawGlow(ctx, g.x, g.y - g.r * 0.03, g.r * 0.24, g.r * 0.19, '#ffd581', 0.07 * breath * fade);
 
     const paintTongue = (
       baseX: number,
@@ -7638,91 +7606,25 @@ export class Game {
       alpha: number,
       hot: boolean,
     ): void => {
-      const traceFlame = (): void => {
-        const tipX = baseX + lean;
-        const tipY = baseY - height;
-        ctx.beginPath();
-        ctx.moveTo(baseX - width, baseY);
-        ctx.bezierCurveTo(
-          baseX - width * 1.03,
-          baseY - height * 0.2,
-          baseX - width * 0.88 + lean * 0.08,
-          baseY - height * 0.34,
-          baseX - width * 0.58 + lean * 0.18,
-          baseY - height * 0.4,
-        );
-        ctx.quadraticCurveTo(
-          baseX - width * 0.46 + lean * 0.22,
-          baseY - height * 0.62,
-          baseX - width * 0.34 + lean * 0.25,
-          baseY - height * 0.7,
-        );
-        ctx.quadraticCurveTo(
-          baseX - width * 0.24 + lean * 0.3,
-          baseY - height * 0.49,
-          baseX - width * 0.08 + lean * 0.4,
-          baseY - height * 0.48,
-        );
-        ctx.quadraticCurveTo(baseX + width * 0.01 + lean * 0.48, baseY - height * 0.83, tipX, tipY);
-        ctx.quadraticCurveTo(
-          tipX + width * 0.12,
-          baseY - height * 0.68,
-          baseX + width * 0.28 + lean * 0.42,
-          baseY - height * 0.49,
-        );
-        ctx.quadraticCurveTo(
-          baseX + width * 0.38 + lean * 0.36,
-          baseY - height * 0.62,
-          baseX + width * 0.5 + lean * 0.28,
-          baseY - height * 0.56,
-        );
-        ctx.quadraticCurveTo(
-          baseX + width * 0.64 + lean * 0.22,
-          baseY - height * 0.36,
-          baseX + width * 0.8,
-          baseY - height * 0.27,
-        );
-        ctx.bezierCurveTo(
-          baseX + width * 0.97,
-          baseY - height * 0.17,
-          baseX + width * 1.02,
-          baseY - height * 0.04,
-          baseX + width,
-          baseY,
-        );
-        ctx.closePath();
-      };
-
-      ctx.globalAlpha = alpha * fade;
-      ctx.fillStyle = hot ? '#ff8c2a' : '#ed5418';
-      traceFlame();
-      ctx.fill();
-
-      ctx.save();
-      ctx.translate(baseX, baseY);
-      ctx.scale(0.62, 0.7);
-      ctx.translate(-baseX, -baseY);
-      ctx.globalAlpha = alpha * 0.7 * fade;
-      ctx.fillStyle = hot ? '#ffd166' : '#ffb141';
-      traceFlame();
-      ctx.fill();
-      ctx.restore();
-
-      ctx.save();
-      ctx.translate(baseX, baseY);
-      ctx.scale(0.3, 0.42);
-      ctx.translate(-baseX, -baseY);
-      ctx.globalAlpha = alpha * 0.5 * fade;
-      ctx.fillStyle = hot ? '#fff3c9' : '#ffe29a';
-      traceFlame();
-      ctx.fill();
-      ctx.restore();
+      // 火舌是一朵预烘的噪声火焰，不再由五串圆点拼成。外焰和亮芯分开贴，
+      // 火根仍留一团柔光把地面接住。
+      drawFlame(ctx, baseX, baseY, width * 3.35, height * 1.02, hot ? '#ff6416' : '#e84a12', alpha * 1.85 * fade, lean);
+      drawFlame(ctx, baseX, baseY, width * 1.58, height * 0.68, hot ? '#ffc75e' : '#ff9e3e', alpha * 0.78 * fade, lean * 0.72);
+      drawGlow(
+        ctx,
+        baseX + lean * 0.14,
+        baseY - height * 0.14,
+        width * 0.72,
+        height * 0.22,
+        hot ? '#fff1b8' : '#ffd786',
+        alpha * 0.72 * fade,
+      );
     };
 
-    const flameCount = Math.round(clamp(g.r / 17, 5, 7));
+    const flameCount = Math.round(clamp(g.r / 8, 9, 16));
     for (let i = 0; i < flameCount; i += 1) {
       const angle = ph + i * 2.39996;
-      const distance = g.r * 0.56 * Math.sqrt((i + 0.5) / flameCount);
+      const distance = g.r * 0.64 * Math.sqrt((i + 0.5) / flameCount);
       const heightSeed = hash(i + 17);
       const widthSeed = hash(i + 71);
       const wobble = 0.5 + 0.5 * Math.sin(t * (3.4 + heightSeed * 3) + i * 1.9 + ph * 2.4);
@@ -7730,34 +7632,48 @@ export class Game {
       const baseY = g.y + Math.sin(angle) * distance * 0.82;
       const core = 1 - clamp(distance / g.r, 0, 1);
       const height =
-        g.r * (0.38 + 0.3 * heightSeed) * (0.8 + 0.2 * core) * (0.85 + 0.15 * wobble) * (0.78 + 0.22 * fade);
-      const width = g.r * (0.1 + 0.055 * widthSeed) * (0.88 + 0.2 * core);
+        g.r * (0.5 + 0.38 * heightSeed) * (0.8 + 0.2 * core) * (0.85 + 0.15 * wobble) * (0.78 + 0.22 * fade);
+      const width = g.r * (0.075 + 0.042 * widthSeed) * (0.88 + 0.2 * core);
       const lean = Math.sin(t * (3.2 + heightSeed * 2.7) + i * 2.1 + ph) * width * 1.25 + (widthSeed - 0.5) * width * 0.9;
-      paintTongue(baseX, baseY, height, width, lean, 0.12 + 0.22 * wobble, core > 0.42);
+      paintTongue(baseX, baseY, height, width, lean, 0.18 + 0.27 * wobble, core > 0.42);
+    }
+
+    // 上升的热气不是几根竖线，而是一串会摆动的暖色软斑：
+    // 越往上越大、越淡，最后自己散进夜色里。
+    for (let column = 0; column < 4; column += 1) {
+      const cycle = (t * 0.13 + column * 0.27 + ph * 0.08) % 1;
+      const baseX = g.x + Math.sin(ph + column * 2.4) * g.r * (0.12 + column * 0.055);
+      const lift = g.r * (0.08 + cycle * 0.62);
+      for (let puff = 0; puff < 3; puff += 1) {
+        const u = puff / 3;
+        const sway = Math.sin(t * 0.82 + column * 1.7 + u * 2.1) * g.r * (0.045 + u * 0.035);
+        drawGlow(
+          ctx,
+          baseX + sway,
+          g.y - lift - u * g.r * 0.15,
+          5.5 + u * 8,
+          10 + u * 13,
+          column % 2 === 0 ? '#ff9b3c' : '#ffb657',
+          (1 - cycle) * (1 - u * 0.42) * 0.024 * fade,
+        );
+      }
     }
 
     for (let i = 0; i < 6; i += 1) {
       const cycle = (t * 0.27 + i * 0.37 + ph * 0.09) % 1;
       const emberX = g.x + Math.sin(ph + i * 2.1 + t * 0.9) * g.r * (0.2 + 0.08 * (i % 3));
       const emberY = g.y + g.r * 0.11 - cycle * g.r * (0.62 + 0.09 * (i % 2));
-      ctx.globalAlpha = (1 - cycle) * (0.12 + 0.045 * i) * fade;
-      ctx.fillStyle = i % 2 === 0 ? '#ffd58b' : '#ff9d4a';
-      ctx.beginPath();
-      ctx.arc(emberX, emberY, 0.65 + (1 - cycle) * 1.1, 0, Math.PI * 2);
-      ctx.fill();
+      drawGlow(
+        ctx,
+        emberX,
+        emberY,
+        0.9 + (1 - cycle) * 1.8,
+        1.6 + (1 - cycle) * 2.4,
+        i % 2 === 0 ? '#ffd58b' : '#ff9d4a',
+        (1 - cycle) * (0.11 + 0.035 * i) * fade,
+      );
     }
 
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = fade * (0.22 + 0.08 * Math.sin(t * 3.4 + ph));
-    ctx.strokeStyle = '#ff9d52';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2.5, 11]);
-    ctx.lineDashOffset = -t * 11;
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, g.r * 0.97, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.lineDashOffset = 0;
     ctx.globalAlpha = 1;
     ctx.restore();
   }
@@ -8177,7 +8093,7 @@ export class Game {
       const a = ph + i * 0.8976; // 一片撒得不规则的油渍（等分的话会读成一个正圆）
       const d = g.r * (0.2 + 0.13 * ((i * 3) % 3));
       const rr = g.r * (0.44 + 0.12 * ((i * 5) % 3));
-      ctx.globalAlpha = (0.17 + 0.07 * ((i * 3) % 3)) * fade;
+      ctx.globalAlpha = (0.1 + 0.045 * ((i * 3) % 3)) * fade;
       ctx.fillStyle = '#150c07';
       ctx.beginPath();
       ctx.arc(g.x + Math.cos(a) * d, g.y + Math.sin(a) * d, rr, 0, 6.2832);
@@ -8195,9 +8111,10 @@ export class Game {
       ctx.arc(g.x + ox, g.y + oy, rr, 0, 6.2832);
       ctx.fill();
     };
-    body(0, 0, g.r, 0.34, 'rgba(255,120,44,0.8)', 'rgba(255,70,16,0)');
-    body(g.r * 0.07, -g.r * 0.05, g.r * 0.62, 0.38, 'rgba(255,170,72,0.8)', 'rgba(255,110,30,0)');
-    body(-g.r * 0.05, -g.r * 0.1, g.r * 0.3, 0.42, 'rgba(255,234,172,0.9)', 'rgba(255,150,60,0)');
+    body(0, -g.r * 0.03, g.r * 1.18, 0.085, 'rgba(255,104,32,0.72)', 'rgba(255,64,14,0)');
+    body(0, 0, g.r, 0.18, 'rgba(255,120,44,0.8)', 'rgba(255,70,16,0)');
+    body(g.r * 0.07, -g.r * 0.05, g.r * 0.62, 0.2, 'rgba(255,170,72,0.8)', 'rgba(255,110,30,0)');
+    body(-g.r * 0.05, -g.r * 0.1, g.r * 0.3, 0.22, 'rgba(255,234,172,0.9)', 'rgba(255,150,60,0)');
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -8227,18 +8144,11 @@ export class Game {
         const s2 = Math.sin(k * 12.9898 + ph * 78.233) * 43758.5453;
         return s2 - Math.floor(s2);
       };
-      // 热雾画在火舌之前、敌人之后：火焰不只是"盖在怪上的一排形状"，
-      // 它得先把自己那圈空气烘亮，站在里面的剪影才有被火包住的实感。
-      const haze = ctx.createRadialGradient(g.x, g.y - g.r * 0.08, 0, g.x, g.y - g.r * 0.04, g.r * 0.94);
-      haze.addColorStop(0, `rgba(255,150,58,${0.095 * fade})`);
-      haze.addColorStop(0.52, `rgba(255,92,24,${0.05 * fade})`);
-      haze.addColorStop(1, 'rgba(255,68,16,0)');
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = haze;
-      ctx.beginPath();
-      ctx.ellipse(g.x, g.y - g.r * 0.04, g.r * 0.94, g.r * 0.82, 0, 0, 6.2832);
-      ctx.fill();
-      const n = Math.round(clamp(g.r / 6.5, 10, 20));
+      // 热雾画在火舌之前、敌人之后：先让火周围那一圈空气亮起来，
+      // 再让火舌从这团空气里长出来。没有清晰边界，也不像一只发光的碗。
+      drawGlow(ctx, g.x, g.y - g.r * 0.05, g.r * 1.12, g.r * 0.94, '#ff6a1c', 0.075 * fade);
+      drawGlow(ctx, g.x, g.y - g.r * 0.08, g.r * 0.76, g.r * 0.6, '#ff9a38', 0.05 * fade);
+      const n = Math.round(clamp(g.r / 7.5, 9, 17));
       for (let i = 0; i < n; i += 1) {
         const a = ph + i * 2.39996; // 黄金角：撒得匀又不成行
         const d = g.r * 0.68 * Math.sqrt((i + 0.5) / n);
@@ -8252,50 +8162,37 @@ export class Game {
         const h = g.r * (0.14 + 0.72 * r1) * (0.7 + 0.45 * core) * (0.8 + 0.35 * wob);
         const w = g.r * (0.045 + 0.075 * r2);
         const tip = bx + Math.sin(t * 4.4 + i * 2.3 + ph) * w * 0.6; // 火尖自己也会飘
-        const shoulder = w * (0.55 + 0.4 * hash(i + 101));
-        ctx.globalAlpha = (0.2 + 0.25 * wob) * (0.72 + 0.48 * r2) * fade;
-        ctx.fillStyle = core > 0.45 ? '#ffad43' : '#ff7526';
-        ctx.beginPath();
-        ctx.moveTo(bx - w, by);
-        ctx.bezierCurveTo(bx - w * 1.22, by - h * 0.24, bx - shoulder * 1.18, by - h * 0.46, bx - shoulder, by - h * 0.57);
-        ctx.quadraticCurveTo(bx - w * 0.22, by - h * 0.74, tip, by - h);
-        ctx.quadraticCurveTo(tip + w * 0.2, by - h * 0.7, bx + shoulder * 0.9, by - h * 0.52);
-        ctx.bezierCurveTo(bx + shoulder * 1.24, by - h * 0.42, bx + w * 1.18, by - h * 0.2, bx + w, by);
-        ctx.closePath();
-        ctx.fill();
+        const alpha = (0.16 + 0.21 * wob) * (0.72 + 0.48 * r2) * fade;
+        // 外焰与内焰各是一张连续的噪声火焰；参差、分叉和细丝都已预烘在纹理里。
+        drawFlame(ctx, bx, by + 1, w * 4.3, h, '#ff5f16', alpha * 1.06, tip - bx);
+        drawFlame(ctx, bx, by + 1, w * 2.3, h * 0.7, '#ff9a34', alpha * 0.82, (tip - bx) * 0.72);
+        drawGlow(ctx, bx, by, w * 1.2, w * 0.46, '#ff7a24', alpha * 0.38);
+        if (core > 0.2) drawGlow(ctx, bx, by - h * 0.12, w * 0.9, h * 0.18, '#ffd47b', alpha * 0.48 * core);
         // 高焰偶尔歪出一小截侧舌：火不是单向生长的锥体，边沿总有一两簇先卷出去。
         if (r1 > 0.58 && core > 0.28) {
           const lick = (hash(i + 23) - 0.5) * w * 2.1;
-          ctx.globalAlpha *= 0.64;
-          ctx.beginPath();
-          ctx.moveTo(bx + lick * 0.25, by - h * (0.18 + 0.12 * r2));
-          ctx.quadraticCurveTo(bx + lick * 0.8, by - h * 0.48, bx + lick, by - h * 0.6);
-          ctx.quadraticCurveTo(bx + lick * 0.48, by - h * 0.34, bx + w * 0.38, by - h * 0.12);
-          ctx.closePath();
-          ctx.fill();
-        }
-        // 内焰只给中间那几朵（边上也白的话，整片会糊成一团奶白）
-        if (core > 0.2) {
-          ctx.globalAlpha = (0.17 + 0.28 * wob) * core * fade;
-          ctx.fillStyle = core > 0.55 ? '#fff3c9' : '#ffcb6e';
-          ctx.beginPath();
-          ctx.moveTo(bx - w * 0.44, by);
-          ctx.bezierCurveTo(bx - w * 0.55, by - h * 0.2, bx - w * 0.36, by - h * 0.38, bx - w * 0.12, by - h * 0.48);
-          ctx.quadraticCurveTo(bx + w * 0.02, by - h * 0.6, tip, by - h * (0.5 + 0.25 * core));
-          ctx.quadraticCurveTo(bx + w * 0.34, by - h * 0.35, bx + w * 0.44, by);
-          ctx.closePath();
-          ctx.fill();
+          drawGlow(ctx, bx + lick, by - h * 0.58, Math.abs(lick) * 0.36 + w * 0.24, h * 0.15, '#ff7b20', alpha * 0.38);
         }
       }
-      // 边：一圈低伏的虚线热边（"这片火烧到哪儿"要看得见边，不然玩家分不清自己站没站进去）
-      ctx.globalAlpha = (0.2 + 0.1 * Math.sin(t * 2.6 + ph * 2)) * fade;
-      ctx.strokeStyle = '#ff7a2f';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([10, 8]);
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r * 0.96, 0, 6.2832);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // 边：两层完全化开的空气光，外圈不闭合。烧到哪儿的读数仍留在 0.955r，
+      // 但眼睛看到的是一圈正在散掉的热气，而不是圆规描出来的橙线。
+      const edgeBreath = 0.5 + 0.5 * Math.sin(t * 2.6 + ph * 2);
+      drawSoftRing(ctx, g.x, g.y, g.r * 0.955, 10 + edgeBreath * 5, '#ff7a2f', (0.035 + edgeBreath * 0.025) * fade);
+      drawSoftRing(ctx, g.x, g.y, g.r * 0.91, 20 + edgeBreath * 8, '#ff9a42', 0.022 * fade);
+      for (let i = 0; i < 9; i += 1) {
+        const a = ph + i * 1.047 + Math.sin(t * 0.7 + i * 1.9) * 0.09;
+        const rr = g.r * (0.93 + 0.025 * Math.sin(ph + i * 2.1));
+        drawGlow(
+          ctx,
+          g.x + Math.cos(a) * rr,
+          g.y + Math.sin(a) * rr * 0.94,
+          4.6 + edgeBreath * 1.2,
+          1.35,
+          i % 3 === 0 ? '#ffcf86' : '#ff9a4a',
+          (0.055 + 0.03 * Math.sin(t * 2.2 + i)) * fade,
+          a + Math.PI / 2,
+        );
+      }
       ctx.globalAlpha = 1;
     }
     if (any) ctx.restore();
@@ -8472,65 +8369,53 @@ export class Game {
       ctx.globalAlpha = 1;
 
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.36 + t * 0.46;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5 + t * 1.8;
-      ctx.setLineDash(meteor ? [7, 9] : thorn ? [11, 7] : [3, 8]);
-      ctx.beginPath();
-      ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // 预警圈里面不是空的：先铺一层很淡的同类色光，让整块地像"正在发热/结霜"，
+      // 外圈仍负责把精确边界说清楚。亮度压低，不能让危险区自己变成一盏灯。
+      drawGlow(ctx, hz.x, hz.y, hz.r * 0.92, hz.r * 0.86, color, (0.028 + t * 0.034) * (meteor ? 1.35 : 1));
+      drawGlow(ctx, hz.x, hz.y, hz.r * 0.46, hz.r * 0.4, color, (0.026 + t * 0.04) * (meteor ? 1.45 : 0.8));
+      // 外圈只用宽光带与游动亮弧交代边界，不再叠虚线或实线圆。
+      drawSoftRing(ctx, hz.x, hz.y, hz.r, 11 + t * 10, color, 0.075 + t * 0.11);
+      const sweepSpeed = meteor ? 1.1 : thorn ? 0.8 : -0.65;
+      const sweepStart = this.time * sweepSpeed + soilPhase;
+      drawSoftRing(ctx, hz.x, hz.y, hz.r, 4.5 + t * 4.5, color, 0.16 + t * 0.2, sweepStart, sweepStart + 1.1 + t * 0.3);
 
+      // 内圈持续收紧，用向内收的柔光读节奏，不再叠一个闭合圆。
       const inner = hz.r * Math.max(0.17, 1 - t * 0.84);
-      ctx.globalAlpha = 0.42 + t * 0.46;
-      ctx.lineWidth = 2.2 + t * 2.3;
-      ctx.beginPath();
-      ctx.arc(hz.x, hz.y, inner, 0, Math.PI * 2);
-      ctx.stroke();
+      for (let i = 0; i < 6; i += 1) {
+        const a = soilPhase + i * 1.047 + Math.sin(this.time * 0.9 + i * 1.7) * 0.14;
+        const rr = inner * (0.64 + 0.2 * Math.sin(this.time * 1.7 + i * 2.1));
+        drawGlow(ctx, hz.x + Math.cos(a) * rr, hz.y + Math.sin(a) * rr, 9 + t * 7, 2.6 + t * 2, color, 0.08 + t * 0.09, a);
+      }
+      const chaseStart = -this.time * (1.2 + t * 0.9) + soilPhase;
+      drawSoftRing(ctx, hz.x, hz.y, inner, 2.6 + t * 2.5, color, 0.15 + t * 0.2, chaseStart, chaseStart + 0.72 + t * 0.28);
 
-      ctx.globalAlpha = 0.28 + t * 0.38;
-      ctx.lineWidth = 1.3;
+      // 刻度不再是齿轮状线段，而是贴着外圈向内收的小热斑。
       for (let i = 0; i < 8; i += 1) {
         const a = (i / 8) * Math.PI * 2 + this.time * 0.08;
         const c = Math.cos(a);
         const s = Math.sin(a);
-        ctx.beginPath();
-        ctx.moveTo(hz.x + c * hz.r * 0.89, hz.y + s * hz.r * 0.89);
-        ctx.lineTo(hz.x + c * hz.r * (1.02 + t * 0.06), hz.y + s * hz.r * (1.02 + t * 0.06));
-        ctx.stroke();
+        drawGlow(
+          ctx,
+          hz.x + c * hz.r * 0.96,
+          hz.y + s * hz.r * 0.96,
+          2.4 + t * 1.5,
+          1.25 + t * 0.9,
+          color,
+          0.14 + t * 0.2,
+          a,
+        );
       }
 
       if (meteor) {
-        ctx.globalAlpha = 0.46 + t * 0.4;
-        ctx.lineWidth = 1.8 + t * 0.9;
-        const cross = inner * 0.72;
-        ctx.beginPath();
-        ctx.moveTo(hz.x - cross, hz.y);
-        ctx.lineTo(hz.x - inner * 0.16, hz.y);
-        ctx.moveTo(hz.x + inner * 0.16, hz.y);
-        ctx.lineTo(hz.x + cross, hz.y);
-        ctx.moveTo(hz.x, hz.y - cross);
-        ctx.lineTo(hz.x, hz.y - inner * 0.16);
-        ctx.moveTo(hz.x, hz.y + inner * 0.16);
-        ctx.lineTo(hz.x, hz.y + cross);
-        ctx.stroke();
-
-        const corner = inner * 0.88;
-        const arm = inner * 0.16;
-        ctx.globalAlpha = 0.32 + t * 0.36;
-        ctx.lineWidth = 1.2 + t * 0.7;
-        ctx.beginPath();
+        // 落点上方提前亮起的一团热空气：火星还没砸到，地面已经被烤暖。
+        drawGlow(ctx, hz.x, hz.y - hz.r * 0.06, hz.r * 0.62, hz.r * 0.52, '#ff7424', 0.045 + t * 0.055);
+        // 中心是一簇向内聚拢的热光，不再用十字准星和角括号。
+        drawGlow(ctx, hz.x, hz.y, inner * 0.34, inner * 0.34, '#ff6a22', 0.1 + t * 0.16);
         for (let i = 0; i < 4; i += 1) {
-          const a = Math.PI / 4 + (i / 4) * Math.PI * 2;
-          const c = Math.cos(a);
-          const s = Math.sin(a);
-          const px = hz.x + c * corner;
-          const py = hz.y + s * corner;
-          ctx.moveTo(px - s * arm, py + c * arm);
-          ctx.lineTo(px, py);
-          ctx.lineTo(px - c * arm, py - s * arm);
+          const a = soilPhase * 1.4 + i * 1.571 + this.time * 0.35;
+          const rr = inner * (0.3 + (i % 2) * 0.14);
+          drawGlow(ctx, hz.x + Math.cos(a) * rr, hz.y + Math.sin(a) * rr, 2 + t * 2.2, 1.1 + t, '#ffb35c', 0.12 + t * 0.18, a);
         }
-        ctx.stroke();
 
         ctx.globalAlpha = 0.72 + pulse * 0.2;
         ctx.fillStyle = '#fff1c8';
@@ -8541,39 +8426,29 @@ export class Game {
         const fallX = hz.x + Math.sin(this.time * 2.2 + hz.x * 0.01) * hz.r * 0.16;
         const fallY = hz.y - hz.r * (2.05 - t * 1.38);
         const trail = hz.r * (0.3 + pulse * 0.08);
-        ctx.globalAlpha = 0.24 + t * 0.3;
-        ctx.strokeStyle = '#ff9d2e';
-        ctx.lineWidth = 4.2 + t * 2;
-        ctx.beginPath();
-        ctx.moveTo(fallX + hz.r * 0.08, fallY + trail);
-        ctx.lineTo(fallX, fallY);
-        ctx.stroke();
-        ctx.globalAlpha = 0.46 + t * 0.42 + pulse * 0.1;
-        ctx.strokeStyle = '#ffd7a0';
-        ctx.lineWidth = 1.5 + t * 1.2;
-        ctx.beginPath();
-        ctx.moveTo(fallX + hz.r * 0.08, fallY + trail);
-        ctx.lineTo(fallX, fallY);
-        ctx.stroke();
+        drawStreak(ctx, fallX + hz.r * 0.08, fallY + trail, fallX, fallY, 13 + t * 6, '#ff5a18', 0.22 + t * 0.14 + pulse * 0.03);
+        drawStreak(ctx, fallX + hz.r * 0.04, fallY + trail * 0.55, fallX, fallY, 4.6 + t * 1.6, '#ffd7a0', 0.28 + t * 0.16);
+        drawGlow(ctx, fallX, fallY, 13 + t * 6, 13 + t * 6, '#ff7a24', 0.17 + t * 0.12);
         ctx.fillStyle = '#fff1c8';
         ctx.beginPath();
         ctx.arc(fallX, fallY, 2.4 + t * 1.5, 0, Math.PI * 2);
         ctx.fill();
       } else if (thorn) {
-        ctx.globalAlpha = 0.38 + t * 0.38;
-        ctx.fillStyle = color;
+        // 荆棘也是光：十六根径向柔光代替一圈实心三角齿。
         const teeth = 16;
-        const spread = (Math.PI / teeth) * 0.62;
         for (let i = 0; i < teeth; i += 1) {
           const a = (i / teeth) * Math.PI * 2 + 0.12;
-          const rootR = hz.r * (0.84 + (i % 2) * 0.035);
-          const tipR = hz.r * (1.05 + (i % 3) * 0.025);
-          ctx.beginPath();
-          ctx.moveTo(hz.x + Math.cos(a - spread) * rootR, hz.y + Math.sin(a - spread) * rootR);
-          ctx.lineTo(hz.x + Math.cos(a) * tipR, hz.y + Math.sin(a) * tipR);
-          ctx.lineTo(hz.x + Math.cos(a + spread) * rootR, hz.y + Math.sin(a + spread) * rootR);
-          ctx.closePath();
-          ctx.fill();
+          const rootR = hz.r * (0.97 + (i % 2) * 0.025);
+          drawGlow(
+            ctx,
+            hz.x + Math.cos(a) * rootR,
+            hz.y + Math.sin(a) * rootR,
+            hz.r * (0.08 + (i % 3) * 0.012) * (0.8 + t * 0.4),
+            hz.r * 0.018,
+            color,
+            0.16 + t * 0.24,
+            a,
+          );
         }
       } else {
         ctx.beginPath();
@@ -8586,7 +8461,7 @@ export class Game {
           const endA = a + (i % 3 === 0 ? -0.08 : 0.04);
           const mx = hz.x + Math.cos(midA) * midR;
           const my = hz.y + Math.sin(midA) * midR;
-          ctx.moveTo(hz.x + c * inner * 0.25, hz.y + s * inner * 0.25);
+          ctx.moveTo(hz.x + c * inner * 0.46, hz.y + s * inner * 0.46);
           ctx.lineTo(mx, my);
           ctx.lineTo(hz.x + Math.cos(endA) * hz.r * (0.76 + (i % 2) * 0.13), hz.y + Math.sin(endA) * hz.r * (0.7 + (i % 2) * 0.12));
           if (i % 2 === 0) {
@@ -8596,15 +8471,21 @@ export class Game {
           }
         }
         ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 0.58;
+        ctx.globalAlpha = 0.22;
         ctx.strokeStyle = '#05070d';
-        ctx.lineWidth = 4.6;
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        ctx.globalAlpha = 0.18;
+        ctx.strokeStyle = '#1a2134';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = 0.38 + t * 0.42;
-        ctx.strokeStyle = '#c7d8ff';
-        ctx.lineWidth = 1.25 + t * 0.55;
-        ctx.stroke();
+        // 裂缝本身留作地面暗纹；冷光只落在裂缝末端，不再给整条裂缝描蓝边。
+        for (let i = 0; i < 6; i += 1) {
+          const a = 0.4 + (i / 6) * Math.PI * 2 + (i % 2 ? 0.12 : -0.05);
+          const rr = hz.r * (0.7 + (i % 2) * 0.13);
+          drawGlow(ctx, hz.x + Math.cos(a) * rr, hz.y + Math.sin(a) * rr, 2.4 + t * 2.1, 1.1 + t * 0.9, '#c7d8ff', 0.12 + t * 0.2, a);
+        }
       }
       ctx.restore();
     }
