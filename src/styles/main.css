@@ -3377,7 +3377,8 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
    右上那一列本身就有 130px 高，竖屏那套 top:136px 会直接顶上去。
    悬赏与灯台改成从下往上量（量到那两个并排按钮的上沿），屏幕再矮也不会压住按钮。 */
 @media (orientation: landscape) and (max-height: 700px) {
-  body.is-touch .hud__build { top: calc(102px + env(safe-area-inset-top)); max-width: 44vw; }
+  /* 状态列到等级行下沿是 107：留 3px 再挂构筑牌，别让牌底的暗色压住等级行。 */
+  body.is-touch .hud__build { top: calc(110px + env(safe-area-inset-top)); max-width: 44vw; }
   body.is-touch .hud__bounty {
     left: auto;
     right: calc(12px + env(safe-area-inset-right));
@@ -3445,7 +3446,7 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   .touch-stick__knob { width: 46px; height: 46px; }
   .touch-btn { width: 64px; height: 64px; font-size: 12.5px; letter-spacing: 1px; }
   /* 悬赏 / 灯台：矮横屏上这两块牌子横着**必然**压在提示卡那条横带的右端
-     （横带的右沿只留 130px，光悬赏牌自己就 200px 宽），所以它们的落点必须停在横带下沿之下。
+     （横带的右沿只留 140px，光悬赏牌自己就 200px 宽），所以它们的落点必须停在横带下沿之下。
      ⚠ 这 28px 不是审美，是量出来的：740×390 上悬赏牌上沿 173、横带下沿 175，
      而"掠影"那种长提示卡（5 行）停在 162——正好从牌子上压过去 4px。
      但有地方放不等于放得下：两块牌子连说明一起叠起来 110~121px，而 376 高的屏上
@@ -3457,6 +3458,12 @@ body.is-touch .hud__pyre { left: auto; right: 12px; top: 196px; }
   body.is-touch .hud__bounty span,
   body.is-touch .hud__pyre span { display: none; }
   body.is-touch .hud__bounty { bottom: calc(146px + env(safe-area-inset-bottom)); }
+}
+/* 320 高时窄屏的右上列收在 145，宽屏仍停在 159；悬赏牌若还挂在 146
+   会反过来压进记分板 3~13px。126 让它在两种宽度下都留出 3px 以上。
+   这一档必须写在 ≤560 那一档之后：后者才是悬赏牌落点的真值。 */
+@media (orientation: landscape) and (max-height: 340px) {
+  body.is-touch .hud__bounty { bottom: calc(126px + env(safe-area-inset-bottom)); }
 }
 
 /* ── 15. 手机横屏矮屏：面板本身也要塞得下 ─────────────────────────────
@@ -3562,10 +3569,12 @@ body.is-touch .key { display: none; }
    ⚠ 别只写到 560：561~700 那一档（平板横屏）HUD 那边照样在排队、照样只留一条横带，
    而 CSS 这边要是没跟上，卡片就还留在屏幕正中——1024×700 实测正好压住左上那一列（6×42px），
    844×700 更狠（96×42px，"掠影"那张 520px 宽的卡横着压过整条血条）。
-   左内边距就是横带的左沿（左列右沿 258 + 8），右内边距是右列的宽度 + 边距。 */
+   左内边距就是横带的左沿（左列右沿 258 + 8），右内边距是右列的宽度 + 边距。
+   右列最宽 120、离边 18，再加 2px 呼吸位，所以右内边距取 140：740 宽时卡片右沿 600，
+   右上牌左沿 607.7，不再擦到那 8px。 */
 @media (orientation: landscape) and (max-height: 700px) {
   body.is-touch .toast-root {
-    padding: calc(58px + env(safe-area-inset-top)) calc(130px + env(safe-area-inset-right)) 0
+    padding: calc(58px + env(safe-area-inset-top)) calc(140px + env(safe-area-inset-right)) 0
       calc(266px + env(safe-area-inset-left));
     align-items: flex-start;
     gap: 5px;
