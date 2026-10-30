@@ -90,6 +90,9 @@ async function main() {
   const base = `http://127.0.0.1:${port}/`;
 
   const browser = await chromium.launch({
+    // 沙箱 / 容器里 playwright 自己那套 headless shell 常常没下下来（机器上只有一份完整 chrome）：
+    // 给一条 `CHROME_PATH=...` 的出路，指到哪个二进制就用哪个；其余环境照旧走 playwright 自己的决定。
+    executablePath: process.env.CHROME_PATH || undefined,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--autoplay-policy=no-user-gesture-required'],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });

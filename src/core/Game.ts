@@ -1037,6 +1037,8 @@ export class Game {
     endless: boolean,
     daily: DailyPlan | null = null,
     pacts: readonly string[] = [],
+    /** 钉一颗种子（v274，只有「重开本夜」用）：同一夜重来 = 同一张地图、同一串波次。 */
+    seed?: number,
   ): void {
     const lantern = LANTERN_MAP[lanternId] ?? LANTERNS[0];
     this.lanternId = lantern.id;
@@ -1049,8 +1051,10 @@ export class Game {
     // 导演从**下一波**起读这份修正（`beginWave` 里乘上去）；这一局已经在跑的那些波不受影响
     this.director.pacts = this.pactMods;
     this.stageIndex = 0;
-    // 今日灯芯用日期派生的固定种子：条件一样，过程仍旧看本事
-    this.startSeed = daily ? daily.seed : (Math.random() * 1e9) | 0;
+    // 今日灯芯用日期派生的固定种子：条件一样，过程仍旧看本事。
+    // 重开本夜（v274）把上一局那颗种子原样交回来：重的是**这一夜**（同一张地图、同一串波次），
+    // 不是"换一夜再来"——后者等于退出重开，那条路本来就有（放弃 → 选灯火）。
+    this.startSeed = seed ?? (daily ? daily.seed : (Math.random() * 1e9) | 0);
     this.rng.reseed(this.startSeed);
     this.resetRunState();
 
@@ -5418,6 +5422,29 @@ export class Game {
       this.state = 'playing';
       this.ui?.showScreen('playing');
     }
+  }
+
+  /**
+   * 重开本夜（v274）：同一盏灯火、同一档难度、同一套「深宵之约」，把这一夜从头再点一次。
+   *
+   * 它和「放弃本次冒险」是同一件事的两半：那一夜**不结算**（不写战报、不发余烬、不动纪录），
+   * 只是把开局那几个参数原样交回 `newRun`。从前想"这一局打坏了，我重来一次"得退出到主菜单、
+   * 再选灯火、再选难度、再勾一遍之约——四次点击里点错一次就得从头再走一遍，
+   * 而死在第 2 关的人一晚上要做这件事十几次。
+   *
+   * 今日灯芯走的是另一条：种子、灯火、难度全由日期决定，所以重开必须把 `dailyPlan`
+   * 一起交回去（`newRun(..., plan)`），不能退化成普通局——否则"今天的题"会变成随机题。
+   * 这也是它和 `startDailyRun()` 的区别：那个按日期**重新组一次**题，这个用的是手头这一份。
+   */
+  retryRun(): void {
+    // 先抓住这一局那颗种子：`newRun` 会把它重算一遍（普通局是新的随机数）。
+    const seed = this.startSeed;
+    if (this.dailyPlan) {
+      const plan = this.dailyPlan;
+      this.newRun(plan.lantern, plan.difficulty, false, plan, [], seed);
+      return;
+    }
+    this.newRun(this.lanternId, this.difficulty, this.endless, null, this.pacts, seed);
   }
 
   buyMeta(id: string): boolean {

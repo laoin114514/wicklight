@@ -6751,6 +6751,39 @@ body.is-touch .key { display: none; }
 .pause-act--danger b { color: #e4b8a7; }
 .pause-act--danger:hover { border-color: rgba(255, 135, 100, 0.5); }
 
+/* 「重开本夜」（v274）：一根铜左棱 + 冷灰底——它不是主行动（继续才是），
+   也不该读成「放弃」那种红。上膛之后（is-armed）才转成炉火色：那时候它才是一颗"会烧掉这一夜"的键。 */
+.pause-act--retry {
+  border-left: 2px solid rgba(180, 138, 62, 0.34);
+  background:
+    linear-gradient(90deg, rgba(96, 70, 24, 0.1), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(52, 47, 41, 0.94), rgba(18, 16, 13, 0.96));
+}
+.pause-act--retry b { color: #e2cfa6; }
+.pause-act--retry:hover { border-color: rgba(214, 168, 84, 0.42); }
+.pause-act--retry.is-armed {
+  border-color: rgba(255, 150, 92, 0.56);
+  border-left-color: rgba(255, 132, 70, 0.82);
+  background:
+    linear-gradient(90deg, rgba(150, 58, 18, 0.34), rgba(0, 0, 0, 0) 78%),
+    linear-gradient(180deg, rgba(66, 40, 26, 0.96), rgba(22, 15, 11, 0.97));
+  box-shadow: 0 0 0 1px rgba(255, 138, 78, 0.16), 0 0 14px rgba(255, 110, 48, 0.18) inset;
+}
+.pause-act--retry.is-armed b { color: #ffd0a6; }
+.pause-act--retry.is-armed > span:not(.pause-act__key):not(.pause-act__mark) { color: rgba(255, 186, 140, 0.62); }
+.pause-act--retry.is-armed .pause-act__mark {
+  border-color: rgba(255, 150, 92, 0.5);
+  color: #ffc79b;
+  animation: pause-retry-pulse 1.1s ease-in-out infinite;
+}
+@keyframes pause-retry-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 132, 70, 0); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 3px rgba(255, 132, 70, 0.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pause-act--retry.is-armed .pause-act__mark { animation: none; }
+}
+
 @media (max-width: 720px) {
   .panel--pause { padding: 17px 15px 15px; }
   .pause-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
@@ -9384,6 +9417,11 @@ body.is-touch .lvl-actions__hint { display: none; }
 @media (orientation: landscape) and (max-height: 340px) and (max-width: 720px) {
   .panel--pause { padding-top: 7px; padding-bottom: 6px; }
   .pause-head { margin-bottom: 4px; }
+  /* v274：暂停面板多了「查图鉴」「重开本夜」两颗键。原来这一档是"说明一列 + 动作一列"
+     上下叠（max-width: 720 的规矩），四颗键正好停在下沿；六颗就多出一行，滚出面板
+     （568×320 实测最后一行的下沿 329，面板只有 307）。矮屏本来就该横着用——
+     这里把两列并排回来，六颗键三行、110px 落在一屏里。 */
+  .pause-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
   .pause-actions .pause-act:first-child { grid-column: auto; }
 }
 

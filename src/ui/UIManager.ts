@@ -59,6 +59,11 @@ export class UIManager implements UIHost {
   private achTab: string = ACHIEVEMENT_GROUPS[0] ?? '全部';
   /** 余烬解锁在小屏上翻到哪一页；桌面上两页仍同时摊开。 */
   private metaTab: 'tree' | 'fire' = 'tree';
+  /**
+   * 暂停面板上的「重开本夜」上膛了没有（v274）。
+   * 只在暂停面板里存活；换进这一屏（`showScreen`）时清掉，见 `retryNight`。
+   */
+  private retryArmed = false;
 
   constructor(private game: Game) {
     this.root = document.getElementById('ui-root') as HTMLElement;
@@ -107,6 +112,9 @@ export class UIManager implements UIHost {
     // 焦点环要知道"这是换了屏，还是同一屏原地重画"：换了屏环收掉，原地重画按身份找回原处
     // （见 FocusRing.attach）。'select' 那一屏是个好例子——挑灯火 / 挑难度都是原地重画。
     this.focusSame = this.focusState === state;
+    // 「重开本夜」的上膛只在暂停面板里活着：换进这一屏就清掉（"点一下、改主意、回去接着打"
+    // 不该让它一直亮着），而暂停面板内部的原地重画不经过这里，所以上膛那一次不会被清掉。
+    if (state === 'paused' && this.focusState !== 'paused') this.retryArmed = false;
     this.focusState = state;
     this.screen.className = 'screen';
     switch (state) {
@@ -216,7 +224,7 @@ export class UIManager implements UIHost {
     });
     this.on('[data-act="daily"]', () => { this.returnState = 'menu'; this.game.openMenu('daily'); });
     this.on('[data-act="meta"]', () => { this.returnState = 'menu'; this.game.openMenu('meta'); });
-    this.on('[data-act="codex"]', () => { this.returnState = 'menu'; this.codexFocus = null; this.game.openMenu('codex'); });
+    this.on('[data-act="codex"]', () => this.openCodex());
     this.on('[data-act="records"]', () => { this.returnState = 'menu'; this.game.openMenu('records'); });
     this.on('[data-act="achievements"]', () => { this.returnState = 'menu'; this.game.openMenu('achievements'); });
     this.on('[data-act="settings"]', () => { this.returnState = 'menu'; this.game.openMenu('settings'); });
@@ -578,8 +586,16 @@ export class UIManager implements UIHost {
             <button class="btn pause-act" data-act="sheet">
               <b>构筑总览</b><span>武器 · 遗物 · 夜咒</span><span class="key pause-act__key">Tab</span>
             </button>
+            <button class="btn pause-act" data-act="codex">
+              <b>查图鉴</b><span>这只怪怎么打 · 这件遗物干什么的</span><span class="pause-act__mark" aria-hidden="true">册</span>
+            </button>
             <button class="btn pause-act" data-act="settings">
-              <b>设置</b><span>声音 · 画面 · 手感</span><span class="key pause-act__key">⚙</span>
+              <b>设置</b><span>声音 · 画面 · 手感</span><span class="pause-act__mark" aria-hidden="true">⚙</span>
+            </button>
+            <button class="btn pause-act pause-act--retry${this.retryArmed ? ' is-armed' : ''}" data-act="retry">
+              <b>${this.retryArmed ? '再按一下 · 确认重开' : '重开本夜'}</b>
+              <span>${this.retryArmed ? '这一夜不结算 · 同一盏灯火从头再来' : '同一盏灯火 · 同一档难度 · 从头再来'}</span>
+              <span class="pause-act__mark" aria-hidden="true">${this.retryArmed ? '！' : '燃'}</span>
             </button>
             <button class="btn pause-act pause-act--danger" data-act="quit">
               <b>放弃本次冒险</b><span>这一夜的收获不会结算</span><span class="pause-act__mark" aria-hidden="true">熄</span>
@@ -593,8 +609,42 @@ export class UIManager implements UIHost {
       this.returnState = 'paused';
       this.game.toggleSheet();
     });
+    this.on('[data-act="codex"]', () => this.openCodex());
     this.on('[data-act="settings"]', () => this.openOverlay('settings'));
+    this.on('[data-act="retry"]', () => this.retryNight());
     this.on('[data-act="quit"]', () => this.game.goMenu());
+  }
+
+  /**
+   * 暂停面板上的「重开本夜」（v274）：**两下**才真的重开。
+   *
+   * 第一下只上膛（把面板原地重画成"再按一下 · 确认重开"），回来假；第二下才把这一夜
+   * 从头点起来，回来真。为什么不做成一下：这一颗按钮按下去**这一夜就没了**——
+   * 而它就在「继续」下面一格，和「放弃本次冒险」挨着；面板本身又是被 Esc 按出来的，
+   * 手从 WASD 挪到方向键的路上蹭一下回车，这个游戏不该把一整夜押在那一下上。
+   * 上膛状态只在**换进这一屏**时清掉（见 `showScreen`），所以"点一下、改主意、回去接着打"
+   * 不会让它一直亮着；反过来，上膛之后原地重画（本函数里那一次 `paused()`）不会把它清掉。
+   */
+  retryNight(): boolean {
+    if (this.game.state !== 'paused') return false;
+    if (!this.retryArmed) {
+      this.retryArmed = true;
+      this.paused();
+      return false;
+    }
+    this.retryArmed = false;
+    this.game.retryRun();
+    return true;
+  }
+
+  /**
+   * 图鉴入口（v274）：从主菜单进 = 翻完回主菜单；从暂停面板进 = 翻完回暂停面板。
+   * 一局打到一半才最需要查图鉴（"这东西刚才为什么没挨打"），而从前只有主菜单里那一个入口。
+   */
+  openCodex(): void {
+    this.codexFocus = null;
+    this.returnState = this.game.state === 'paused' ? 'paused' : 'menu';
+    this.game.openMenu('codex');
   }
 
   private loadout(): void {
